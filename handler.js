@@ -74,11 +74,11 @@ async function messageHandler(sock, msg, store) {
   const senderNum = sender.split('@')[0];
   const isOwner = config.owner.includes(senderNum) || config.rowner.includes(senderNum);
 
-  
+
   // 📛 Nombre correcto
   const contact = store?.contacts?.[sender] || {};
-  const name = pushName || contact.name || contact.notify || senderNum;
-
+const isOwner = config.owner.includes(senderNum) || config.rowner.includes(senderNum);
+  
   // 📝 LOG
   console.log(
     chalk.cyan('📩 Mensaje recibido'),
@@ -108,17 +108,18 @@ if (!command) return;
 const plugin = plugins.get(command);
 if (!plugin) return;
 
-  const ctx = {
-    sock,
-    msg,
-    remoteJid,
-    sender,
-    senderNum,
-    args,
-    command,
-    store,
-    config
-  };
+const ctx = {
+  sock,
+  msg,
+  remoteJid,
+  sender,
+  senderNum,
+  args,
+  command,
+  store,
+  config,
+  isOwner // 👈 IMPORTANTE
+};
 
   try {
     await plugin.execute(ctx);
