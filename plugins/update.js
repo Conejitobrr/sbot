@@ -32,20 +32,9 @@ module.exports = {
       }
 
       await sock.sendMessage(remoteJid, {
-        text: '✅ Actualizado\n🔁 Reiniciando...'
-      }, { quoted: msg });
-
-      process.exit(0);
-    });
-  }
-};
-      await sock.sendMessage(remoteJid, {
         text: '✅ Actualizado correctamente\n🔁 Reiniciando...'
       }, { quoted: msg });
 
-      console.log(stdout);
-
-      // 🔁 reiniciar bot
       process.exit(0);
     });
   }
