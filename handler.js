@@ -41,6 +41,23 @@ async function messageHandler(sock, msg, store) {
   const body = getBody(msg);
   if (!body) return;
 
+  // ─────────────────────────────
+  // 🖨️ LOG DE MENSAJES
+  // ─────────────────────────────
+  const senderNumber = sender.split('@')[0];
+  const name = pushName || 'Sin nombre';
+
+  console.log(`
+═══════════════════════════════
+📩 MENSAJE RECIBIDO
+═══════════════════════════════
+👤 Nombre : ${name}
+📱 Número : ${senderNumber}
+💬 Mensaje: ${body}
+${fromGroup ? '👥 Grupo  : Sí' : '👤 Chat privado'}
+═══════════════════════════════
+`);
+
   // ── Grupo ─────────────────────────────────
   let groupAdmins = [];
   let botIsAdmin  = false;
@@ -72,7 +89,7 @@ async function messageHandler(sock, msg, store) {
     remoteJid,
     sender,
     fromGroup,
-    pushName: pushName || sender.split('@')[0],
+    pushName: pushName || senderNumber,
     args,
     command,
     prefix: parsed.prefix || '!',
@@ -84,7 +101,7 @@ async function messageHandler(sock, msg, store) {
   };
 
   // ─────────────────────────────────────────
-  // 🎯 COMANDOS BÁSICOS (SIN PLUGINS)
+  // 🎯 COMANDOS BÁSICOS
   // ─────────────────────────────────────────
 
   try {
@@ -109,7 +126,7 @@ Comandos disponibles:
         return ctx.reply(`👤 Owner: ${config.rowner[0]}`);
 
       case 'ban':
-        if (!config.rowner.includes(sender.split('@')[0])) {
+        if (!config.rowner.includes(senderNumber)) {
           return ctx.reply('❌ Solo el owner puede usar esto');
         }
         if (!args[0]) return ctx.reply('⚠️ Usa: !ban numero');
@@ -118,7 +135,7 @@ Comandos disponibles:
         return ctx.reply('🚫 Usuario baneado');
 
       case 'unban':
-        if (!config.rowner.includes(sender.split('@')[0])) {
+        if (!config.rowner.includes(senderNumber)) {
           return ctx.reply('❌ Solo el owner puede usar esto');
         }
         if (!args[0]) return ctx.reply('⚠️ Usa: !unban numero');
@@ -127,7 +144,7 @@ Comandos disponibles:
         return ctx.reply('✅ Usuario desbaneado');
 
       default:
-        return; // comando no existe
+        return;
     }
 
   } catch (err) {
