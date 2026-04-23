@@ -72,16 +72,6 @@ if (sender === botJid || key.fromMe) return;
 
 const body = getBody(msg);
 if (!body) return;
-// ── Detectar prefijo ─────────────────────────────────────────────
-  const parsed = detectPrefix(body);
-  if (!parsed) return;
-
-  const args    = parsed.body.trim().split(/\s+/);
-  const command = args.shift()?.toLowerCase();
-  if (!command) return;
-
-  const plugin = plugins.get(command);
-  if (!plugin) return;
 
 const senderNum = sender.split('@')[0];
 
