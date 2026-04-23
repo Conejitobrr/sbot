@@ -6,36 +6,39 @@ module.exports = {
   commands: ['update'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid, senderNum, config } = ctx;
+    const { sock, remoteJid, msg, isOwner } = ctx;
 
-    if (!ctx.isOwner) {
-  return ctx.sock.sendMessage(ctx.remoteJid, {
-    text: '❌ Solo el owner puede usar este comando'
-  }, { quoted: ctx.msg });
+    // 🔒 SOLO OWNER
+    if (!isOwner) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Solo el owner puede usar este comando'
+      }, { quoted: msg });
     }
 
+    // ⏳ Mensaje inicial
     await sock.sendMessage(remoteJid, {
-      text: '🔄 Actualizando desde GitHub...'
+      text: '🔄 Actualizando bot desde GitHub...'
     }, { quoted: msg });
 
-    exec('git pull', async (err, stdout) => {
+    // 🚀 Ejecutar git pull
+    exec('git pull', (err, stdout, stderr) => {
+
       if (err) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Error al actualizar'
+          text: '❌ Error al actualizar:\n' + err.message
         }, { quoted: msg });
       }
 
-      if (stdout.includes('Already up to date')) {
-        return sock.sendMessage(remoteJid, {
-          text: '✅ Ya estás en la última versión'
+      // 📦 Instalar dependencias (opcional)
+      exec('npm install', async () => {
+
+        await sock.sendMessage(remoteJid, {
+          text: '✅ Bot actualizado correctamente\n\n🔁 Reiniciando...'
         }, { quoted: msg });
-      }
 
-      await sock.sendMessage(remoteJid, {
-        text: '✅ Actualizado correctamente\n🔁 Reiniciando...'
-      }, { quoted: msg });
-
-      process.exit(0);
+        // 🔁 Reiniciar bot
+        process.exit(0);
+      });
     });
   }
 };
