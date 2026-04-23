@@ -1,3 +1,5 @@
+Este es el handler.js que modifiqué
+
 'use strict';
 
 const path    = require('path');
@@ -6,10 +8,10 @@ const chalk   = require('chalk');
 const config  = require('./config');
 
 const {
-  getBody, isGroup, getBotJid,
-  normalizeJid,
-  detectPrefix,
-} = require('./lib/utils.js');
+getBody, isGroup, getBotJid,
+normalizeJid,
+detectPrefix,
+} = require('./lib/utils');
 
 // ═══════════════════════════════════════
 // 📦 CARGA DE PLUGINS
@@ -18,34 +20,35 @@ const {
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
 
 if (!fs.existsSync(PLUGINS_DIR)) {
-  fs.mkdirSync(PLUGINS_DIR, { recursive: true });
+fs.mkdirSync(PLUGINS_DIR, { recursive: true });
 }
 
 const plugins = new Map();
 
 function loadPlugins() {
-  plugins.clear();
+plugins.clear();
 
-  const files = fs.readdirSync(PLUGINS_DIR).filter(f => f.endsWith('.js'));
+const files = fs.readdirSync(PLUGINS_DIR).filter(f => f.endsWith('.js'));
 
-  for (const file of files) {
-    try {
-      const filepath = path.join(PLUGINS_DIR, file);
-      delete require.cache[require.resolve(filepath)];
+for (const file of files) {
+try {
+const filepath = path.join(PLUGINS_DIR, file);
+delete require.cache[require.resolve(filepath)];
 
-      const plugin = require(filepath);
-      const cmds = plugin.commands || [];
+const plugin = require(filepath);  
+  const cmds = plugin.commands || [];  
 
-      for (const cmd of cmds) {
-        plugins.set(cmd.toLowerCase(), plugin);
-      }
+  for (const cmd of cmds) {  
+    plugins.set(cmd.toLowerCase(), plugin);  
+  }  
 
-    } catch (e) {
-      console.log(chalk.red(`Error cargando ${file}:`), e.message);
-    }
-  }
+} catch (e) {  
+  console.log(chalk.red(`Error cargando ${file}:`), e.message);  
+}
 
-  console.log(chalk.green(`Plugins cargados: ${plugins.size}`));
+}
+
+console.log(chalk.green(Plugins cargados: ${plugins.size}));
 }
 
 loadPlugins();
@@ -55,70 +58,81 @@ loadPlugins();
 // ═══════════════════════════════════════
 
 async function messageHandler(sock, msg, store) {
-  const { key, message, pushName } = msg;
-  if (!message) return;
+const { key, message, pushName } = msg;
+if (!message) return;
 
-  const remoteJid = key.remoteJid;
-  const fromGroup = isGroup(remoteJid);
+const remoteJid = key.remoteJid;
+const fromGroup = isGroup(remoteJid);
 
-  let sender = fromGroup ? key.participant : remoteJid;
-  sender = normalizeJid(sender);
+let sender = fromGroup ? key.participant : remoteJid;
+sender = normalizeJid(sender);
 
-  const botJid = getBotJid(sock);
-  if (sender === botJid || key.fromMe) return;
+const botJid = getBotJid(sock);
+if (sender === botJid || key.fromMe) return;
 
-  const body = getBody(msg);
-  if (!body) return;
-
-  // ✅ SOLO UNA VEZ
+const body = getBody(msg);
+if (!body) return;
+// ── Detectar prefijo ─────────────────────────────────────────────
   const parsed = detectPrefix(body);
   if (!parsed) return;
 
-  const args    = parsed.body.split(/\s+/);
+  const args    = parsed.body.trim().split(/\s+/);
   const command = args.shift()?.toLowerCase();
-
-  const senderNum = sender.split('@')[0];
-
-  const contact = store?.contacts?.[sender] || {};
-  const name = pushName || contact.name || contact.notify || senderNum;
-
-  // 📝 LOG
-  console.log(
-    chalk.cyan('📩 Mensaje recibido'),
-    '\n',
-    chalk.yellow('👤 Nombre :'), name,
-    '\n',
-    chalk.green('📞 Número :'), senderNum,
-    '\n',
-    chalk.magenta('💬 Mensaje:'), body,
-    '\n',
-    chalk.gray('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-  );
-
-  if (config.readMessages) {
-    await sock.readMessages([key]).catch(() => {});
-  }
+  if (!command) return;
 
   const plugin = plugins.get(command);
   if (!plugin) return;
 
-  const ctx = {
-    sock,
-    msg,
-    remoteJid,
-    sender,
-    senderNum,
-    args,
-    command,
-    store,
-    config
-  };
+const senderNum = sender.split('@')[0];
 
-  try {
-    await plugin.execute(ctx);
-  } catch (e) {
-    console.log(chalk.red('Error en plugin:'), e.message);
-  }
+const contact = store?.contacts?.[sender] || {};
+const name = pushName || contact.name || contact.notify || senderNum;
+
+// 📝 LOG
+console.log(
+chalk.cyan('📩 Mensaje recibido'),
+'\n',
+chalk.yellow('👤 Nombre :'), name,
+'\n',
+chalk.green('📞 Número :'), senderNum,
+'\n',
+chalk.magenta('💬 Mensaje:'), body,
+'\n',
+chalk.gray('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+);
+
+if (config.readMessages) {
+await sock.readMessages([key]).catch(() => {});
+}
+
+// ───── COMANDOS ─────
+
+const parsed = detectPrefix(body);
+if (!parsed) return;
+
+const args    = parsed.body.trim().split(/\s+/);
+const command = args.shift()?.toLowerCase();
+
+const plugin = plugins.get(command);
+if (!plugin) return;
+
+const ctx = {
+sock,
+msg,
+remoteJid,
+sender,
+senderNum,
+args,
+command,
+store,
+config
+};
+
+try {
+await plugin.execute(ctx);
+} catch (e) {
+console.log(chalk.red('Error en plugin:'), e.message);
+}
 }
 
 module.exports = { messageHandler, loadPlugins };
