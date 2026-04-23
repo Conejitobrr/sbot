@@ -6,12 +6,12 @@ module.exports = {
   commands: ['update'],
 
   async execute(ctx) {
-    const { sock, remoteJid, msg, isOwner } = ctx;
+    const { sock, remoteJid, msg } = ctx;
 
-    // 🔒 SOLO OWNER
-    if (!isOwner) {
+    // 🤖 SOLO EL BOT (fromMe)
+    if (!msg.key.fromMe) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Solo el owner puede usar este comando'
+        text: '❌ Este comando solo puede ejecutarlo el bot'
       }, { quoted: msg });
     }
 
@@ -21,7 +21,7 @@ module.exports = {
     }, { quoted: msg });
 
     // 🚀 Ejecutar git pull
-    exec('git pull', (err, stdout, stderr) => {
+    exec('git pull', (err) => {
 
       if (err) {
         return sock.sendMessage(remoteJid, {
@@ -29,7 +29,7 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 📦 Instalar dependencias (opcional)
+      // 📦 Instalar dependencias
       exec('npm install', async () => {
 
         await sock.sendMessage(remoteJid, {
