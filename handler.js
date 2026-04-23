@@ -77,7 +77,8 @@ async function messageHandler(sock, msg, store) {
 
   // 📛 Nombre correcto
   const contact = store?.contacts?.[sender] || {};
-
+const name = pushName || contact.name || contact.notify || senderNum;
+  
   // 📝 LOG
   console.log(
     chalk.cyan('📩 Mensaje recibido'),
