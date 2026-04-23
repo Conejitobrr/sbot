@@ -5,16 +5,18 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeInMemoryStore
+  makeCacheableSignalKeyStore,
+  jidNormalizedUser
 } = require('@whiskeysockets/baileys');
 
+const { Boom } = require('@hapi/boom');
 const pino   = require('pino');
 const chalk  = require('chalk');
 const qrcode = require('qrcode-terminal');
 const fs     = require('fs');
 const path   = require('path');
 
-// 👇 IMPORTANTE: handler
+// 👇 handler
 const { messageHandler } = require('./handler');
 
 // ═══════════════════════════════════════
@@ -27,10 +29,8 @@ if (!fs.existsSync(SESSION_DIR)) {
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
 
-// 🧠 STORE (para contactos, nombres, etc)
-const store = makeInMemoryStore({
-  logger: pino({ level: 'silent' })
-});
+// 🧠 STORE SIMPLE (nuevo reemplazo)
+const store = { contacts: {}, messages: {} };
 
 // ═══════════════════════════════════════
 // START BOT
@@ -38,30 +38,35 @@ const store = makeInMemoryStore({
 
 async function startBot(opts = {}) {
 
+  const useCode  = opts.method === 'code';
+  const phoneNum = opts.phone || null;
+
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
     version,
     logger: pino({ level: 'silent' }),
-    auth: state,
+    browser: useCode
+      ? ['Ubuntu', 'Chrome', '20.0.04']
+      : ['SiriusBot', 'Safari', '2.0.0'],
+    auth: {
+      creds: state.creds,
+      keys : makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+    },
     printQRInTerminal: false
   });
-
-  // 🔥 VINCULAR STORE
-  store.bind(sock.ev);
 
   // ═══════════════════════════════════
   // CÓDIGO DE EMPAREJAMIENTO
   // ═══════════════════════════════════
 
-  if (opts.method === 'code' && opts.phone && !state.creds?.registered) {
+  if (useCode && phoneNum && !state.creds?.registered) {
     setTimeout(async () => {
       try {
-        const code = await sock.requestPairingCode(opts.phone);
-
-        console.log(chalk.cyan('\n  Código de emparejamiento:\n'));
-        console.log(chalk.bgCyan.black(`   ${code}   \n`));
+        const rawCode = await sock.requestPairingCode(phoneNum);
+        console.log(chalk.cyan('\nCódigo de emparejamiento:\n'));
+        console.log(chalk.bgCyan.black(`   ${rawCode}   \n`));
       } catch (e) {
         console.log(chalk.red('Error al generar código'));
       }
@@ -69,22 +74,29 @@ async function startBot(opts = {}) {
   }
 
   // ═══════════════════════════════════
-  // EVENTOS
+  // EVENTOS DE CONEXIÓN
   // ═══════════════════════════════════
 
-  sock.ev.on('connection.update', ({ connection, qr, lastDisconnect }) => {
+  sock.ev.on('connection.update', (update) => {
+    const { connection, qr, lastDisconnect } = update;
 
-    if (qr && opts.method === 'qr') {
+    // 🔥 QR
+    if (qr && !useCode) {
       console.log(chalk.yellow('\nEscanea este QR:\n'));
       qrcode.generate(qr, { small: true });
     }
 
+    // ✅ CONECTADO
     if (connection === 'open') {
-      console.log(chalk.green('\n✅ Conectado como SiriusBot\n'));
+      const num = jidNormalizedUser(sock.user.id).split('@')[0];
+      console.log(chalk.green('\n✅ Conectado como:'), num, '\n');
     }
 
+    // 🔁 RECONEXIÓN
     if (connection === 'close') {
-      const reason = lastDisconnect?.error?.output?.statusCode;
+      const reason = lastDisconnect?.error instanceof Boom
+        ? lastDisconnect.error.output?.statusCode
+        : 0;
 
       if (reason !== DisconnectReason.loggedOut) {
         console.log(chalk.yellow('Reconectando...\n'));
@@ -95,12 +107,29 @@ async function startBot(opts = {}) {
     }
   });
 
-  // 🔥 GUARDAR SESIÓN
+  // 💾 GUARDAR SESIÓN
   sock.ev.on('creds.update', saveCreds);
 
-  // 🔥 AQUÍ ESTABA EL ERROR
-  sock.ev.on('messages.upsert', async ({ messages }) => {
+  // ═══════════════════════════════════
+  // CONTACTOS (reemplazo de store.bind)
+  // ═══════════════════════════════════
+
+  sock.ev.on('contacts.upsert', contacts => {
+    for (const c of contacts) {
+      if (c.id) store.contacts[c.id] = c;
+    }
+  });
+
+  // ═══════════════════════════════════
+  // MENSAJES
+  // ═══════════════════════════════════
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+
     for (const msg of messages) {
+      if (!msg.message) continue;
+
       try {
         await messageHandler(sock, msg, store);
       } catch (e) {
