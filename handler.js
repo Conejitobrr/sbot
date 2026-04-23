@@ -98,6 +98,7 @@ async function messageHandler(sock, msg, store) {
 
 const parsed = detectPrefix(body);
 if (!parsed) return;
+  
 const args    = parsed.body.trim().split(/\s+/);
 const command = args.shift()?.toLowerCase();
 if (!command) return;
