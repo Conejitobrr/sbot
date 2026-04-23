@@ -71,14 +71,28 @@ async function messageHandler(sock, msg, store) {
   const body = getBody(msg);
   if (!body) return;
 
-    // ── Permisos ─────────────────────────────────────────────────────
-  const senderNum = sender.split('@')[0];
-  const isRowner  = config.rowner.includes(senderNum);
-  const isOwner   = config.owner.includes(senderNum) || isRowner;
-  const isMod     = config.mods.includes(senderNum)  || isOwner;
-  const isAdmin   = groupAdmins.includes(sender)      || isOwner;
-  const isPremium = (await db.isPremium(sender))      || isOwner;
-  
+// ── Permisos ─────────────────────────────────────────────────────
+const senderNum = sender.replace(/[^0-9]/g, '');
+
+const isRowner = (config.rowner || []).includes(senderNum);
+const isOwner  = (config.owner  || []).includes(senderNum) || isRowner;
+
+// opcional (si no tienes mods en config)
+const isMod = isOwner;
+
+// grupos (solo si es grupo)
+let groupAdmins = [];
+if (fromGroup && msg.message) {
+  try {
+    const metadata = await sock.groupMetadata(remoteJid);
+    groupAdmins = getGroupAdmins(metadata.participants);
+  } catch {}
+}
+
+const isAdmin = groupAdmins.includes(sender) || isOwner;
+
+// premium (seguro)
+const isPremium = (await db.isPremium?.(sender).catch(() => false)) || isOwner;  
   // 📛 Nombre correcto
   const contact = store?.contacts?.[sender] || {};
 const name = pushName || contact.name || contact.notify || senderNum;
