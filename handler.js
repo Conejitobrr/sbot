@@ -77,8 +77,7 @@ async function messageHandler(sock, msg, store) {
 
   // 📛 Nombre correcto
   const contact = store?.contacts?.[sender] || {};
-const isOwner = config.owner.includes(senderNum) || config.rowner.includes(senderNum);
-  
+
   // 📝 LOG
   console.log(
     chalk.cyan('📩 Mensaje recibido'),
