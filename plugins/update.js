@@ -8,13 +8,6 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, msg } = ctx;
 
-    // 🤖 SOLO EL BOT (fromMe)
-    if (!msg.key.fromMe) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Este comando solo puede ejecutarlo el bot'
-      }, { quoted: msg });
-    }
-
     // ⏳ Mensaje inicial
     await sock.sendMessage(remoteJid, {
       text: '🔄 Actualizando bot desde GitHub...'
