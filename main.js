@@ -4,7 +4,8 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  makeInMemoryStore
 } = require('@whiskeysockets/baileys');
 
 const pino   = require('pino');
@@ -13,14 +14,23 @@ const qrcode = require('qrcode-terminal');
 const fs     = require('fs');
 const path   = require('path');
 
+// 👇 IMPORTANTE: handler
+const { messageHandler } = require('./handler');
+
 // ═══════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════
 
 const SESSION_DIR = path.resolve('./session');
+
 if (!fs.existsSync(SESSION_DIR)) {
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
+
+// 🧠 STORE (para contactos, nombres, etc)
+const store = makeInMemoryStore({
+  logger: pino({ level: 'silent' })
+});
 
 // ═══════════════════════════════════════
 // START BOT
@@ -37,6 +47,9 @@ async function startBot(opts = {}) {
     auth: state,
     printQRInTerminal: false
   });
+
+  // 🔥 VINCULAR STORE
+  store.bind(sock.ev);
 
   // ═══════════════════════════════════
   // CÓDIGO DE EMPAREJAMIENTO
@@ -82,7 +95,19 @@ async function startBot(opts = {}) {
     }
   });
 
+  // 🔥 GUARDAR SESIÓN
   sock.ev.on('creds.update', saveCreds);
+
+  // 🔥 AQUÍ ESTABA EL ERROR
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      try {
+        await messageHandler(sock, msg, store);
+      } catch (e) {
+        console.log(chalk.red('Error en handler:'), e.message);
+      }
+    }
+  });
 
   return sock;
 }
