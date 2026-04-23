@@ -9,7 +9,7 @@ const {
   getBody, isGroup, getBotJid,
   normalizeJid,
   detectPrefix,
-} = require('./lib/utils');
+} = require('./lib/utils.js');
 
 // ═══════════════════════════════════════
 // 📦 CARGA DE PLUGINS
