@@ -8,10 +8,10 @@ module.exports = {
   async execute(ctx) {
     const { sock, msg, remoteJid, senderNum, config } = ctx;
 
-    if (!config.owner.includes(senderNum)) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Solo el owner puede usar este comando'
-      }, { quoted: msg });
+    if (!ctx.isOwner) {
+  return ctx.sock.sendMessage(ctx.remoteJid, {
+    text: '❌ Solo el owner puede usar este comando'
+  }, { quoted: ctx.msg });
     }
 
     await sock.sendMessage(remoteJid, {
