@@ -70,11 +70,12 @@ async function messageHandler(sock, msg, store) {
   const body = getBody(msg);
   if (!body) return;
 
-const parsed = detectPrefix(body);
-if (!parsed) return;
+  // ✅ SOLO UNA VEZ
+  const parsed = detectPrefix(body);
+  if (!parsed) return;
 
-const args    = parsed.body.split(/\s+/);
-const command = args.shift()?.toLowerCase();
+  const args    = parsed.body.split(/\s+/);
+  const command = args.shift()?.toLowerCase();
 
   const senderNum = sender.split('@')[0];
 
@@ -97,14 +98,6 @@ const command = args.shift()?.toLowerCase();
   if (config.readMessages) {
     await sock.readMessages([key]).catch(() => {});
   }
-
-  // ───── COMANDOS ─────
-
-  const parsed = detectPrefix(body);
-  if (!parsed) return;
-
-  const args    = parsed.body.trim().split(/\s+/);
-  const command = args.shift()?.toLowerCase();
 
   const plugin = plugins.get(command);
   if (!plugin) return;
