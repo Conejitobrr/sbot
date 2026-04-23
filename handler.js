@@ -71,11 +71,13 @@ async function messageHandler(sock, msg, store) {
   const body = getBody(msg);
   if (!body) return;
 
-  const senderNum = sender.replace(/[^0-9]/g, '');
-
-const isOwner =
-  config.owner.includes(senderNum) ||
-  config.rowner.includes(senderNum);
+    // ── Permisos ─────────────────────────────────────────────────────
+  const senderNum = sender.split('@')[0];
+  const isRowner  = config.rowner.includes(senderNum);
+  const isOwner   = config.owner.includes(senderNum) || isRowner;
+  const isMod     = config.mods.includes(senderNum)  || isOwner;
+  const isAdmin   = groupAdmins.includes(sender)      || isOwner;
+  const isPremium = (await db.isPremium(sender))      || isOwner;
   
   // 📛 Nombre correcto
   const contact = store?.contacts?.[sender] || {};
