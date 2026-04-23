@@ -12,10 +12,48 @@ const {
   detectPrefix,
 } = require('./lib/utils');
 
-// ───── SIN PLUGINS (vacío por ahora)
+// ═══════════════════════════════════════
+// 📦 CARGA DE PLUGINS
+// ═══════════════════════════════════════
+
+const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
+
+if (!fs.existsSync(PLUGINS_DIR)) {
+  fs.mkdirSync(PLUGINS_DIR, { recursive: true });
+}
+
 const plugins = new Map();
 
-// ─────────────────────────────────────────────────────────────
+function loadPlugins() {
+  plugins.clear();
+
+  const files = fs.readdirSync(PLUGINS_DIR).filter(f => f.endsWith('.js'));
+
+  for (const file of files) {
+    try {
+      const filepath = path.join(PLUGINS_DIR, file);
+      delete require.cache[require.resolve(filepath)];
+
+      const plugin = require(filepath);
+      const cmds = plugin.commands || [];
+
+      for (const cmd of cmds) {
+        plugins.set(cmd.toLowerCase(), plugin);
+      }
+
+    } catch (e) {
+      console.log(chalk.red(`Error cargando plugin ${file}:`), e.message);
+    }
+  }
+
+  console.log(chalk.green(`Plugins cargados: ${plugins.size}`));
+}
+
+loadPlugins();
+
+// ═══════════════════════════════════════
+// 🚀 HANDLER PRINCIPAL
+// ═══════════════════════════════════════
 
 async function messageHandler(sock, msg, store) {
   const { key, message, pushName } = msg;
@@ -24,7 +62,6 @@ async function messageHandler(sock, msg, store) {
   const remoteJid = key.remoteJid;
   const fromGroup = isGroup(remoteJid);
 
-  // 🔥 FIX AQUÍ (sin resolveLidSync)
   let sender = fromGroup ? key.participant : remoteJid;
   sender = normalizeJid(sender);
 
@@ -35,6 +72,59 @@ async function messageHandler(sock, msg, store) {
   if (!body) return;
 
   const senderNum = sender.split('@')[0];
+
+  // 📛 Nombre correcto
+  const contact = store?.contacts?.[sender] || {};
+  const name = pushName || contact.name || contact.notify || senderNum;
+
+  // 📝 LOG
+  console.log(
+    chalk.cyan('📩 Mensaje recibido'),
+    '\n',
+    chalk.yellow('👤 Nombre :'), name,
+    '\n',
+    chalk.green('📞 Número :'), senderNum,
+    '\n',
+    chalk.magenta('💬 Mensaje:'), body,
+    '\n',
+    chalk.gray('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  );
+
+  if (config.readMessages) {
+    await sock.readMessages([key]).catch(() => {});
+  }
+
+  // ───── COMANDOS ─────
+
+  const parsed = detectPrefix(body);
+  if (!parsed) return;
+
+  const args    = parsed.body.trim().split(/\s+/);
+  const command = args.shift()?.toLowerCase();
+
+  const plugin = plugins.get(command);
+  if (!plugin) return;
+
+  const ctx = {
+    sock,
+    msg,
+    remoteJid,
+    sender,
+    senderNum,
+    args,
+    command,
+    store,
+    config
+  };
+
+  try {
+    await plugin.execute(ctx);
+  } catch (e) {
+    console.log(chalk.red('Error en plugin:'), e.message);
+  }
+}
+
+module.exports = { messageHandler, loadPlugins };  const senderNum = sender.split('@')[0];
 
   // 🔥 NOMBRE CORRECTO (con fallback)
   const contact = store?.contacts?.[sender] || {};
