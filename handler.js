@@ -71,10 +71,12 @@ async function messageHandler(sock, msg, store) {
   const body = getBody(msg);
   if (!body) return;
 
-  const senderNum = sender.split('@')[0];
-  const isOwner = config.owner.includes(senderNum) || config.rowner.includes(senderNum);
+  const senderNum = sender.replace(/[^0-9]/g, '');
 
-
+const isOwner =
+  config.owner.includes(senderNum) ||
+  config.rowner.includes(senderNum);
+  
   // 📛 Nombre correcto
   const contact = store?.contacts?.[sender] || {};
 const name = pushName || contact.name || contact.notify || senderNum;
