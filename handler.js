@@ -69,7 +69,6 @@ async function messageHandler(sock, msg, store) {
 
   const body = getBody(msg);
   if (!body) return;
-  const { detectPrefix } = require('./lib/utils'); // 👈 arriba del archivo si no está
 
 const parsed = detectPrefix(body);
 if (!parsed) return;
