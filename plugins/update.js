@@ -6,14 +6,11 @@ module.exports = {
   commands: ['update'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid, sender, config } = ctx;
+    const { sock, msg, remoteJid, senderNum, config } = ctx;
 
-    const senderNum = sender.split('@')[0];
-
-    // 🔒 Solo owner
     if (!config.owner.includes(senderNum)) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Este comando es solo para el owner'
+        text: '❌ Solo el owner puede usar este comando'
       }, { quoted: msg });
     }
 
@@ -21,9 +18,8 @@ module.exports = {
       text: '🔄 Actualizando desde GitHub...'
     }, { quoted: msg });
 
-    exec('git pull', async (err, stdout, stderr) => {
+    exec('git pull', async (err, stdout) => {
       if (err) {
-        console.log(err);
         return sock.sendMessage(remoteJid, {
           text: '❌ Error al actualizar'
         }, { quoted: msg });
@@ -35,6 +31,14 @@ module.exports = {
         }, { quoted: msg });
       }
 
+      await sock.sendMessage(remoteJid, {
+        text: '✅ Actualizado\n🔁 Reiniciando...'
+      }, { quoted: msg });
+
+      process.exit(0);
+    });
+  }
+};
       await sock.sendMessage(remoteJid, {
         text: '✅ Actualizado correctamente\n🔁 Reiniciando...'
       }, { quoted: msg });
