@@ -8,7 +8,7 @@ const db      = require('./lib/database');
 
 const {
   getBody, isGroup, getGroupAdmins, getBotJid, isBotAdmin,
-  resolveLidSync, learnLidsFromParticipants, normalizeJid,
+  normalizeJid,
   detectPrefix,
 } = require('./lib/utils');
 
@@ -24,8 +24,9 @@ async function messageHandler(sock, msg, store) {
   const remoteJid = key.remoteJid;
   const fromGroup = isGroup(remoteJid);
 
+  // 🔥 FIX AQUÍ (sin resolveLidSync)
   let sender = fromGroup ? key.participant : remoteJid;
-  sender = normalizeJid(resolveLidSync(sender, store));
+  sender = normalizeJid(sender);
 
   const botJid = getBotJid(sock);
   if (sender === botJid || key.fromMe) return;
@@ -35,11 +36,15 @@ async function messageHandler(sock, msg, store) {
 
   const senderNum = sender.split('@')[0];
 
+  // 🔥 NOMBRE CORRECTO (con fallback)
+  const contact = store?.contacts?.[sender] || {};
+  const name = pushName || contact.name || contact.notify || senderNum;
+
   // ───────────── 🔥 LOG DE MENSAJES 🔥 ─────────────
   console.log(
     chalk.cyan('📩 Mensaje recibido'),
     '\n',
-    chalk.yellow('👤 Nombre :'), pushName || 'Sin nombre',
+    chalk.yellow('👤 Nombre :'), name,
     '\n',
     chalk.green('📞 Número :'), senderNum,
     '\n',
