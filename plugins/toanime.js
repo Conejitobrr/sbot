@@ -1,9 +1,12 @@
 'use strict';
 
+require('dotenv').config();
+
 const fs = require('fs');
 const path = require('path');
-const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const axios = require('axios');
 const Replicate = require('replicate');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
   commands: ['toanime'],
@@ -40,9 +43,17 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔑 REPLICATE TOKEN
+      // 🔑 TOKEN DESDE .env (NO GITHUB HARD CODE)
+      const token = process.env.REPLICATE_API_TOKEN;
+
+      if (!token) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No hay API key configurada en .env'
+        }, { quoted: msg });
+      }
+
       const replicate = new Replicate({
-        auth: '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'
+        auth: token
       });
 
       const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
@@ -52,7 +63,7 @@ module.exports = {
         {
           input: {
             image: `data:image/jpeg;base64,${imageBase64}`,
-            prompt: "anime style, high quality, detailed face, cinematic lighting, ultra detailed illustration",
+            prompt: "anime style, ultra detailed face, cinematic lighting, high quality illustration, soft shading",
             strength: 0.75
           }
         }
@@ -60,10 +71,11 @@ module.exports = {
 
       const imageUrl = result[0];
 
-      const img = await fetch(imageUrl);
-      const arrayBuffer = await img.arrayBuffer();
+      const img = await axios.get(imageUrl, {
+        responseType: 'arraybuffer'
+      });
 
-      fs.writeFileSync(output, Buffer.from(arrayBuffer));
+      fs.writeFileSync(output, img.data);
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
@@ -74,10 +86,10 @@ module.exports = {
       fs.unlinkSync(output);
 
     } catch (err) {
-      console.log('ANIME API ERROR:', err.message || err);
+      console.log('ANIME API ERROR:', err.response?.data || err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con IA anime (Replicate)'
+        text: '❌ Error con IA anime. Revisa tu API key o conexión.'
       }, { quoted: msg });
     }
   }
