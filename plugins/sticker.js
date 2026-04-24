@@ -19,7 +19,7 @@ module.exports = {
 
       if (!type || (type !== 'imageMessage' && type !== 'videoMessage')) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Responde a una imagen o video con .s'
+          text: 'Responde a una imagen o video con .s'
         }, { quoted: msg });
       }
 
@@ -41,7 +41,7 @@ module.exports = {
 
       const input = path.join(
         tempDir,
-        `input.${type === 'imageMessage' ? 'jpg' : 'mp4'}`
+        'input.' + (type === 'imageMessage' ? 'jpg' : 'mp4')
       );
 
       const output = path.join(tempDir, 'output.webp');
@@ -69,4 +69,36 @@ module.exports = {
           '-compression_level 4',
           '-preset picture',
           '-loop 0',
-          '-an
+          '-an',
+          '-vsync 0'
+        ])
+        .toFormat('webp')
+        .save(output)
+        .on('end', async () => {
+          const sticker = fs.readFileSync(output);
+
+          await sock.sendMessage(remoteJid, {
+            sticker
+          }, { quoted: msg });
+
+          fs.unlinkSync(input);
+          fs.unlinkSync(output);
+        })
+        .on('error', async (err) => {
+          console.error(err);
+
+          await sock.sendMessage(remoteJid, {
+            text: 'Error al convertir a sticker'
+          }, { quoted: msg });
+
+          if (fs.existsSync(input)) fs.unlinkSync(input);
+        });
+
+    } catch (err) {
+      console.error(err);
+      await sock.sendMessage(remoteJid, {
+        text: 'Error general en sticker'
+      }, { quoted: msg });
+    }
+  }
+};
