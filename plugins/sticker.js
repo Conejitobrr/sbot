@@ -46,14 +46,18 @@ module.exports = {
 
       ffmpeg(input)
         .outputOptions([
-          '-vcodec', 'libwebp'
-          '-vf', 'scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:(ow-iw)/2:(oh-ih)/2'
-         '-lossless', '1',
-          '-loop', '0',
-          '-preset', 'default',
-          '-an',
-          '-vsync', '0'
-        ])
+  '-vcodec', 'libwebp',
+  '-vf', [
+    'scale=512:512:force_original_aspect_ratio=decrease',
+    'fps=15',
+    'pad=512:512:(ow-iw)/2:(oh-ih)/2'
+  ].join(','),
+  '-lossless', '1',
+  '-loop', '0',
+  '-preset', 'default',
+  '-an',
+  '-vsync', '0'
+])
         .toFormat('webp')
         .save(output)
         .on('end', async () => {
