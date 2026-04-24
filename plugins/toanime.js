@@ -40,18 +40,15 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 EFECTO ANIME (cartoon + edges)
+      // 🔥 EFECTO ANIME (ARREGLADO)
       const cmd = `
       magick "${input}" \
       -resize 512x512 \
       -colorspace RGB \
-      -posterize 4 \
+      -posterize 5 \
       -edge 1 \
-      -negate \
-      -threshold 50% \
-      -blur 0x1 \
-      -compose multiply \
-      -composite \
+      -auto-level \
+      -sharpen 0x1 \
       "${output}"
       `;
 
