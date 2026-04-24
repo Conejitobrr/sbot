@@ -15,9 +15,9 @@ module.exports = {
       const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
       const message = quoted || msg.message;
 
-      const type = Object.keys(message)[0];
+      const type = Object.keys(message || {})[0];
 
-      if (type !== 'imageMessage' && type !== 'videoMessage') {
+      if (!type || (type !== 'imageMessage' && type !== 'videoMessage')) {
         return sock.sendMessage(remoteJid, {
           text: '❌ Responde a una imagen o video con .s'
         }, { quoted: msg });
@@ -37,7 +37,7 @@ module.exports = {
       }
 
       const tempDir = path.join(__dirname, '../temp');
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       const input = path.join(tempDir, 'input');
       const output = path.join(tempDir, 'output.webp');
@@ -46,16 +46,21 @@ module.exports = {
 
       ffmpeg(input)
         .outputOptions([
-  '-vcodec', 'libwebp',
-'-vf', 'trim=duration=9999,crop=iw:ih:0:0,scale=512:512:force_original_aspect_ratio=decrease,fps=15'
-].join(',')
- '-pix_fmt', 'yuva420p',
-  '-lossless', '1',
-  '-loop', '0',
-  '-preset', 'default',
-  '-an',
-  '-vsync', '0'
-])
+          '-vcodec', 'libwebp',
+
+          // 🔥 CLAVE: sin padding, sin deformar, respeta proporción real
+          '-vf', [
+            'scale=512:512:force_original_aspect_ratio=decrease',
+            'fps=15'
+          ].join(','),
+
+          '-lossless', '1',
+          '-qscale', '1',
+          '-loop', '0',
+          '-preset', 'default',
+          '-an',
+          '-vsync', '0'
+        ])
         .toFormat('webp')
         .save(output)
         .on('end', async () => {
@@ -73,12 +78,14 @@ module.exports = {
           await sock.sendMessage(remoteJid, {
             text: '❌ Error al convertir a sticker'
           }, { quoted: msg });
+
+          if (fs.existsSync(input)) fs.unlinkSync(input);
         });
 
     } catch (err) {
       console.error(err);
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general en el comando'
+        text: '❌ Error general en sticker'
       }, { quoted: msg });
     }
   }
