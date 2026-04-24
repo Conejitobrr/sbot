@@ -62,14 +62,17 @@ module.exports = {
 
       command
         .outputOptions([
+  '-vcod.outputOptions([
   '-vcodec libwebp',
   '-vf ' + vf,
   '-pix_fmt yuva420p',
-  '-lossless 0',
-  '-qscale 0',
-  '-compression_level 6',
-  '-loop 0',
+
+  // 🔥 CALIDAD ALTA REAL
+  '-q:v 90',              // calidad (0–100)
+  '-compression_level 4', // menos compresión = más calidad
   '-preset picture',
+
+  '-loop 0',
   '-an',
   '-vsync 0'
 ])
