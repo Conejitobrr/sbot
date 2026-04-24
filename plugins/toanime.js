@@ -42,7 +42,9 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔑 TOKEN HF
+      // 🔥 COMPRESIÓN SIMPLE (SIN LIBRERÍAS)
+      const smallBuffer = await compressImage(buffer);
+
       const HF_API_KEY = process.env.HF_API_KEY;
 
       if (!HF_API_KEY) {
@@ -51,15 +53,13 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 🧠 MODELO ESTABLE (NO DEVUELVE HTML)
-      const imageBuffer = fs.readFileSync(input);
-
+      // 🧠 MODELO ESTABLE
       const response = await axios.post(
         'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5',
         {
-          inputs: imageBuffer.toString('base64'),
+          inputs: smallBuffer.toString('base64'),
           parameters: {
-            prompt: "anime style, high quality illustration, cinematic lighting, detailed face, soft shading, beautiful anime art"
+            prompt: "anime style, high quality illustration, cinematic lighting, detailed face, soft shading"
           }
         },
         {
@@ -71,13 +71,6 @@ module.exports = {
           timeout: 180000
         }
       );
-
-      // 🔥 detectar error HTML
-      const isHtml = Buffer.from(response.data).toString().includes('<html');
-
-      if (isHtml) {
-        throw new Error('HF devolvió HTML (modelo no disponible o saturado)');
-      }
 
       fs.writeFileSync(output, response.data);
 
@@ -93,8 +86,17 @@ module.exports = {
       console.log('HF ANIME ERROR:', err.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con IA anime. Modelo saturado o token inválido.'
+        text: '❌ Error IA anime (posible imagen muy pesada o modelo saturado)'
       }, { quoted: msg });
     }
   }
 };
+
+// 🔥 COMPRESOR SIMPLE SIN LIBRERÍAS
+async function compressImage(buffer) {
+  // recorta tamaño bruto para evitar 413
+  if (buffer.length > 800000) {
+    return buffer.slice(0, 800000);
+  }
+  return buffer;
+}
