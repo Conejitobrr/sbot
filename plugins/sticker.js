@@ -45,23 +45,16 @@ module.exports = {
       fs.writeFileSync(input, buffer);
 
       ffmpeg(input)
-        .outputOptions([
-          '-vcodec', 'libwebp',
-
-          // 🔥 CLAVE: sin padding, sin deformar, respeta proporción real
-          '-vf', [
-  'scale=512:512:force_original_aspect_ratio=decrease',
-  'pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
-  'fps=15'
-].join(',')
-
-          '-lossless', '1',
-          '-qscale', '1',
-          '-loop', '0',
-          '-preset', 'default',
-          '-an',
-          '-vsync', '0'
-        ])
+.outputOptions([
+  '-vcodec libwebp',
+  '-vf scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000,fps=15',
+  '-lossless 1',
+  '-qscale 0',
+  '-loop 0',
+  '-preset default',
+  '-an',
+  '-vsync 0'
+])
         .toFormat('webp')
         .save(output)
         .on('end', async () => {
