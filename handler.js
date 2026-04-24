@@ -7,13 +7,11 @@ const config  = require('./config');
 const db      = require('./lib/database');
 
 const {
-  getBody, isGroup, getGroupAdmins, getBotJid,
-  normalizeJid,
-  detectPrefix,
+  getBody, normalizeJid, detectPrefix, getGroupAdmins
 } = require('./lib/utils');
 
 // ═══════════════════════════════════════
-// 📦 CARGA DE PLUGINS
+// 📦 PLUGINS
 // ═══════════════════════════════════════
 
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins');
@@ -24,6 +22,7 @@ if (!fs.existsSync(PLUGINS_DIR)) {
 
 const plugins = new Map();
 
+// 🔥 FUNCIÓN HOT RELOAD REAL
 function loadPlugins() {
   plugins.clear();
 
@@ -32,6 +31,8 @@ function loadPlugins() {
   for (const file of files) {
     try {
       const filepath = path.join(PLUGINS_DIR, file);
+
+      // limpiar cache de Node
       delete require.cache[require.resolve(filepath)];
 
       const plugin = require(filepath);
@@ -42,17 +43,21 @@ function loadPlugins() {
       }
 
     } catch (e) {
-      console.log(chalk.red(`Error cargando plugin ${file}:`), e.message);
+      console.log(chalk.red(`Error plugin ${file}:`), e.message);
     }
   }
 
-  console.log(chalk.green(`Plugins cargados: ${plugins.size}`));
+  console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size}`));
 }
 
+// 🔥 HACER GLOBAL (IMPORTANTE PARA UPDATE)
+global.loadPlugins = loadPlugins;
+
+// cargar al inicio
 loadPlugins();
 
 // ═══════════════════════════════════════
-// 🚀 HANDLER PRINCIPAL
+// 🚀 MESSAGE HANDLER
 // ═══════════════════════════════════════
 
 async function messageHandler(sock, msg, store) {
@@ -65,95 +70,38 @@ async function messageHandler(sock, msg, store) {
   let sender = fromGroup ? key.participant : remoteJid;
   sender = normalizeJid(sender);
 
-  const isFromMe = key.fromMe;
-
   const body = getBody(msg);
   if (!body) return;
 
   const parsed = detectPrefix(body);
-
-  // Permitir comandos propios
-  if (isFromMe && !parsed) return;
-
-  // ── PERMISOS ─────────────────────────
-  const senderNum = sender.replace(/[^0-9]/g, '');
-
-  const botNumber = sock.user.id.split(':')[0];
-
-  const isRowner = (config.rowner || []).includes(senderNum);
-
-  const isOwner =
-    senderNum === botNumber ||
-    (config.owner || []).includes(senderNum) ||
-    isRowner;
-
-  let groupAdmins = [];
-  if (fromGroup) {
-    try {
-      const metadata = await sock.groupMetadata(remoteJid);
-      groupAdmins = getGroupAdmins(metadata.participants);
-    } catch {}
-  }
-
-  const isAdmin = groupAdmins.includes(sender) || isOwner;
-
-  // 🔥 PREMIUM
-  const isPremium =
-    (await db.isPremium?.(sender).catch(() => false)) || isOwner;
-
-  const contact = store?.contacts?.[sender] || {};
-  const name = pushName || contact.name || contact.notify || senderNum;
-
-  // 📝 LOG
-  console.log(
-    chalk.cyan('📩 Mensaje'),
-    '\n',
-    chalk.yellow('👤'), name,
-    '\n',
-    chalk.green('📞'), senderNum,
-    '\n',
-    chalk.magenta('💬'), body,
-    '\n',
-    chalk.gray('━━━━━━━━━━━━━━━━━━')
-  );
-
-  if (config.readMessages) {
-    await sock.readMessages([key]).catch(() => {});
-  }
-
-  // ───── COMANDOS ─────
-
   if (!parsed) return;
 
-  const args    = parsed.body.trim().split(/\s+/);
+  const args = parsed.body.trim().split(/\s+/);
   const command = args.shift()?.toLowerCase();
   if (!command) return;
 
   const plugin = plugins.get(command);
   if (!plugin) return;
 
-  // 🔥 CONTEXTO COMPLETO
   const ctx = {
     sock,
     msg,
     remoteJid,
     sender,
-    senderNum,
     args,
     command,
     store,
     config,
 
-    // permisos
-    isOwner,
-    isAdmin,
-    isPremium
+    isOwner: false,
+    isAdmin: false,
+    isPremium: false
   };
 
   try {
     await plugin.execute(ctx);
   } catch (e) {
-    console.log(chalk.red('Error en plugin:'), e.message);
+    console.log(chalk.red('Error plugin:'), e.message);
   }
 }
 
