@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 
 const {
   default: makeWASocket,
@@ -7,41 +7,34 @@ const {
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   jidNormalizedUser
-} = require('@whiskeysockets/baileys');
+} = require('@whiskeysockets/baileys')
 
-const { Boom } = require('@hapi/boom');
-const pino   = require('pino');
-const chalk  = require('chalk');
-const qrcode = require('qrcode-terminal');
-const fs     = require('fs');
-const path   = require('path');
+const { Boom } = require('@hapi/boom')
+const pino = require('pino')
+const chalk = require('chalk')
+const qrcode = require('qrcode-terminal')
+const fs = require('fs')
+const path = require('path')
 
-const { messageHandler } = require('./handler');
+const { messageHandler } = require('./handler')
 
-// ═══════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════
-
-const SESSION_DIR = path.resolve('./session');
+const SESSION_DIR = path.resolve('./session')
 
 if (!fs.existsSync(SESSION_DIR)) {
-  fs.mkdirSync(SESSION_DIR, { recursive: true });
+  fs.mkdirSync(SESSION_DIR, { recursive: true })
 }
 
-// STORE SIMPLE
-const store = { contacts: {}, messages: {} };
-
-// ═══════════════════════════════════════
-// START BOT
-// ═══════════════════════════════════════
+const store = {
+  contacts: {},
+  messages: {}
+}
 
 async function startBot(opts = {}) {
+  const useCode = opts.method === 'code'
+  const phoneNum = opts.phone || null
 
-  const useCode  = opts.method === 'code';
-  const phoneNum = opts.phone || null;
-
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-  const { version } = await fetchLatestBaileysVersion();
+  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
+  const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
     version,
@@ -51,87 +44,91 @@ async function startBot(opts = {}) {
       : ['SiriusBot', 'Safari', '2.0.0'],
     auth: {
       creds: state.creds,
-      keys : makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+      keys: makeCacheableSignalKeyStore(
+        state.keys,
+        pino({ level: 'silent' })
+      )
     },
     printQRInTerminal: false
-  });
-
-  // ═══════════════════════════════════
-  // CÓDIGO DE EMPAREJAMIENTO
-  // ═══════════════════════════════════
+  })
 
   if (useCode && phoneNum && !state.creds?.registered) {
     setTimeout(async () => {
       try {
-        const rawCode = await sock.requestPairingCode(phoneNum);
-        console.log(chalk.cyan('\nCódigo de emparejamiento:\n'));
-        console.log(chalk.bgCyan.black(`   ${rawCode}   \n`));
-      } catch (e) {
-        console.log(chalk.red('Error al generar código'));
+        const rawCode = await sock.requestPairingCode(phoneNum)
+
+        console.log(chalk.cyan('\nCódigo de emparejamiento:\n'))
+        console.log(chalk.bgCyan.black(`   ${rawCode}   \n`))
+      } catch {
+        console.log(chalk.red('Error al generar código'))
       }
-    }, 3000);
+    }, 3000)
   }
 
-  // ═══════════════════════════════════
-  // EVENTOS DE CONEXIÓN
-  // ═══════════════════════════════════
-
-  sock.ev.on('connection.update', (update) => {
-    const { connection, qr, lastDisconnect } = update;
+  sock.ev.on('connection.update', update => {
+    const { connection, qr, lastDisconnect } = update
 
     if (qr && !useCode) {
-      console.log(chalk.yellow('\nEscanea este QR:\n'));
-      qrcode.generate(qr, { small: true });
+      console.log(chalk.yellow('\nEscanea este QR:\n'))
+      qrcode.generate(qr, { small: true })
     }
 
     if (connection === 'open') {
-      const num = jidNormalizedUser(sock.user.id).split('@')[0];
-      console.log(chalk.green('\n✅ Conectado como:'), num, '\n');
+      const num = jidNormalizedUser(sock.user.id).split('@')[0]
+      console.log(chalk.green('\n✅ Conectado como:'), num, '\n')
     }
 
     if (connection === 'close') {
-      const reason = lastDisconnect?.error instanceof Boom
-        ? lastDisconnect.error.output?.statusCode
-        : 0;
+      const reason =
+        lastDisconnect?.error instanceof Boom
+          ? lastDisconnect.error.output?.statusCode
+          : 0
 
       if (reason !== DisconnectReason.loggedOut) {
-        console.log(chalk.yellow('Reconectando...\n'));
-        startBot({ method: 'saved' });
+        console.log(chalk.yellow('Reconectando...\n'))
+        startBot({ method: 'saved' })
       } else {
-        console.log(chalk.red('Sesión cerrada. Borra /session\n'));
+        console.log(chalk.red('Sesión cerrada. Borra /session\n'))
       }
     }
-  });
+  })
 
-  sock.ev.on('creds.update', saveCreds);
-
-  // ═══════════════════════════════════
-  // CONTACTOS
-  // ═══════════════════════════════════
+  sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('contacts.upsert', contacts => {
     for (const c of contacts) {
-      if (c.id) store.contacts[c.id] = c;
-    }
-  });
-
-  // ═══════════════════════════════════
-  // MENSAJES (🔥 CORREGIDO)
-  // ═══════════════════════════════════
-
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    for (const msg of messages) {
-      if (!msg.message) continue;
-
-      try {
-        await messageHandler(sock, msg, store);
-      } catch (e) {
-        console.log(chalk.red('Error en handler:'), e.message);
+      if (c.id) {
+        store.contacts[c.id] = c
       }
     }
-  });
+  })
 
-  return sock;
+  // DEBUG DIRECTO DE EVENTOS
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(chalk.blue('📨 messages.upsert type:'), type)
+
+    if (type !== 'notify') return
+
+    for (const msg of messages) {
+      try {
+        console.log(
+          chalk.magenta('➡️ Mensaje recibido en main:'),
+          JSON.stringify(msg.message, null, 2)
+        )
+
+        if (!msg.message) continue
+        if (!msg.key?.remoteJid) continue
+        if (msg.key.remoteJid === 'status@broadcast') continue
+
+        await messageHandler(sock, msg, store)
+
+      } catch (e) {
+        console.log(chalk.red('Error en handler:'), e)
+      }
+    }
+  })
+
+  return sock
 }
 
-module.exports = { startBot };
+module.exports = { startBot }
