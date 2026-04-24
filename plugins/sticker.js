@@ -47,7 +47,11 @@ module.exports = {
       ffmpeg(input)
         .outputOptions([
   '-vcodec', 'libwebp',
-  '-vf', 'crop=iw:ih,scale=512:512:force_original_aspect_ratio=decrease,fps=15'      
+ '-vf', [
+  'crop=iw:ih',
+  'scale=512:512:force_original_aspect_ratio=decrease',
+  'fps=15'
+].join(',')
  '-pix_fmt', 'yuva420p',
   '-lossless', '1',
   '-loop', '0',
