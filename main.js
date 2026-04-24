@@ -1,7 +1,6 @@
 'use strict';
 require('dotenv').config(); // 👈 AQUÍ
 
-'use strict';
 
 // resto de tu código...
 
