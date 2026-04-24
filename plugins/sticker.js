@@ -50,9 +50,10 @@ module.exports = {
 
           // 🔥 CLAVE: sin padding, sin deformar, respeta proporción real
           '-vf', [
-            'scale=512:512:force_original_aspect_ratio=decrease',
-            'fps=15'
-          ].join(','),
+  'scale=512:512:force_original_aspect_ratio=decrease',
+  'pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
+  'fps=15'
+].join(',')
 
           '-lossless', '1',
           '-qscale', '1',
