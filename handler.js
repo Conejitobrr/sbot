@@ -7,7 +7,10 @@ const config  = require('./config');
 const db      = require('./lib/database');
 
 const {
-  getBody, normalizeJid, detectPrefix, getGroupAdmins
+  getBody,
+  normalizeJid,
+  detectPrefix,
+  getGroupAdmins
 } = require('./lib/utils');
 
 // ═══════════════════════════════════════
@@ -22,7 +25,6 @@ if (!fs.existsSync(PLUGINS_DIR)) {
 
 const plugins = new Map();
 
-// 🔥 FUNCIÓN HOT RELOAD REAL
 function loadPlugins() {
   plugins.clear();
 
@@ -32,7 +34,6 @@ function loadPlugins() {
     try {
       const filepath = path.join(PLUGINS_DIR, file);
 
-      // limpiar cache de Node
       delete require.cache[require.resolve(filepath)];
 
       const plugin = require(filepath);
@@ -50,14 +51,14 @@ function loadPlugins() {
   console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size}`));
 }
 
-// 🔥 HACER GLOBAL (IMPORTANTE PARA UPDATE)
+// 🔥 GLOBAL PARA UPDATE
 global.loadPlugins = loadPlugins;
 
-// cargar al inicio
+// carga inicial
 loadPlugins();
 
 // ═══════════════════════════════════════
-// 🚀 MESSAGE HANDLER
+// 🚀 HANDLER PRINCIPAL
 // ═══════════════════════════════════════
 
 async function messageHandler(sock, msg, store) {
@@ -83,6 +84,37 @@ async function messageHandler(sock, msg, store) {
   const plugin = plugins.get(command);
   if (!plugin) return;
 
+  // ═══════════════════════════════════
+  // 🔐 PERMISOS REALES
+  // ═══════════════════════════════════
+
+  const senderNum = sender.replace(/[^0-9]/g, '');
+  const botNumber = (config.defaultPhone || '').replace(/[^0-9]/g, '');
+
+  const isOwner =
+    senderNum === botNumber ||
+    (config.owner || []).includes(senderNum);
+
+  let groupAdmins = [];
+
+  if (fromGroup) {
+    try {
+      const metadata = await sock.groupMetadata(remoteJid);
+      groupAdmins = getGroupAdmins(metadata.participants);
+    } catch {}
+  }
+
+  const isAdmin = fromGroup
+    ? groupAdmins.includes(sender) || isOwner
+    : isOwner;
+
+  const isPremium =
+    (await db.isPremium?.(sender).catch(() => false)) || isOwner;
+
+  // ═══════════════════════════════════
+  // CONTEXTO FINAL
+  // ═══════════════════════════════════
+
   const ctx = {
     sock,
     msg,
@@ -93,10 +125,14 @@ async function messageHandler(sock, msg, store) {
     store,
     config,
 
-    isOwner: false,
-    isAdmin: false,
-    isPremium: false
+    isOwner,
+    isAdmin,
+    isPremium
   };
+
+  // ═══════════════════════════════════
+  // EJECUCIÓN
+  // ═══════════════════════════════════
 
   try {
     await plugin.execute(ctx);
