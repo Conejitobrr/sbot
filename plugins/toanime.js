@@ -2,8 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const Replicate = require('replicate');
 
 module.exports = {
   commands: ['toanime'],
@@ -36,33 +36,34 @@ module.exports = {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       const input = path.join(tempDir, 'input.jpg');
-      const output = path.join(tempDir, 'anime.png');
+      const output = path.join(tempDir, 'anime.jpg');
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 MODELO STABLE ANIME (FUNCIONAL)
-      const HF_API_KEY = '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';
+      // 🔑 REPLICATE TOKEN
+      const replicate = new Replicate({
+        auth: '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'
+      });
 
-      const imageBuffer = fs.readFileSync(input);
+      const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
 
-      const response = await axios.post(
-        'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5',
-        imageBuffer,
+      const result = await replicate.run(
+        "cjwbw/anything-v4.0-img2img",
         {
-          headers: {
-            Authorization: `Bearer ${HF_API_KEY}`,
-            'Content-Type': 'application/octet-stream'
-          },
-          params: {
-            // prompt anime estilo
-            prompt: "anime style, high quality, detailed face, cinematic lighting, ultra clean illustration"
-          },
-          responseType: 'arraybuffer',
-          timeout: 120000
+          input: {
+            image: `data:image/jpeg;base64,${imageBase64}`,
+            prompt: "anime style, high quality, detailed face, cinematic lighting, ultra detailed illustration",
+            strength: 0.75
+          }
         }
       );
 
-      fs.writeFileSync(output, response.data);
+      const imageUrl = result[0];
+
+      const img = await fetch(imageUrl);
+      const arrayBuffer = await img.arrayBuffer();
+
+      fs.writeFileSync(output, Buffer.from(arrayBuffer));
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
@@ -73,10 +74,10 @@ module.exports = {
       fs.unlinkSync(output);
 
     } catch (err) {
-      console.log('ANIME API ERROR:', err.response?.data || err.message);
+      console.log('ANIME API ERROR:', err.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con IA anime. Intenta nuevamente o revisa tu token.'
+        text: '❌ Error con IA anime (Replicate)'
       }, { quoted: msg });
     }
   }
