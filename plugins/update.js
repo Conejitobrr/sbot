@@ -1,71 +1,43 @@
 'use strict';
 
-const axios = require('axios');
-
-let lastSHA = '';
-let intervalStarted = false;
-
-const owner = 'Conejitobrr';
-const repo = 'siriusbot';
-
-global.gitChat = null;
+const { exec } = require('child_process');
 
 module.exports = {
-  commands: ['actualizar', 'actualizacion'],
+  commands: ['update'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid } = ctx;
+    const { sock, remoteJid, msg } = ctx;
 
-    global.gitChat = remoteJid;
+    try {
+      await sock.sendMessage(remoteJid, {
+        text: '🔄 Actualizando bot desde GitHub...'
+      }, { quoted: msg });
 
-    await sock.sendMessage(remoteJid, {
-      text: '🔄 Monitoreo de actualizaciones activado...'
-    }, { quoted: msg });
-
-    if (intervalStarted) return;
-    intervalStarted = true;
-
-    setInterval(async () => {
-      try {
-        const res = await axios.get(
-          `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1`
-        );
-
-        const commit = res.data[0];
-        const sha = commit.sha;
-        const message = commit.commit.message;
-
-        if (sha !== lastSHA) {
-          lastSHA = sha;
-
-          // 🔥 EXTRAER SOLO NOMBRE DEL ARCHIVO
-          const files = commit.files || [];
-
-          let changedFiles = '';
-
-          if (files.length > 0) {
-            changedFiles = files
-              .map(f => `📦 ${f.filename}`)
-              .join('\n');
-          } else {
-            // fallback: intentar sacar del mensaje
-            changedFiles = `📦 ${message}`;
-          }
-
-          if (global.gitChat) {
-            await sock.sendMessage(global.gitChat, {
-              text:
-`🚀 *Actualización detectada*
-
-${changedFiles}`
-            });
-          }
+      // 🔥 actualizar repo
+      exec('git pull && npm install', (err, stdout, stderr) => {
+        if (err) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ Error al actualizar:\n' + err.message
+          }, { quoted: msg });
         }
 
-      } catch (e) {
-        console.log('Git watch error:', e.message);
-      }
+        sock.sendMessage(remoteJid, {
+          text:
+`✅ Bot actualizado correctamente
 
-    }, 60000);
+♻️ Reiniciando para aplicar cambios...`
+        }, { quoted: msg });
+
+        // 🔁 reinicio real del proceso (Termux)
+        setTimeout(() => {
+          exec('pkill -f node && node index.js');
+        }, 1500);
+      });
+
+    } catch (e) {
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error inesperado:\n' + e.message
+      }, { quoted: msg });
+    }
   }
 };
