@@ -3,7 +3,6 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const FormData = require('form-data');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
@@ -20,7 +19,7 @@ module.exports = {
 
       if (!type || type !== 'imageMessage') {
         return sock.sendMessage(remoteJid, {
-          text: 'Responde a una imagen con .toanime'
+          text: '❌ Responde a una imagen con .toanime'
         }, { quoted: msg });
       }
 
@@ -37,38 +36,37 @@ module.exports = {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       const input = path.join(tempDir, 'input.jpg');
-      const output = path.join(tempDir, 'anime.jpg');
+      const output = path.join(tempDir, 'anime.png');
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 TU API KEY (CREAR EN DEEPAI)
-      const API_KEY = '66a1401d-3e3b-42f5-ab9f-a4e15db5044a';
+      // 🔥 MODELO STABLE ANIME (FUNCIONAL)
+      const HF_API_KEY = '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';
 
-      const form = new FormData();
-      form.append('image', fs.createReadStream(input));
+      const imageBuffer = fs.readFileSync(input);
 
       const response = await axios.post(
-        'https://api.deepai.org/api/toonify',
-        form,
+        'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5',
+        imageBuffer,
         {
           headers: {
-            ...form.getHeaders(),
-            'api-key': API_KEY
-          }
+            Authorization: `Bearer ${HF_API_KEY}`,
+            'Content-Type': 'application/octet-stream'
+          },
+          params: {
+            // prompt anime estilo
+            prompt: "anime style, high quality, detailed face, cinematic lighting, ultra clean illustration"
+          },
+          responseType: 'arraybuffer',
+          timeout: 120000
         }
       );
 
-      const imageUrl = response.data.output_url;
-
-      const result = await axios.get(imageUrl, {
-        responseType: 'arraybuffer'
-      });
-
-      fs.writeFileSync(output, result.data);
+      fs.writeFileSync(output, response.data);
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
-        caption: '✨ Anime IA aplicado'
+        caption: '✨ Anime IA PRO aplicado'
       }, { quoted: msg });
 
       fs.unlinkSync(input);
@@ -78,7 +76,7 @@ module.exports = {
       console.log('ANIME API ERROR:', err.response?.data || err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con API anime'
+        text: '❌ Error con IA anime. Intenta nuevamente o revisa tu token.'
       }, { quoted: msg });
     }
   }
