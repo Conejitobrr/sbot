@@ -1,5 +1,7 @@
 'use strict';
 
+const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+
 module.exports = {
   commands: ['notify', 'hidetag', 'notificar'],
 
@@ -26,10 +28,10 @@ module.exports = {
 
       const users = participants.map(p => p.id);
 
-      // 🔥 CARACTER INVISIBLE (TRUCO CLAVE)
+      // 🔥 INVISIBLE (TRUCO)
       const invisible = String.fromCharCode(8206).repeat(1000);
 
-      const message = {
+      const content = {
         extendedTextMessage: {
           text: `${invisible}\n📢 *NOTIFICACIÓN*\n\n${text}`,
           contextInfo: {
@@ -40,17 +42,43 @@ module.exports = {
         }
       };
 
-      // 🔥 ENVÍO POTENTE
-      await sock.relayMessage(remoteJid, message, {
-        messageId: msg.key.id
-      });
+      // 🔥 GENERAR MENSAJE CORRECTO
+      const msgGen = generateWAMessageFromContent(
+        remoteJid,
+        content,
+        {
+          userJid: sock.user.id,
+          quoted: msg
+        }
+      );
+
+      // 🔥 ENVIAR BIEN
+      await sock.relayMessage(
+        remoteJid,
+        msgGen.message,
+        { messageId: msgGen.key.id }
+      );
 
     } catch (e) {
-      console.log(e);
+      console.log('ERROR PRINCIPAL:', e);
 
-      await sock.sendMessage(remoteJid, {
-        text: '❌ Error al notificar'
-      }, { quoted: msg });
+      // 🔥 FALLBACK (SI FALLA)
+      try {
+        const metadata = await sock.groupMetadata(remoteJid);
+        const users = metadata.participants.map(p => p.id);
+
+        await sock.sendMessage(remoteJid, {
+          text: `📢 ${text}`,
+          mentions: users
+        }, { quoted: msg });
+
+      } catch (err) {
+        console.log('ERROR FALLBACK:', err);
+
+        await sock.sendMessage(remoteJid, {
+          text: '❌ Error al notificar'
+        }, { quoted: msg });
+      }
     }
   }
 };
