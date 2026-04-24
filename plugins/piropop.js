@@ -13,8 +13,9 @@ module.exports = {
     let texto = '';
 
     try {
-      // 🤖 IA con Gemini
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash' // 👈 IMPORTANTE
+      });
 
       const result = await model.generateContent(
         'Dame un piropo corto, romántico y creativo'
@@ -23,7 +24,7 @@ module.exports = {
       texto = result.response.text();
 
     } catch (err) {
-      console.log('⚠️ Error Gemini, usando fallback');
+      console.log('ERROR GEMINI:', err.message);
 
       // 🔁 FALLBACK
       const piropos = [
@@ -37,7 +38,6 @@ module.exports = {
       texto = piropos[Math.floor(Math.random() * piropos.length)];
     }
 
-    // 💬 RESPONDER
     await sock.sendMessage(remoteJid, {
       text: texto
     }, {
