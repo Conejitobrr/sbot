@@ -11,7 +11,7 @@ module.exports = {
       'Me gustaría ser papel para poder envolver ese bombón.',
       'Eres como wifi sin contraseña, todo el mundo te busca.',
       'Quién fuera bus para andar por las curvas de tu corazón.',
-      'Quiero volar sin alas y entrar en tu universo.',
+      'Quiero volar sin alas y entrar en tu Universo.',
       'Quisiera ser mantequilla para derretirme en tu arepa.',
       'Si la belleza fuera pecado, ya estarías en el infierno.',
       'Robar está mal, pero un beso tuyo sí me lo robaría.',
