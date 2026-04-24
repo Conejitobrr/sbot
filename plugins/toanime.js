@@ -43,7 +43,7 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔑 TOKEN DESDE .env
+      // 🔑 TOKEN desde .env
       const token = process.env.REPLICATE_API_TOKEN;
 
       if (!token) {
@@ -58,18 +58,17 @@ module.exports = {
 
       const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
 
-      // 🧠 MODELO REAL QUE SÍ EXISTE
+      // 🧠 MODELO REAL Y FUNCIONAL
       const result = await replicate.run(
-        "bytedance/sdxl-lightning",
+        "nightmareai/real-esrgan",
         {
           input: {
-            prompt: "anime style, high quality illustration, cinematic lighting, ultra detailed face, soft shading, beautiful anime art",
-            image: `data:image/jpeg;base64,${imageBase64}`,
-            strength: 0.75
+            image: `data:image/jpeg;base64,${imageBase64}`
           }
         }
       );
 
+      // El resultado puede ser URL o array
       const imageUrl = Array.isArray(result) ? result[0] : result;
 
       const img = await axios.get(imageUrl, {
@@ -80,7 +79,7 @@ module.exports = {
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
-        caption: '✨ Anime IA PRO aplicado'
+        caption: '✨ Anime IA aplicado (versión estable)'
       }, { quoted: msg });
 
       fs.unlinkSync(input);
