@@ -42,9 +42,6 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 COMPRESIÓN SIMPLE (SIN LIBRERÍAS)
-      const smallBuffer = await compressImage(buffer);
-
       const HF_API_KEY = process.env.HF_API_KEY;
 
       if (!HF_API_KEY) {
@@ -53,50 +50,44 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 🧠 MODELO ESTABLE
+      // 🔥 SPACE API (NO 413, NO BASE64)
+      const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
+
       const response = await axios.post(
-        'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5',
+        'https://hf.space/embed/akhaliq/AnimeGANv2/api/predict/',
         {
-          inputs: smallBuffer.toString('base64'),
-          parameters: {
-            prompt: "anime style, high quality illustration, cinematic lighting, detailed face, soft shading"
-          }
+          data: [`data:image/jpeg;base64,${imageBase64}`]
         },
         {
           headers: {
             Authorization: `Bearer ${HF_API_KEY}`,
             'Content-Type': 'application/json'
-          },
-          responseType: 'arraybuffer',
-          timeout: 180000
+          }
         }
       );
 
-      fs.writeFileSync(output, response.data);
+      const imageUrl = response.data.data[0];
+
+      const img = await axios.get(imageUrl, {
+        responseType: 'arraybuffer'
+      });
+
+      fs.writeFileSync(output, img.data);
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
-        caption: '✨ Anime IA aplicado con HuggingFace'
+        caption: '✨ Anime IA aplicado (Space API)'
       }, { quoted: msg });
 
       fs.unlinkSync(input);
       fs.unlinkSync(output);
 
     } catch (err) {
-      console.log('HF ANIME ERROR:', err.message || err);
+      console.log('HF SPACE ERROR:', err.response?.data || err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error IA anime (posible imagen muy pesada o modelo saturado)'
+        text: '❌ Error con Space API anime. Intenta otra imagen.'
       }, { quoted: msg });
     }
   }
 };
-
-// 🔥 COMPRESOR SIMPLE SIN LIBRERÍAS
-async function compressImage(buffer) {
-  // recorta tamaño bruto para evitar 413
-  if (buffer.length > 800000) {
-    return buffer.slice(0, 800000);
-  }
-  return buffer;
-}
