@@ -3,9 +3,6 @@
 const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-
-ffmpeg.setFfmpegPath(ffmpegPath);
 
 module.exports = {
   commands: ['s'],
@@ -30,22 +27,23 @@ module.exports = {
         message: message
       });
 
-      const buffer = Buffer.from([]);
+      let buffer = Buffer.from([]);
 
       for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
       }
 
-      const input = path.join(__dirname, '../temp/input');
-      const output = path.join(__dirname, '../temp/output.webp');
+      const tempDir = path.join(__dirname, '../temp');
 
-      if (!fs.existsSync(path.join(__dirname, '../temp'))) {
-        fs.mkdirSync(path.join(__dirname, '../temp'));
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir);
       }
+
+      const input = path.join(tempDir, 'input');
+      const output = path.join(tempDir, 'output.webp');
 
       fs.writeFileSync(input, buffer);
 
-      // 🎬 Convertir a sticker
       ffmpeg(input)
         .outputOptions([
           '-vcodec', 'libwebp',
@@ -63,7 +61,7 @@ module.exports = {
           const sticker = fs.readFileSync(output);
 
           await sock.sendMessage(remoteJid, {
-            sticker: sticker
+            sticker
           }, { quoted: msg });
 
           fs.unlinkSync(input);
