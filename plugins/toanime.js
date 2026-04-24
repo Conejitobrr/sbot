@@ -5,7 +5,6 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const sharp = require('sharp');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
@@ -39,16 +38,9 @@ module.exports = {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       const input = path.join(tempDir, 'input.jpg');
-      const optimized = path.join(tempDir, 'opt.jpg');
       const output = path.join(tempDir, 'anime.jpg');
 
       fs.writeFileSync(input, buffer);
-
-      // 🔥 REDUCIR TAMAÑO (CLAVE PARA EVITAR ERROR)
-      await sharp(input)
-        .resize(512, 512, { fit: 'inside' })
-        .jpeg({ quality: 80 })
-        .toFile(optimized);
 
       // 🔑 HUGGINGFACE TOKEN
       const HF_API_KEY = process.env.HF_API_KEY;
@@ -59,9 +51,9 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      const imageBuffer = fs.readFileSync(optimized);
+      // 🧠 MODELO ANIME ESTABLE
+      const imageBuffer = fs.readFileSync(input);
 
-      // 🧠 MODELO ESTABLE HF
       const response = await axios.post(
         'https://api-inference.huggingface.co/models/lambdalabs/sd-image-variations-diffusers',
         imageBuffer,
@@ -79,18 +71,17 @@ module.exports = {
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
-        caption: '✨ Anime IA aplicado con HuggingFace'
+        caption: '✨ Anime IA aplicado (modo estable)'
       }, { quoted: msg });
 
       fs.unlinkSync(input);
-      fs.unlinkSync(optimized);
       fs.unlinkSync(output);
 
     } catch (err) {
       console.log('HF ANIME ERROR:', err.response?.data || err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con HuggingFace IA. Intenta otra imagen o revisa tu token.'
+        text: '❌ Error con IA anime. Intenta otra imagen.'
       }, { quoted: msg });
     }
   }
