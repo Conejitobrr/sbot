@@ -42,7 +42,7 @@ module.exports = {
 
       // 🔑 REPLICATE TOKEN
       const replicate = new Replicate({
-        auth: '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'
+        auth: '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'
       });
 
       const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
