@@ -5,6 +5,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const sharp = require('sharp');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
@@ -38,11 +39,18 @@ module.exports = {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       const input = path.join(tempDir, 'input.jpg');
+      const optimized = path.join(tempDir, 'opt.jpg');
       const output = path.join(tempDir, 'anime.jpg');
 
       fs.writeFileSync(input, buffer);
 
-      // 🔑 TU TOKEN HUGGINGFACE
+      // 🔥 REDUCIR TAMAÑO (CLAVE PARA EVITAR ERROR)
+      await sharp(input)
+        .resize(512, 512, { fit: 'inside' })
+        .jpeg({ quality: 80 })
+        .toFile(optimized);
+
+      // 🔑 HUGGINGFACE TOKEN
       const HF_API_KEY = process.env.HF_API_KEY;
 
       if (!HF_API_KEY) {
@@ -51,21 +59,16 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
+      const imageBuffer = fs.readFileSync(optimized);
 
-      // 🧠 MODELO ANIME (FUNCIONAL EN HF)
+      // 🧠 MODELO ESTABLE HF
       const response = await axios.post(
         'https://api-inference.huggingface.co/models/lambdalabs/sd-image-variations-diffusers',
-        {
-          inputs: imageBase64,
-          parameters: {
-            prompt: "anime style, high quality, detailed face, cinematic lighting, illustration"
-          }
-        },
+        imageBuffer,
         {
           headers: {
             Authorization: `Bearer ${HF_API_KEY}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/octet-stream'
           },
           responseType: 'arraybuffer',
           timeout: 120000
@@ -80,13 +83,14 @@ module.exports = {
       }, { quoted: msg });
 
       fs.unlinkSync(input);
+      fs.unlinkSync(optimized);
       fs.unlinkSync(output);
 
     } catch (err) {
       console.log('HF ANIME ERROR:', err.response?.data || err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con HuggingFace AI. Intenta otra imagen.'
+        text: '❌ Error con HuggingFace IA. Intenta otra imagen o revisa tu token.'
       }, { quoted: msg });
     }
   }
