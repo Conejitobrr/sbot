@@ -7,8 +7,9 @@ const config  = require('./config');
 const db      = require('./lib/database');
 
 const {
-  getBody, isGroup, getGroupAdmins, getBotJid,
-  normalizeJid, detectPrefix,
+  getBody, isGroup, getGroupAdmins, getBotJid, isBotAdmin,
+  normalizeJid,
+  detectPrefix,
 } = require('./lib/utils');
 
 // ═══════════════════════════════════════
@@ -66,27 +67,28 @@ async function messageHandler(sock, msg, store) {
 
   const botJid = getBotJid(sock);
 
-  // 🔥 PERMITIR OWNER EN PRIVADO (FIX REAL)
-  const senderNum = sender.replace(/[^0-9]/g, '');
-  const isRowner = (config.rowner || []).includes(senderNum);
-  const isOwner  = (config.owner  || []).includes(senderNum) || isRowner;
-
-  // ❌ antes bloqueaba todo
-  // if (sender === botJid || key.fromMe) return;
-
-  // ✅ ahora correcto
-  if (sender === botJid) return;
-  if (key.fromMe && !isOwner) return;
+  // ⚠️ YA NO BLOQUEAMOS TODOS LOS MENSAJES PROPIOS
+  const isFromMe = key.fromMe;
 
   const body = getBody(msg);
   if (!body) return;
 
+  // 👇 Detectar comando antes de bloquear
+  const parsed = detectPrefix(body);
+
+  // 🔥 SOLO ignorar si es tuyo y NO es comando
+  if (isFromMe && !parsed) return;
+
   // ── Permisos ─────────────────────────
+  const senderNum = sender.replace(/[^0-9]/g, '');
+
+  const isRowner = (config.rowner || []).includes(senderNum);
+  const isOwner  = (config.owner  || []).includes(senderNum) || isRowner;
 
   const isMod = isOwner;
 
   let groupAdmins = [];
-  if (fromGroup) {
+  if (fromGroup && msg.message) {
     try {
       const metadata = await sock.groupMetadata(remoteJid);
       groupAdmins = getGroupAdmins(metadata.participants);
@@ -118,7 +120,6 @@ async function messageHandler(sock, msg, store) {
 
   // ───── COMANDOS ─────
 
-  const parsed = detectPrefix(body);
   if (!parsed) return;
 
   const args    = parsed.body.trim().split(/\s+/);
@@ -138,10 +139,7 @@ async function messageHandler(sock, msg, store) {
     command,
     store,
     config,
-    isOwner,
-    isAdmin,
-    isPremium,
-    isGroup: fromGroup
+    isOwner
   };
 
   try {
