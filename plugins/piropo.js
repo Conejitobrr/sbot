@@ -17,7 +17,13 @@ module.exports = {
       'Me gustaría ser un gato para pasar 7 vidas a tu lado.',
       'Robar está mal, pero un beso tuyo sí me lo robaría.',
       'Bonita, camina por la sombra que el sol derrite chocolates.',
-      'Pareces Google, tienes todo lo que busco.'
+      'Pareces Google, tienes todo lo que busco.',
+      'No es el ron ni la cerveza, eres tú quien se me ha subido a la cabeza.',
+      'Si hablamos de matemáticas eres la suma de todos mis deseos.',
+      'Mi café favorito es el de tus ojos.',
+      'Quiero ser Photoshop para retocarte todo el cuerpo.',
+      'Quisiera que fueras cereal para cucharearte en las mañanas.',
+      'Quién fuera hambre para darte tres veces al día.'
     ];
 
     const random = piropos[Math.floor(Math.random() * piropos.length)];
@@ -25,22 +31,7 @@ module.exports = {
     await sock.sendMessage(remoteJid, {
       text: random
     }, {
-      quoted: msg // 👈 RESPONDE AL MENSAJE
+      quoted: msg // 👈 responde al mensaje
     });
-  }
-};      'No es el ron ni la cerveza, eres tú quien se me ha subido a la cabeza.',
-      'Si hablamos de matemáticas eres la suma de todos mis deseos.',
-      'Pareces Google porque tienes todo lo que yo busco.',
-      'Mi café favorito es el de tus ojos.',
-      'Quiero ser Photoshop para retocarte todo el cuerpo.',
-      'Quisiera que fueras cereal para cucharearte en las mañanas.',
-      'Quién fuera hambre para darte tres veces al día.'
-    ];
-
-    const pickRandom = (list) => list[Math.floor(Math.random() * list.length)];
-
-    const texto = pickRandom(piropos);
-
-    await sock.sendMessage(remoteJid, { text: texto });
   }
 };
