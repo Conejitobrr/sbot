@@ -4,8 +4,8 @@ require('dotenv').config();
 
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 const Replicate = require('replicate');
+const axios = require('axios');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
@@ -43,12 +43,12 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔑 TOKEN DESDE .env (NO GITHUB HARD CODE)
+      // 🔑 TOKEN DESDE .env
       const token = process.env.REPLICATE_API_TOKEN;
 
       if (!token) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ No hay API key configurada en .env'
+          text: '❌ Falta REPLICATE_API_TOKEN en .env'
         }, { quoted: msg });
       }
 
@@ -58,18 +58,19 @@ module.exports = {
 
       const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
 
+      // 🧠 MODELO REAL QUE SÍ EXISTE
       const result = await replicate.run(
-        "cjwbw/anything-v4.0-img2img",
+        "bytedance/sdxl-lightning",
         {
           input: {
+            prompt: "anime style, high quality illustration, cinematic lighting, ultra detailed face, soft shading, beautiful anime art",
             image: `data:image/jpeg;base64,${imageBase64}`,
-            prompt: "anime style, ultra detailed face, cinematic lighting, high quality illustration, soft shading",
             strength: 0.75
           }
         }
       );
 
-      const imageUrl = result[0];
+      const imageUrl = Array.isArray(result) ? result[0] : result;
 
       const img = await axios.get(imageUrl, {
         responseType: 'arraybuffer'
@@ -89,7 +90,7 @@ module.exports = {
       console.log('ANIME API ERROR:', err.response?.data || err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con IA anime. Revisa tu API key o conexión.'
+        text: '❌ Error con IA anime. Revisa token o conexión.'
       }, { quoted: msg });
     }
   }
