@@ -52,12 +52,12 @@ module.exports = {
 
       const vf = isImage
         ? 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
-        : 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=18,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
+        : 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=12,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
       const command = ffmpeg(input);
 
       if (!isImage) {
-        command.setStartTime(0).setDuration(6);
+        command.setStartTime(0).setDuration(5);
       }
 
       command
@@ -65,9 +65,8 @@ module.exports = {
           '-vcodec libwebp',
           '-vf ' + vf,
           '-pix_fmt yuva420p',
-          '-q:v 90',
-          '-compression_level 4',
-          '-preset picture',
+          '-q:v 70',
+          '-compression_level 6',
           '-loop 0',
           '-an',
           '-vsync 0'
@@ -85,7 +84,7 @@ module.exports = {
           fs.unlinkSync(output);
         })
         .on('error', async (err) => {
-          console.error(err);
+          console.error('FFMPEG ERROR:', err);
 
           await sock.sendMessage(remoteJid, {
             text: 'Error al convertir a sticker'
