@@ -1,5 +1,4 @@
 'use strict';
-require('dotenv').config();
 
 const {
   default: makeWASocket,
