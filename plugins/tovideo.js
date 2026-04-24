@@ -16,7 +16,7 @@ module.exports = {
 
       if (!quoted) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Responde a un sticker con .tovideo'
+          text: '❌ Responde a un sticker'
         }, { quoted: msg });
       }
 
@@ -40,35 +40,24 @@ module.exports = {
       const tempDir = path.join(__dirname, '../temp');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-      const input = path.join(tempDir, 'input.webp');
-      const gif   = path.join(tempDir, 'temp.gif');
+      const input  = path.join(tempDir, 'input.webp');
+      const gif    = path.join(tempDir, 'temp.gif');
       const output = path.join(tempDir, 'output.mp4');
 
       fs.writeFileSync(input, buffer);
 
-      const isAnimated = media.isAnimated;
-
-      let cmd;
-
-      if (isAnimated) {
-        // 🔥 WEBP → GIF → MP4 (SOLUCIÓN REAL)
-        cmd = `
-        ffmpeg -y -i "${input}" "${gif}" &&
-        ffmpeg -y -i "${gif}" -movflags faststart -pix_fmt yuv420p -vf "scale=512:-1:flags=lanczos,fps=15" "${output}"
-        `;
-      } else {
-        // 🖼 Sticker normal → video
-        cmd = `
-        ffmpeg -y -loop 1 -i "${input}" -t 3 -movflags faststart -pix_fmt yuv420p -vf "scale=512:-1:flags=lanczos" "${output}"
-        `;
-      }
+      // 🔥 AQUÍ ESTÁ LA MAGIA (ImageMagick)
+      const cmd = `
+      magick "${input}" "${gif}" &&
+      ffmpeg -y -i "${gif}" -movflags faststart -pix_fmt yuv420p -vf "scale=512:-1:flags=lanczos,fps=15" "${output}"
+      `;
 
       exec(cmd, async (err) => {
         if (err) {
-          console.log('FFMPEG ERROR:', err);
+          console.log('ERROR:', err);
 
           return sock.sendMessage(remoteJid, {
-            text: '❌ Error real al convertir (webp bug solucionado parcialmente)'
+            text: '❌ Error al convertir (ver consola)'
           }, { quoted: msg });
         }
 
@@ -84,7 +73,6 @@ module.exports = {
           console.log('SEND ERROR:', e);
         }
 
-        // 🧹 limpiar
         [input, gif, output].forEach(f => {
           if (fs.existsSync(f)) fs.unlinkSync(f);
         });
@@ -94,7 +82,7 @@ module.exports = {
       console.log('ERROR GENERAL:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general en tovideo'
+        text: '❌ Error general'
       }, { quoted: msg });
     }
   }
