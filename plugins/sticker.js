@@ -46,6 +46,10 @@ module.exports = {
 
       const isImage = type === 'imageMessage';
 
+const vf = isImage
+  ? 'scale=512:-1:flags=lanczos'
+  : 'scale=512:-1:flags=lanczos,fps=18';
+
 const command = ffmpeg(input);
 
 if (!isImage) {
@@ -55,7 +59,8 @@ if (!isImage) {
 command
   .outputOptions([
     '-vcodec libwebp',
-    '-vf scale=512:512:force_original_aspect_ratio=increase,crop=512:512:flags=lanczos'    '-lossless 0',
+    '-vf ' + vf,
+    '-lossless 0',
     '-qscale 0',
     '-compression_level 6',
     '-loop 0',
