@@ -41,60 +41,34 @@ module.exports = {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       const input = path.join(tempDir, 'input.webp');
+      const output = path.join(tempDir, 'output.png');
+
       fs.writeFileSync(input, buffer);
 
-      const isAnimated = media.isAnimated;
+      // 🔥 SI ES ANIMADO → SOLO PRIMER FRAME
+      const cmd = media.isAnimated
+        ? `ffmpeg -y -i "${input}" -vframes 1 "${output}"`
+        : `ffmpeg -y -i "${input}" "${output}"`;
 
-      if (isAnimated) {
-        // 🎞 STICKER ANIMADO → VIDEO
-        const output = path.join(tempDir, 'output.mp4');
+      exec(cmd, async (err) => {
+        if (err) {
+          console.log('FFMPEG ERROR:', err);
 
-        const cmd = `ffmpeg -y -i "${input}" -movflags faststart -pix_fmt yuv420p -vf "scale=512:-1:flags=lanczos,fps=15" "${output}"`;
-
-        exec(cmd, async (err) => {
-          if (err) {
-            console.log('FFMPEG ERROR:', err);
-            return sock.sendMessage(remoteJid, {
-              text: '❌ Error al convertir sticker animado'
-            }, { quoted: msg });
-          }
-
-          const video = fs.readFileSync(output);
-
-          await sock.sendMessage(remoteJid, {
-            video,
-            caption: '🎞 Convertido a video'
+          return sock.sendMessage(remoteJid, {
+            text: '❌ Error al convertir sticker'
           }, { quoted: msg });
+        }
 
-          fs.unlinkSync(input);
-          fs.unlinkSync(output);
-        });
+        const image = fs.readFileSync(output);
 
-      } else {
-        // 🖼 STICKER NORMAL → IMAGEN
-        const output = path.join(tempDir, 'output.jpg');
+        await sock.sendMessage(remoteJid, {
+          image,
+          caption: '🖼 Convertido a PNG'
+        }, { quoted: msg });
 
-        const cmd = `ffmpeg -y -i "${input}" "${output}"`;
-
-        exec(cmd, async (err) => {
-          if (err) {
-            console.log('FFMPEG ERROR:', err);
-            return sock.sendMessage(remoteJid, {
-              text: '❌ Error al convertir sticker'
-            }, { quoted: msg });
-          }
-
-          const image = fs.readFileSync(output);
-
-          await sock.sendMessage(remoteJid, {
-            image,
-            caption: '🖼 Convertido a imagen'
-          }, { quoted: msg });
-
-          fs.unlinkSync(input);
-          fs.unlinkSync(output);
-        });
-      }
+        fs.unlinkSync(input);
+        fs.unlinkSync(output);
+      });
 
     } catch (err) {
       console.log('ERROR GENERAL:', err);
