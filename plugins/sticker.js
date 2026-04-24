@@ -55,8 +55,7 @@ if (!isImage) {
 command
   .outputOptions([
     '-vcodec libwebp',
-    `-vf scale=512:-1:flags=lanczos${isImage ? '' : ',fps=18'}`,
-    '-lossless 0',
+    '-vf scale=512:512:force_original_aspect_ratio=increase,crop=512:512:flags=lanczos'    '-lossless 0',
     '-qscale 0',
     '-compression_level 6',
     '-loop 0',
