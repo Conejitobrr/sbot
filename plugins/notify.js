@@ -31,12 +31,12 @@ module.exports = {
       const metadata = await sock.groupMetadata(remoteJid);
       const users = metadata.participants.map(p => p.id);
 
-      // 🔥 INVISIBLE PARA EMPUJAR NOTIFICACIÓN
-      const invisible = String.fromCharCode(8206).repeat(1000);
+      // 🔥 INVISIBLE REDUCIDO (SIN "LEER MÁS")
+      const invisible = String.fromCharCode(8206).repeat(50);
 
       const content = {
         extendedTextMessage: {
-          text: invisible + text, // 👈 SOLO TU MENSAJE
+          text: invisible + text,
           contextInfo: {
             mentionedJid: users
           }
@@ -61,13 +61,13 @@ module.exports = {
     } catch (e) {
       console.log('ERROR:', e);
 
-      // 🔥 FALLBACK
+      // fallback
       try {
         const metadata = await sock.groupMetadata(remoteJid);
         const users = metadata.participants.map(p => p.id);
 
         await sock.sendMessage(remoteJid, {
-          text: text,
+          text,
           mentions: users
         }, { quoted: msg });
 
