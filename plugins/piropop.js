@@ -1,58 +1,47 @@
 'use strict';
 
-require('dotenv').config();
-const OpenAI = require('openai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 module.exports = {
-  commands: ['piropop'], // 👈 CAMBIADO AQUÍ
-  description: 'Piropo con IA',
+  commands: ['piropop'],
 
   async execute(ctx) {
     const { sock, remoteJid, msg } = ctx;
 
-    let target;
-
-    if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
-      target = msg.message.extendedTextMessage.contextInfo.participant;
-    } else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length) {
-      target = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
-    }
-
-    if (!target) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Menciona o responde a alguien'
-      }, { quoted: msg });
-    }
-
-    const numero = target.split('@')[0];
+    let texto = '';
 
     try {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4.1-mini',
-        messages: [
-          { role: 'system', content: 'Eres experto en piropos creativos en español.' },
-          { role: 'user', content: 'Dame un piropo corto y original.' }
-        ],
-        max_tokens: 60
-      });
+      // 🤖 IA con Gemini
+      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
-      const piropo = response.choices[0].message.content.trim();
+      const result = await model.generateContent(
+        'Dame un piropo corto, romántico y creativo'
+      );
 
-      await sock.sendMessage(remoteJid, {
-        text: `@${numero} ${piropo}`,
-        mentions: [target]
-      }, { quoted: msg });
+      texto = result.response.text();
 
     } catch (err) {
-      console.log(err);
+      console.log('⚠️ Error Gemini, usando fallback');
 
-      await sock.sendMessage(remoteJid, {
-        text: '❌ Error con la IA'
-      }, { quoted: msg });
+      // 🔁 FALLBACK
+      const piropos = [
+        'Eres como wifi sin contraseña 😍',
+        'Si la belleza fuera delito, ya estarías presa 💘',
+        '¿Eres magia? Porque todo mejora contigo ✨',
+        'Eres la razón de mi sonrisa 😊',
+        'No eres Google, pero tienes todo lo que busco ❤️'
+      ];
+
+      texto = piropos[Math.floor(Math.random() * piropos.length)];
     }
+
+    // 💬 RESPONDER
+    await sock.sendMessage(remoteJid, {
+      text: texto
+    }, {
+      quoted: msg
+    });
   }
 };
