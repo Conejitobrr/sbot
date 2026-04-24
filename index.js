@@ -1,162 +1,112 @@
 'use strict';
 
-const path   = require('path')
-const fs     = require('fs')
-const chalk  = require('chalk')
-const config = require('./config')
-const db     = require('./lib/database')
-
-const {
-  getBody,
-  normalizeJid,
-  detectPrefix,
-  getGroupAdmins
-} = require('./lib/utils')
+const chalk    = require('chalk');
+const figlet   = require('figlet');
+const readline = require('readline');
+const path     = require('path');
+const fs       = require('fs');
 
 // ═══════════════════════════════════════
-// PLUGINS
+// CONFIG SIMPLE
 // ═══════════════════════════════════════
 
-const PLUGINS_DIR = path.join(process.cwd(), 'plugins')
+const config = {
+  botName     : 'SiriusBot',
+  botVersion  : '1.0.0',
+  sessionPath : './session',
+  defaultPhone: '51958959882'
+};
 
-if (!fs.existsSync(PLUGINS_DIR)) {
-  fs.mkdirSync(PLUGINS_DIR, { recursive: true })
+// ═══════════════════════════════════════
+// BANNER
+// ═══════════════════════════════════════
+
+function showBanner() {
+  console.clear();
+  const lines = figlet.textSync('SiriusBot', { font: 'Big' }).split('\n');
+  lines.forEach(l => console.log(chalk.cyan.bold(l)));
+
+  console.log('');
+  console.log(chalk.gray('  ─────────────────────────────────────────'));
+  console.log(chalk.white('  🤖 Bot     : ') + chalk.green(config.botName));
+  console.log(chalk.white('  📦 Versión : ') + chalk.yellow(config.botVersion));
+  console.log(chalk.gray('  ─────────────────────────────────────────\n'));
 }
 
-const plugins = new Map()
+// ═══════════════════════════════════════
+// READLINE
+// ═══════════════════════════════════════
 
-function loadPlugins() {
-  plugins.clear()
+function createRL() {
+  return readline.createInterface({
+    input : process.stdin,
+    output: process.stdout,
+  });
+}
 
-  const files = fs.readdirSync(PLUGINS_DIR).filter(f => f.endsWith('.js'))
+function ask(rl, q) {
+  return new Promise(r => rl.question(q, ans => r(ans.trim())));
+}
 
-  for (const file of files) {
-    try {
-      const filepath = path.join(PLUGINS_DIR, file)
+// ═══════════════════════════════════════
+// MÉTODO DE CONEXIÓN
+// ═══════════════════════════════════════
 
-      delete require.cache[require.resolve(filepath)]
+async function askConnectionMethod() {
+  const sessionDir = path.resolve(process.cwd(), config.sessionPath);
+  const credsFile  = path.join(sessionDir, 'creds.json');
 
-      const plugin = require(filepath)
-      const cmds = plugin.commands || []
-
-      for (const cmd of cmds) {
-        plugins.set(cmd.toLowerCase(), plugin)
-      }
-
-    } catch (e) {
-      console.log(chalk.red(`Error plugin ${file}:`), e.message)
-    }
+  // Si ya existe sesión → conectar directo
+  if (fs.existsSync(credsFile)) {
+    return { method: 'saved', phone: null };
   }
 
-  console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size}`))
+  const rl = createRL();
+
+  console.log(chalk.cyan('  ¿Cómo deseas conectar WhatsApp?\n'));
+  console.log(chalk.white('  [1] QR'));
+  console.log(chalk.white('  [2] Código con número\n'));
+
+  let choice = '';
+  while (!['1','2'].includes(choice)) {
+    choice = await ask(rl, chalk.yellow('  → Opción: '));
+  }
+
+  if (choice === '1') {
+    rl.close();
+    return { method: 'qr', phone: null };
+  }
+
+  // Código con número
+  console.log(chalk.gray('\n  Número por defecto: ' + config.defaultPhone));
+  let phone = await ask(rl, chalk.yellow('  → Presiona ENTER o escribe otro: '));
+
+  if (!phone) phone = config.defaultPhone;
+
+  // limpiar
+  phone = phone.replace(/\D/g, '');
+
+  rl.close();
+  return { method: 'code', phone };
 }
 
-global.loadPlugins = loadPlugins
-loadPlugins()
-
 // ═══════════════════════════════════════
-// NORMALIZADOR
+// MAIN
 // ═══════════════════════════════════════
 
-const normalize = n => (n || '').replace(/[^0-9]/g, '')
+async function main() {
+  showBanner();
 
-// ═══════════════════════════════════════
-// HANDLER
-// ═══════════════════════════════════════
+  const { method, phone } = await askConnectionMethod();
 
-async function messageHandler(sock, msg, store) {
+  console.log(chalk.cyan('\n  Conectando...\n'));
+
   try {
-    const { key, message } = msg
-    if (!message) return
-
-    const remoteJid = key.remoteJid
-    const fromGroup = remoteJid?.endsWith('@g.us')
-
-    let sender = fromGroup ? key.participant : remoteJid
-    sender = normalizeJid(sender)
-
-    const body = getBody(msg)
-
-    // DEBUG GLOBAL
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('📞 REMITENTE:', sender)
-    console.log('💬 MENSAJE:', body || '[Sin texto]')
-    console.log('📦 TIPO:', Object.keys(message))
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-
-    if (!body) return
-
-    const parsed = detectPrefix(body)
-    if (!parsed) return
-
-    const args = parsed.body.trim().split(/\s+/)
-    const command = args.shift()?.toLowerCase()
-    if (!command) return
-
-    const plugin = plugins.get(command)
-
-    if (!plugin) {
-      console.log(chalk.yellow(`⚠️ Comando no encontrado: ${command}`))
-      return
-    }
-
-    // ═══════════════════════════════════
-    // PERMISOS
-    // ═══════════════════════════════════
-
-    const senderNum = normalize(sender)
-    const botNumber = normalize(sock.user?.id?.split(':')[0])
-
-    const ownerList  = (config.owner || []).map(normalize)
-    const rownerList = (config.rowner || []).map(normalize)
-
-    const isOwner =
-      senderNum === botNumber ||
-      ownerList.includes(senderNum) ||
-      rownerList.includes(senderNum)
-
-    let groupAdmins = []
-
-    if (fromGroup) {
-      try {
-        const metadata = await sock.groupMetadata(remoteJid)
-        groupAdmins = getGroupAdmins(metadata.participants)
-      } catch {}
-    }
-
-    const isAdmin = fromGroup
-      ? groupAdmins.includes(sender) || isOwner
-      : isOwner
-
-    const isPremium =
-      (await db.isPremium?.(sender).catch(() => false)) || isOwner
-
-    // ═══════════════════════════════════
-    // CONTEXTO
-    // ═══════════════════════════════════
-
-    const ctx = {
-      sock,
-      msg,
-      remoteJid,
-      sender,
-      args,
-      command,
-      store,
-      config,
-      isOwner,
-      isAdmin,
-      isPremium
-    }
-
-    await plugin.execute(ctx)
-
+    const { startBot } = require('./main');
+    await startBot({ method, phone });
   } catch (e) {
-    console.log(chalk.red('❌ Error en handler:'), e)
+    console.error(chalk.red('Error:'), e.message);
   }
 }
 
-module.exports = {
-  messageHandler,
-  loadPlugins
-}
+main();
