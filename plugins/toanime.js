@@ -4,7 +4,6 @@ require('dotenv').config();
 
 const fs = require('fs');
 const path = require('path');
-const Replicate = require('replicate');
 const axios = require('axios');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
@@ -43,53 +42,51 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔑 TOKEN desde .env
-      const token = process.env.REPLICATE_API_TOKEN;
+      // 🔑 TU TOKEN HUGGINGFACE
+      const HF_API_KEY = process.env.HF_API_KEY;
 
-      if (!token) {
+      if (!HF_API_KEY) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Falta REPLICATE_API_TOKEN en .env'
+          text: '❌ Falta HF_API_KEY en .env'
         }, { quoted: msg });
       }
 
-      const replicate = new Replicate({
-        auth: token
-      });
-
       const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
 
-      // 🧠 MODELO REAL Y FUNCIONAL
-      const result = await replicate.run(
-        "nightmareai/real-esrgan",
+      // 🧠 MODELO ANIME (FUNCIONAL EN HF)
+      const response = await axios.post(
+        'https://api-inference.huggingface.co/models/lambdalabs/sd-image-variations-diffusers',
         {
-          input: {
-            image: `data:image/jpeg;base64,${imageBase64}`
+          inputs: imageBase64,
+          parameters: {
+            prompt: "anime style, high quality, detailed face, cinematic lighting, illustration"
           }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${HF_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          responseType: 'arraybuffer',
+          timeout: 120000
         }
       );
 
-      // El resultado puede ser URL o array
-      const imageUrl = Array.isArray(result) ? result[0] : result;
-
-      const img = await axios.get(imageUrl, {
-        responseType: 'arraybuffer'
-      });
-
-      fs.writeFileSync(output, img.data);
+      fs.writeFileSync(output, response.data);
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
-        caption: '✨ Anime IA aplicado (versión estable)'
+        caption: '✨ Anime IA aplicado con HuggingFace'
       }, { quoted: msg });
 
       fs.unlinkSync(input);
       fs.unlinkSync(output);
 
     } catch (err) {
-      console.log('ANIME API ERROR:', err.response?.data || err.message);
+      console.log('HF ANIME ERROR:', err.response?.data || err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con IA anime. Revisa token o conexión.'
+        text: '❌ Error con HuggingFace AI. Intenta otra imagen.'
       }, { quoted: msg });
     }
   }
