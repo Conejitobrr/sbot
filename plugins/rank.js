@@ -3,12 +3,19 @@
 const db = require('../lib/database');
 
 function getRole(level) {
+  if (level >= 500) return '🐉 Trascendido';
+  if (level >= 250) return '☄️ Celestial';
+  if (level >= 150) return '🪐 Divino';
   if (level >= 100) return '👑 Inmortal';
+  if (level >= 70) return '💠 Mítico';
   if (level >= 50) return '🌟 Leyenda';
-  if (level >= 30) return '🧙 Maestro';
-  if (level >= 20) return '⚔️ Elite';
-  if (level >= 10) return '🛡️ Guerrero';
+  if (level >= 35) return '🧙 Maestro';
+  if (level >= 25) return '🔥 Elite';
+  if (level >= 18) return '⚔️ Veterano';
+  if (level >= 12) return '🛡️ Guerrero';
+  if (level >= 8) return '⚡ Aventurero';
   if (level >= 5) return '📚 Aprendiz';
+  if (level >= 3) return '🌱 Principiante';
   return '🐣 Novato';
 }
 
@@ -21,7 +28,7 @@ function makeBar(progress, total, size = 10) {
 
 module.exports = {
   commands: ['rank'],
-  description: 'Muestra tu rango y progreso',
+  description: 'Muestra tu rango o el de otro usuario',
 
   async execute(ctx) {
     const {
@@ -29,10 +36,35 @@ module.exports = {
       remoteJid,
       sender,
       pushName,
-      msg
+      msg,
+      store
     } = ctx;
 
-    const user = await db.getUser(sender);
+    let target = sender;
+    let targetName = pushName;
+
+    // Respuesta a mensaje
+    if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+      target =
+        msg.message.extendedTextMessage.contextInfo.participant;
+    }
+
+    // Mención
+    else if (
+      msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length
+    ) {
+      target =
+        msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+    }
+
+    if (target !== sender) {
+      targetName =
+        store.contacts?.[target]?.name ||
+        store.contacts?.[target]?.notify ||
+        target.split('@')[0];
+    }
+
+    const user = await db.getUser(target);
 
     const xp = user.xp || 0;
     const level = user.level || 1;
@@ -49,9 +81,9 @@ module.exports = {
     await sock.sendMessage(remoteJid, {
       text:
 `╔════════════════════╗
-║      🎖️ TU RANGO
+║      🎖️ PERFIL RANK
 ╠════════════════════╣
-║ 👤 ${pushName}
+║ 👤 ${targetName}
 ║
 ║ ⭐ XP: ${xp}
 ║ 📈 Nivel: ${level}
@@ -61,7 +93,8 @@ module.exports = {
 ║ ${progress}/1000 XP
 ║
 ║ ⏳ Faltan: ${needed} XP
-╚════════════════════╝`
+╚════════════════════╝`,
+      mentions: target !== sender ? [target] : []
     }, { quoted: msg });
   }
 };
