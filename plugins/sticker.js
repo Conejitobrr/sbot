@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const ffmpeg = require('fluent-ffmpeg');
+const { exec } = require('child_process');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
@@ -19,7 +19,7 @@ module.exports = {
 
       if (!type || (type !== 'imageMessage' && type !== 'videoMessage')) {
         return sock.sendMessage(remoteJid, {
-          text: 'Responde a imagen, video o gif con .s'
+          text: 'Responde a imagen/video/gif con .s'
         }, { quoted: msg });
       }
 
@@ -40,77 +40,45 @@ module.exports = {
 
       const isImage = type === 'imageMessage';
 
-      const input = path.join(
-        tempDir,
-        `input.${isImage ? 'jpg' : 'mp4'}`
-      );
-
+      const input = path.join(tempDir, `input.${isImage ? 'jpg' : 'mp4'}`);
       const output = path.join(tempDir, 'output.webp');
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 FILTRO UNIVERSAL (NO DEFORMA + TRANSPARENCIA)
-      const vf = isImage
-        ? 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
-        : 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=10,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
+      // 🔥 COMANDO FFmpeg DIRECTO (SIN BUGS)
+      const cmd = isImage
+        ? `ffmpeg -y -i "${input}" -vf "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -q:v 60 -compression_level 6 -preset picture -loop 0 "${output}"`
+        : `ffmpeg -y -i "${input}" -t 4 -vf "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=10,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -fs 700k -loop 0 -an "${output}"`;
 
-      const command = ffmpeg(input);
+      exec(cmd, async (err) => {
+        if (err) {
+          console.log('FFMPEG CMD ERROR:', err);
 
-      // 🔥 MUY IMPORTANTE PARA GIF/VIDEO
-      if (!isImage) {
-        command
-          .inputOptions(['-ignore_loop 0']) // permite gifs
-          .setStartTime(0)
-          .setDuration(4); // máximo seguro
-      }
+          return sock.sendMessage(remoteJid, {
+            text: '❌ Error real de ffmpeg'
+          }, { quoted: msg });
+        }
 
-      command
-        .outputOptions([
-          '-vcodec libwebp',
-          '-vf ' + vf,
-          '-pix_fmt yuva420p',
-
-          // 🔥 ESTO ARREGLA EL "REINTENTAR"
-          '-fs 700k',
-          '-q:v 55',
-          '-compression_level 6',
-
-          '-loop 0',
-          '-an',
-          '-vsync 0'
-        ])
-        .toFormat('webp')
-        .save(output)
-        .on('end', async () => {
-          try {
-            const sticker = fs.readFileSync(output);
-
-            await sock.sendMessage(remoteJid, {
-              sticker
-            }, { quoted: msg });
-
-          } catch (e) {
-            console.log('SEND ERROR:', e);
-          }
-
-          fs.unlinkSync(input);
-          fs.unlinkSync(output);
-        })
-        .on('error', async (err) => {
-          console.log('FFMPEG ERROR:', err);
+        try {
+          const sticker = fs.readFileSync(output);
 
           await sock.sendMessage(remoteJid, {
-            text: 'Error al convertir (video/gif)'
+            sticker
           }, { quoted: msg });
 
-          if (fs.existsSync(input)) fs.unlinkSync(input);
-        });
+        } catch (e) {
+          console.log('SEND ERROR:', e);
+        }
+
+        fs.unlinkSync(input);
+        fs.unlinkSync(output);
+      });
 
     } catch (err) {
       console.log('GENERAL ERROR:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: 'Error general en sticker'
+        text: '❌ Error general'
       }, { quoted: msg });
     }
   }
