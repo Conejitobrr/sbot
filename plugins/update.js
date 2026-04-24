@@ -2,13 +2,13 @@
 
 const axios = require('axios');
 
-let previousCommitSHA = '';
-let previousMessage = '';
+let lastSHA = '';
+let intervalStarted = false;
 
 const owner = 'Conejitobrr';
 const repo = 'siriusbot';
 
-let intervalStarted = false;
+global.gitChat = null;
 
 module.exports = {
   commands: ['actualizar', 'actualizacion'],
@@ -16,8 +16,10 @@ module.exports = {
   async execute(ctx) {
     const { sock, msg, remoteJid } = ctx;
 
+    global.gitChat = remoteJid;
+
     await sock.sendMessage(remoteJid, {
-      text: '🔄 Iniciando monitoreo del repositorio...'
+      text: '🔄 Monitoreo de actualizaciones activado...'
     }, { quoted: msg });
 
     if (intervalStarted) return;
@@ -32,24 +34,36 @@ module.exports = {
         const commit = res.data[0];
         const sha = commit.sha;
         const message = commit.commit.message;
-        const url = commit.html_url;
 
-        if (sha !== previousCommitSHA || message !== previousMessage) {
-          previousCommitSHA = sha;
-          previousMessage = message;
+        if (sha !== lastSHA) {
+          lastSHA = sha;
 
-          await sock.sendMessage(remoteJid, {
-            text:
+          // 🔥 EXTRAER SOLO NOMBRE DEL ARCHIVO
+          const files = commit.files || [];
+
+          let changedFiles = '';
+
+          if (files.length > 0) {
+            changedFiles = files
+              .map(f => `📦 ${f.filename}`)
+              .join('\n');
+          } else {
+            // fallback: intentar sacar del mensaje
+            changedFiles = `📦 ${message}`;
+          }
+
+          if (global.gitChat) {
+            await sock.sendMessage(global.gitChat, {
+              text:
 `🚀 *Actualización detectada*
 
-📦 Repo: ${repo}
-📝 Commit: ${message}
-🔗 Link: ${url}`
-          }, { quoted: msg });
+${changedFiles}`
+            });
+          }
         }
 
       } catch (e) {
-        console.log('Git watcher error:', e.message);
+        console.log('Git watch error:', e.message);
       }
 
     }, 60000);
