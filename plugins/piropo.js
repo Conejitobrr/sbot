@@ -2,7 +2,7 @@
 
 module.exports = {
   commands: ['piropo'],
-  description: 'Envía un piropo aleatorio',
+  description: 'Envía un piropo mencionando a alguien',
 
   async execute(ctx) {
     const { sock, remoteJid, msg } = ctx;
@@ -14,24 +14,39 @@ module.exports = {
       'Quiero volar sin alas y entrar en tu universo.',
       'Quisiera ser mantequilla para derretirme en tu arepa.',
       'Si la belleza fuera pecado, ya estarías en el infierno.',
-      'Me gustaría ser un gato para pasar 7 vidas a tu lado.',
       'Robar está mal, pero un beso tuyo sí me lo robaría.',
       'Bonita, camina por la sombra que el sol derrite chocolates.',
       'Pareces Google, tienes todo lo que busco.',
-      'No es el ron ni la cerveza, eres tú quien se me ha subido a la cabeza.',
-      'Si hablamos de matemáticas eres la suma de todos mis deseos.',
-      'Mi café favorito es el de tus ojos.',
-      'Quiero ser Photoshop para retocarte todo el cuerpo.',
-      'Quisiera que fueras cereal para cucharearte en las mañanas.',
-      'Quién fuera hambre para darte tres veces al día.'
+      'Mi café favorito es el de tus ojos.'
     ];
 
     const random = piropos[Math.floor(Math.random() * piropos.length)];
 
+    // 🔥 Detectar usuario mencionado o respondido
+    let target;
+
+    // si responde a alguien
+    if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+      target = msg.message.extendedTextMessage.contextInfo.participant;
+    }
+    // si menciona con @
+    else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length) {
+      target = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+    }
+
+    // ❌ si no hay usuario
+    if (!target) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Menciona o responde a alguien para enviarle un piropo'
+      }, { quoted: msg });
+    }
+
+    const numero = target.split('@')[0];
+
+    // 💌 enviar piropo con mención
     await sock.sendMessage(remoteJid, {
-      text: random
-    }, {
-      quoted: msg // 👈 responde al mensaje
-    });
+      text: `@${numero} ${random}`,
+      mentions: [target]
+    }, { quoted: msg });
   }
 };
