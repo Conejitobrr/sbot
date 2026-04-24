@@ -1,18 +1,13 @@
 'use strict';
 
 const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+const db = require('../lib/database');
 
 module.exports = {
   commands: ['notify', 'hidetag', 'notificar'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid, args, isOwner, isAdmin } = ctx;
-
-    if (!(isAdmin || isOwner)) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Solo admins pueden usar esto'
-      }, { quoted: msg });
-    }
+    const { sock, msg, remoteJid, args, isOwner, isAdmin, isPremium, sender } = ctx;
 
     if (!remoteJid.endsWith('@g.us')) {
       return sock.sendMessage(remoteJid, {
@@ -27,12 +22,32 @@ module.exports = {
       }, { quoted: msg });
     }
 
+    // 🔥 PERMISOS
+    if (!(isAdmin || isPremium || isOwner)) {
+
+      const allowed = await db.canUseNotify(sender);
+
+      if (!allowed) {
+        const left = await db.getRemainingUses(sender);
+
+        return sock.sendMessage(remoteJid, {
+          text: `❌ Límite alcanzado (5 diarios)\n🔒 Hazte premium para uso ilimitado`
+        }, { quoted: msg });
+      }
+
+      const left = await db.getRemainingUses(sender);
+
+      await sock.sendMessage(remoteJid, {
+        text: `⚠️ Uso gratis restante: ${left}/5`
+      }, { quoted: msg });
+    }
+
     try {
       const metadata = await sock.groupMetadata(remoteJid);
       const users = metadata.participants.map(p => p.id);
 
-      // 🔥 INVISIBLE REDUCIDO (SIN "LEER MÁS")
-      const invisible = String.fromCharCode(8206).repeat(50);
+      // 🔥 INVISIBLE SIN "LEER MÁS"
+      const invisible = String.fromCharCode(8206).repeat(30);
 
       const content = {
         extendedTextMessage: {
@@ -59,23 +74,11 @@ module.exports = {
       );
 
     } catch (e) {
-      console.log('ERROR:', e);
+      console.log(e);
 
-      // fallback
-      try {
-        const metadata = await sock.groupMetadata(remoteJid);
-        const users = metadata.participants.map(p => p.id);
-
-        await sock.sendMessage(remoteJid, {
-          text,
-          mentions: users
-        }, { quoted: msg });
-
-      } catch {
-        await sock.sendMessage(remoteJid, {
-          text: '❌ Error al enviar'
-        }, { quoted: msg });
-      }
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error al enviar'
+      }, { quoted: msg });
     }
   }
 };
