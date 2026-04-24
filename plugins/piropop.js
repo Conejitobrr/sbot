@@ -1,8 +1,10 @@
 'use strict';
 
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
 
 module.exports = {
   commands: ['piropop'],
@@ -13,25 +15,26 @@ module.exports = {
     let texto = '';
 
     try {
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-pro' // 👈 ESTE SÍ FUNCIONA
+      const completion = await groq.chat.completions.create({
+        model: 'llama3-8b-8192', // 🔥 rápido y gratis
+        messages: [
+          {
+            role: 'user',
+            content: 'Dame un piropo corto, romántico y creativo'
+          }
+        ]
       });
 
-      const result = await model.generateContent(
-        'Dame un piropo corto, romántico y creativo'
-      );
-
-      texto = result.response.text();
+      texto = completion.choices[0].message.content;
 
     } catch (err) {
-      console.log('ERROR GEMINI:', err.message);
+      console.log('ERROR GROQ:', err.message);
 
       // 🔁 fallback
       const piropos = [
         'Eres como wifi sin contraseña 😍',
         'Si la belleza fuera delito, ya estarías presa 💘',
         '¿Eres magia? Porque todo mejora contigo ✨',
-        'Eres la razón de mi sonrisa 😊',
         'No eres Google, pero tienes todo lo que busco ❤️'
       ];
 
