@@ -19,11 +19,11 @@ module.exports = {
 
       if (!type || type !== 'imageMessage') {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Responde a una imagen con .toanime'
+          text: 'Responde a una imagen con .toanime'
         }, { quoted: msg });
       }
 
-      const media = message.imageMessage;
+      const media = message[type];
 
       const stream = await downloadContentFromMessage(media, 'image');
 
@@ -36,53 +36,47 @@ module.exports = {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
       const input = path.join(tempDir, 'input.jpg');
-      const output = path.join(tempDir, 'anime.png');
+      const output = path.join(tempDir, 'anime.jpg');
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 EFECTO ANIME (ARREGLADO)
+      // 🔥 FILTRO ESTILO ANIME MEJORADO (COLOR + SUAVIZADO)
       const cmd = `
-      magick "${input}" \
-      -resize 512x512 \
-      -colorspace RGB \
-      -posterize 5 \
-      -edge 1 \
-      -auto-level \
-      -sharpen 0x1 \
-      "${output}"
+        magick "${input}" \
+        -resize 512x512 \
+        -colorspace RGB \
+        -brightness-contrast 10x20 \
+        -modulate 110,120,100 \
+        -posterize 6 \
+        -bilateral-blur 0x3 \
+        -sharpen 0x1 \
+        "${output}"
       `;
 
       exec(cmd, async (err) => {
         if (err) {
           console.log('ANIME ERROR:', err);
-
           return sock.sendMessage(remoteJid, {
-            text: '❌ Error aplicando filtro anime'
+            text: '❌ Error al aplicar filtro anime'
           }, { quoted: msg });
         }
 
-        try {
-          const img = fs.readFileSync(output);
+        const img = fs.readFileSync(output);
 
-          await sock.sendMessage(remoteJid, {
-            image: img,
-            caption: '✨ Anime filter aplicado'
-          }, { quoted: msg });
+        await sock.sendMessage(remoteJid, {
+          image: img,
+          caption: '✨ Anime style aplicado'
+        }, { quoted: msg });
 
-        } catch (e) {
-          console.log('SEND ERROR:', e);
-        }
-
-        [input, output].forEach(f => {
-          if (fs.existsSync(f)) fs.unlinkSync(f);
-        });
+        fs.unlinkSync(input);
+        fs.unlinkSync(output);
       });
 
     } catch (err) {
-      console.log('ERROR GENERAL:', err);
+      console.log('GENERAL ERROR:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general en toanime'
+        text: '❌ Error general'
       }, { quoted: msg });
     }
   }
