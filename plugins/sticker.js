@@ -31,7 +31,6 @@ module.exports = {
       );
 
       let buffer = Buffer.from([]);
-
       for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
       }
@@ -50,6 +49,7 @@ module.exports = {
 
       const isImage = type === 'imageMessage';
 
+      // 🔥 ESCALA + TRANSPARENCIA + SIN DEFORMAR
       const vf = isImage
         ? 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
         : 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=12,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
@@ -57,7 +57,7 @@ module.exports = {
       const command = ffmpeg(input);
 
       if (!isImage) {
-        command.setStartTime(0).setDuration(5);
+        command.setStartTime(0).setDuration(4); // 🔥 máximo recomendado
       }
 
       command
@@ -65,8 +65,12 @@ module.exports = {
           '-vcodec libwebp',
           '-vf ' + vf,
           '-pix_fmt yuva420p',
-          '-q:v 70',
+
+          // 🔥 CLAVE para que WhatsApp NO falle
+          '-fs 800k',           // límite tamaño (MUY IMPORTANTE)
+          '-q:v 60',            // calidad balanceada
           '-compression_level 6',
+
           '-loop 0',
           '-an',
           '-vsync 0'
