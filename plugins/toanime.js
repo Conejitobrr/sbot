@@ -1,10 +1,8 @@
 'use strict';
 
-require('dotenv').config();
-
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
+const { exec } = require('child_process');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
@@ -42,51 +40,39 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      const HF_API_KEY = process.env.HF_API_KEY;
+      // 🎨 FILTRO ANIME LOCAL (SIN IA)
+      await new Promise((resolve, reject) => {
+        const cmd = `
+          magick "${input}" \
+          -resize 512x512 \
+          -modulate 110,120,100 \
+          -sharpen 0x1 \
+          -contrast \
+          -edge 1 \
+          -colorspace RGB \
+          -posterize 12 \
+          "${output}"
+        `;
 
-      if (!HF_API_KEY) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ Falta HF_API_KEY en .env'
-        }, { quoted: msg });
-      }
-
-      // 🔥 SPACE API (NO 413, NO BASE64)
-      const imageBase64 = fs.readFileSync(input, { encoding: 'base64' });
-
-      const response = await axios.post(
-        'https://hf.space/embed/akhaliq/AnimeGANv2/api/predict/',
-        {
-          data: [`data:image/jpeg;base64,${imageBase64}`]
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${HF_API_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      const imageUrl = response.data.data[0];
-
-      const img = await axios.get(imageUrl, {
-        responseType: 'arraybuffer'
+        exec(cmd, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
       });
-
-      fs.writeFileSync(output, img.data);
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(output),
-        caption: '✨ Anime IA aplicado (Space API)'
+        caption: '✨ Anime aplicado (modo local sin API)'
       }, { quoted: msg });
 
       fs.unlinkSync(input);
       fs.unlinkSync(output);
 
     } catch (err) {
-      console.log('HF SPACE ERROR:', err.response?.data || err.message);
+      console.log('LOCAL ANIME ERROR:', err.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error con Space API anime. Intenta otra imagen.'
+        text: '❌ Error en filtro local (¿tienes ImageMagick instalado?)'
       }, { quoted: msg });
     }
   }
