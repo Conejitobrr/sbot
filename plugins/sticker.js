@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
   commands: ['s'],
@@ -22,10 +23,13 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 📥 Descargar media
-      const stream = await sock.downloadMediaMessage({
-        message: message
-      });
+      const media = message[type];
+
+      // 📥 Descargar media (forma correcta)
+      const stream = await downloadContentFromMessage(
+        media,
+        type === 'imageMessage' ? 'image' : 'video'
+      );
 
       let buffer = Buffer.from([]);
 
@@ -44,6 +48,7 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
+      // 🎬 Convertir a sticker
       ffmpeg(input)
         .outputOptions([
           '-vcodec', 'libwebp',
@@ -54,33 +59,4 @@ module.exports = {
           '-an',
           '-vsync', '0'
         ])
-        .toFormat('webp')
-        .save(output)
-        .on('end', async () => {
-
-          const sticker = fs.readFileSync(output);
-
-          await sock.sendMessage(remoteJid, {
-            sticker
-          }, { quoted: msg });
-
-          fs.unlinkSync(input);
-          fs.unlinkSync(output);
-        })
-        .on('error', async (err) => {
-          console.log(err);
-
-          await sock.sendMessage(remoteJid, {
-            text: '❌ Error al crear sticker'
-          }, { quoted: msg });
-        });
-
-    } catch (e) {
-      console.log(e);
-
-      await sock.sendMessage(remoteJid, {
-        text: '❌ Error inesperado'
-      }, { quoted: msg });
-    }
-  }
-};
+        .to
