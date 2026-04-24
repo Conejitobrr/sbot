@@ -44,7 +44,10 @@ function loadPlugins() {
       }
 
     } catch (err) {
-      console.log(chalk.red(`Error cargando plugin ${file}:`), err.message)
+      console.log(
+        chalk.red(`Error cargando plugin ${file}:`),
+        err.message
+      )
     }
   }
 
@@ -86,23 +89,38 @@ async function messageHandler(sock, msg, store) {
       'Sin nombre'
 
     const body = getBody(msg)
+    const number = sender.replace(/@.+/, '')
 
     // ═══════════════════════════════════
-    // DEBUG GLOBAL: SIEMPRE MUESTRA TODO
+    // LOGGER VISUAL
     // ═══════════════════════════════════
 
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('👤 NOMBRE   :', pushName)
-    console.log('📞 NÚMERO   :', sender)
-    console.log('💬 MENSAJE  :', body || '[Sin texto]')
-    console.log('📦 TIPO     :', Object.keys(message))
-    console.log('📄 RAW KEY  :', key)
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+    let chatLabel = chalk.blue('PRIVADO')
+    let chatName = 'Chat Privado'
 
-    // Si no tiene texto, no continuar
+    if (fromGroup) {
+      chatLabel = chalk.magenta('GRUPO')
+
+      try {
+        const metadata = await sock.groupMetadata(remoteJid)
+        chatName = metadata.subject || 'Grupo'
+      } catch {
+        chatName = 'Grupo'
+      }
+    }
+
+    console.log(chalk.gray('\n╔══════════════════════════════'))
+    console.log(chalk.white('║ 📍 Tipo   :'), chatLabel)
+    console.log(chalk.white('║ 🏷️ Chat   :'), chalk.cyan(chatName))
+    console.log(chalk.white('║ 👤 Nombre :'), chalk.green(pushName))
+    console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number))
+    console.log(chalk.white('║ 💬 Msg    :'), chalk.white(body || '[Sin texto]'))
+    console.log(chalk.gray('╚══════════════════════════════\n'))
+
+    // Si no tiene texto → no procesar comandos
     if (!body) return
 
-    // Solo procesar comandos desde aquí
+    // Detectar prefijo
     const parsed = detectPrefix(body)
     if (!parsed) return
 
