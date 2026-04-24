@@ -19,7 +19,7 @@ module.exports = {
 
       if (!type || (type !== 'imageMessage' && type !== 'videoMessage')) {
         return sock.sendMessage(remoteJid, {
-          text: 'Responde a una imagen o video con .s'
+          text: 'Responde a imagen, video o gif con .s'
         }, { quoted: msg });
       }
 
@@ -38,26 +38,30 @@ module.exports = {
       const tempDir = path.join(__dirname, '../temp');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
+      const isImage = type === 'imageMessage';
+
       const input = path.join(
         tempDir,
-        'input.' + (type === 'imageMessage' ? 'jpg' : 'mp4')
+        `input.${isImage ? 'jpg' : 'mp4'}`
       );
 
       const output = path.join(tempDir, 'output.webp');
 
       fs.writeFileSync(input, buffer);
 
-      const isImage = type === 'imageMessage';
-
-      // 🔥 ESCALA + TRANSPARENCIA + SIN DEFORMAR
+      // 🔥 FILTRO UNIVERSAL (NO DEFORMA + TRANSPARENCIA)
       const vf = isImage
         ? 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
-        : 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=12,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
+        : 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=10,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
       const command = ffmpeg(input);
 
+      // 🔥 MUY IMPORTANTE PARA GIF/VIDEO
       if (!isImage) {
-        command.setStartTime(0).setDuration(4); // 🔥 máximo recomendado
+        command
+          .inputOptions(['-ignore_loop 0']) // permite gifs
+          .setStartTime(0)
+          .setDuration(4); // máximo seguro
       }
 
       command
@@ -66,9 +70,9 @@ module.exports = {
           '-vf ' + vf,
           '-pix_fmt yuva420p',
 
-          // 🔥 CLAVE para que WhatsApp NO falle
-          '-fs 800k',           // límite tamaño (MUY IMPORTANTE)
-          '-q:v 60',            // calidad balanceada
+          // 🔥 ESTO ARREGLA EL "REINTENTAR"
+          '-fs 700k',
+          '-q:v 55',
           '-compression_level 6',
 
           '-loop 0',
@@ -78,27 +82,33 @@ module.exports = {
         .toFormat('webp')
         .save(output)
         .on('end', async () => {
-          const sticker = fs.readFileSync(output);
+          try {
+            const sticker = fs.readFileSync(output);
 
-          await sock.sendMessage(remoteJid, {
-            sticker
-          }, { quoted: msg });
+            await sock.sendMessage(remoteJid, {
+              sticker
+            }, { quoted: msg });
+
+          } catch (e) {
+            console.log('SEND ERROR:', e);
+          }
 
           fs.unlinkSync(input);
           fs.unlinkSync(output);
         })
         .on('error', async (err) => {
-          console.error('FFMPEG ERROR:', err);
+          console.log('FFMPEG ERROR:', err);
 
           await sock.sendMessage(remoteJid, {
-            text: 'Error al convertir a sticker'
+            text: 'Error al convertir (video/gif)'
           }, { quoted: msg });
 
           if (fs.existsSync(input)) fs.unlinkSync(input);
         });
 
     } catch (err) {
-      console.error(err);
+      console.log('GENERAL ERROR:', err);
+
       await sock.sendMessage(remoteJid, {
         text: 'Error general en sticker'
       }, { quoted: msg });
