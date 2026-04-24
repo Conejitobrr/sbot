@@ -8,30 +8,49 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, msg } = ctx;
 
-    // ⏳ Mensaje inicial
-    await sock.sendMessage(remoteJid, {
-      text: '🔄 Actualizando bot desde GitHub...'
-    }, { quoted: msg });
+    try {
+      await sock.sendMessage(remoteJid, {
+        text: '🔄 Actualizando bot desde GitHub...'
+      }, { quoted: msg });
 
-    // 🚀 Ejecutar git pull
-    exec('git pull', (err) => {
+      // 🔥 git pull
+      exec('git pull', (err, stdout) => {
+        if (err) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ Error en git pull:\n' + err.message
+          }, { quoted: msg });
+        }
 
-      if (err) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ Error al actualizar:\n' + err.message
-        }, { quoted: msg });
-      }
-
-      // 📦 Instalar dependencias
-      exec('npm install', async () => {
-
-        await sock.sendMessage(remoteJid, {
-          text: '✅ Bot actualizado correctamente\n\n🔁 Reiniciando...'
+        sock.sendMessage(remoteJid, {
+          text: '📦 Repositorio actualizado\n📥 Instalando dependencias...'
         }, { quoted: msg });
 
-        // 🔁 Reiniciar bot
-        process.exit(0);
+        // 🔥 npm install
+        exec('npm install', async (err2) => {
+          if (err2) {
+            return sock.sendMessage(remoteJid, {
+              text: '❌ Error en npm install:\n' + err2.message
+            }, { quoted: msg });
+          }
+
+          await sock.sendMessage(remoteJid, {
+            text:
+`✅ Bot actualizado correctamente
+
+⚠️ Reinicio automático no activo
+👉 Ejecuta manualmente:
+
+node index.js`
+          }, { quoted: msg });
+
+          // ❌ NO matamos el proceso (evita cierre)
+        });
       });
-    });
+
+    } catch (e) {
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error inesperado:\n' + e.message
+      }, { quoted: msg });
+    }
   }
 };
