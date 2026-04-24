@@ -25,7 +25,6 @@ if (!fs.existsSync(PLUGINS_DIR)) {
 
 const plugins = new Map();
 
-// 🔥 CARGA DE PLUGINS
 function loadPlugins() {
   plugins.clear();
 
@@ -52,19 +51,17 @@ function loadPlugins() {
   console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size}`));
 }
 
-// 🔥 GLOBAL PARA UPDATE
 global.loadPlugins = loadPlugins;
-
 loadPlugins();
 
 // ═══════════════════════════════════════
-// 🔐 NORMALIZADOR DE NÚMEROS
+// 🔐 NORMALIZADOR
 // ═══════════════════════════════════════
 
 const normalize = (n) => (n || '').replace(/[^0-9]/g, '');
 
 // ═══════════════════════════════════════
-// 🚀 HANDLER PRINCIPAL
+// 🚀 HANDLER
 // ═══════════════════════════════════════
 
 async function messageHandler(sock, msg, store) {
@@ -91,25 +88,31 @@ async function messageHandler(sock, msg, store) {
   if (!plugin) return;
 
   // ═══════════════════════════════════
-  // 🔥 PERMISOS REALES (FIX TOTAL)
+  // 🔥 DEBUG (AHORA SÍ VERÁS TODO)
+  // ═══════════════════════════════════
+
+  console.log('━━━━━━━━━━━━━━━━━━');
+  console.log('📩 BODY:', body);
+  console.log('📞 SENDER:', sender);
+  console.log('🚀 COMMAND:', command);
+
+  // ═══════════════════════════════════
+  // 🔥 PERMISOS CORREGIDOS
   // ═══════════════════════════════════
 
   const senderNum = normalize(sender);
 
-  // 🔥 BOT NUMBER REAL
-  const botNumber = normalize(sock.user?.id);
+  // 🔥 BOT NUMBER CORRECTO
+  const botNumber = normalize(sock.user?.id?.split(':')[0]);
 
-  // 🔥 LISTAS OWNER
-  const ownerList = (config.owner || []).map(normalize);
+  const ownerList  = (config.owner || []).map(normalize);
   const rownerList = (config.rowner || []).map(normalize);
 
-  // 🔥 OWNER FINAL (BLINDADO)
   const isOwner =
     senderNum === botNumber ||
     ownerList.includes(senderNum) ||
     rownerList.includes(senderNum);
 
-  // 🔥 ADMIN GRUPOS
   let groupAdmins = [];
 
   if (fromGroup) {
@@ -123,12 +126,11 @@ async function messageHandler(sock, msg, store) {
     ? groupAdmins.includes(sender) || isOwner
     : isOwner;
 
-  // 🔥 PREMIUM
   const isPremium =
     (await db.isPremium?.(sender).catch(() => false)) || isOwner;
 
   // ═══════════════════════════════════
-  // CONTEXTO FINAL
+  // CONTEXTO
   // ═══════════════════════════════════
 
   const ctx = {
