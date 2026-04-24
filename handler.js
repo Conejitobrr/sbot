@@ -7,9 +7,8 @@ const config  = require('./config');
 const db      = require('./lib/database');
 
 const {
-  getBody, isGroup, getGroupAdmins, getBotJid, isBotAdmin,
-  normalizeJid,
-  detectPrefix,
+  getBody, isGroup, getGroupAdmins, getBotJid,
+  normalizeJid, detectPrefix,
 } = require('./lib/utils');
 
 // ═══════════════════════════════════════
@@ -66,37 +65,40 @@ async function messageHandler(sock, msg, store) {
   sender = normalizeJid(sender);
 
   const botJid = getBotJid(sock);
-  if (sender === botJid || key.fromMe) return;
+
+  // 🔥 PERMITIR OWNER EN PRIVADO (FIX REAL)
+  const senderNum = sender.replace(/[^0-9]/g, '');
+  const isRowner = (config.rowner || []).includes(senderNum);
+  const isOwner  = (config.owner  || []).includes(senderNum) || isRowner;
+
+  // ❌ antes bloqueaba todo
+  // if (sender === botJid || key.fromMe) return;
+
+  // ✅ ahora correcto
+  if (sender === botJid) return;
+  if (key.fromMe && !isOwner) return;
 
   const body = getBody(msg);
   if (!body) return;
 
-// ── Permisos ─────────────────────────────────────────────────────
-const senderNum = sender.replace(/[^0-9]/g, '');
+  // ── Permisos ─────────────────────────
 
-const isRowner = (config.rowner || []).includes(senderNum);
-const isOwner  = (config.owner  || []).includes(senderNum) || isRowner;
+  const isMod = isOwner;
 
-// opcional (si no tienes mods en config)
-const isMod = isOwner;
+  let groupAdmins = [];
+  if (fromGroup) {
+    try {
+      const metadata = await sock.groupMetadata(remoteJid);
+      groupAdmins = getGroupAdmins(metadata.participants);
+    } catch {}
+  }
 
-// grupos (solo si es grupo)
-let groupAdmins = [];
-if (fromGroup && msg.message) {
-  try {
-    const metadata = await sock.groupMetadata(remoteJid);
-    groupAdmins = getGroupAdmins(metadata.participants);
-  } catch {}
-}
+  const isAdmin = groupAdmins.includes(sender) || isOwner;
+  const isPremium = (await db.isPremium?.(sender).catch(() => false)) || isOwner;
 
-const isAdmin = groupAdmins.includes(sender) || isOwner;
-
-// premium (seguro)
-const isPremium = (await db.isPremium?.(sender).catch(() => false)) || isOwner;  
-  // 📛 Nombre correcto
   const contact = store?.contacts?.[sender] || {};
-const name = pushName || contact.name || contact.notify || senderNum;
-  
+  const name = pushName || contact.name || contact.notify || senderNum;
+
   // 📝 LOG
   console.log(
     chalk.cyan('📩 Mensaje recibido'),
@@ -116,28 +118,31 @@ const name = pushName || contact.name || contact.notify || senderNum;
 
   // ───── COMANDOS ─────
 
-const parsed = detectPrefix(body);
-if (!parsed) return;
-  
-const args    = parsed.body.trim().split(/\s+/);
-const command = args.shift()?.toLowerCase();
-if (!command) return;
+  const parsed = detectPrefix(body);
+  if (!parsed) return;
 
-const plugin = plugins.get(command);
-if (!plugin) return;
+  const args    = parsed.body.trim().split(/\s+/);
+  const command = args.shift()?.toLowerCase();
+  if (!command) return;
 
-const ctx = {
-  sock,
-  msg,
-  remoteJid,
-  sender,
-  senderNum,
-  args,
-  command,
-  store,
-  config,
-  isOwner // 👈 IMPORTANTE
-};
+  const plugin = plugins.get(command);
+  if (!plugin) return;
+
+  const ctx = {
+    sock,
+    msg,
+    remoteJid,
+    sender,
+    senderNum,
+    args,
+    command,
+    store,
+    config,
+    isOwner,
+    isAdmin,
+    isPremium,
+    isGroup: fromGroup
+  };
 
   try {
     await plugin.execute(ctx);
