@@ -64,6 +64,25 @@ loadPlugins()
 const normalize = txt =>
   (txt || '').replace(/[^0-9]/g, '')
 
+function getReadableMessage(msg) {
+  const body = getBody(msg)
+  if (body) return body
+
+  const m = msg.message || {}
+
+  if (m.imageMessage) return '[Imagen]'
+  if (m.videoMessage) return '[Video]'
+  if (m.stickerMessage) return '[Sticker]'
+  if (m.audioMessage) return '[Audio]'
+  if (m.documentMessage) return '[Documento]'
+  if (m.locationMessage) return '[Ubicación]'
+  if (m.contactMessage) return '[Contacto]'
+  if (m.contactsArrayMessage) return '[Contactos]'
+  if (m.reactionMessage) return '[Reacción]'
+
+  return '[Sin texto]'
+}
+
 // ═══════════════════════════════════════
 // HANDLER
 // ═══════════════════════════════════════
@@ -89,6 +108,7 @@ async function messageHandler(sock, msg, store) {
       'Sin nombre'
 
     const body = getBody(msg)
+    const displayMsg = getReadableMessage(msg)
     const number = sender.replace(/@.+/, '')
 
     // ═══════════════════════════════════
@@ -114,13 +134,12 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 🏷️ Chat   :'), chalk.cyan(chatName))
     console.log(chalk.white('║ 👤 Nombre :'), chalk.green(pushName))
     console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number))
-    console.log(chalk.white('║ 💬 Msg    :'), chalk.white(body || '[Sin texto]'))
+    console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
-    // Si no tiene texto → no procesar comandos
+    // Solo comandos si hay texto real
     if (!body) return
 
-    // Detectar prefijo
     const parsed = detectPrefix(body)
     if (!parsed) return
 
