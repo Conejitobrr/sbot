@@ -53,9 +53,8 @@ module.exports = {
 
       // 🔥 ESCALA + PADDING TRANSPARENTE (NO DEFORMA)
       const vf = isImage
-  ? 'scale=512:-1:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
-  : 'scale=512:-1:flags=lanczos,fps=18,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
-      const command = ffmpeg(input);
+  ? 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
+  : 'scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=18,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';      const command = ffmpeg(input);
 
       if (!isImage) {
         command.setStartTime(0).setDuration(6);
