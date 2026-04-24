@@ -48,15 +48,32 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🎬 Convertir a sticker
-      ffmpeg(input)
-        .outputOptions([
-          '-vcodec', 'libwebp',
-          '-vf', 'scale=512:512:force_original_aspect_ratio=decrease,fps=15',
-          '-lossless', '1',
-          '-loop', '0',
-          '-preset', 'default',
-          '-an',
-          '-vsync', '0'
-        ])
-        .to
+// 🎬 Convertir a sticker
+ffmpeg(input)
+  .outputOptions([
+    '-vcodec', 'libwebp',
+    '-vf', 'scale=512:512:force_original_aspect_ratio=decrease,fps=15',
+    '-lossless', '1',
+    '-loop', '0',
+    '-preset', 'default',
+    '-an',
+    '-vsync', '0'
+  ])
+  .toFormat('webp')
+  .save(output)
+  .on('end', async () => {
+    const sticker = fs.readFileSync(output);
+
+    await sock.sendMessage(remoteJid, {
+      sticker
+    }, { quoted: msg });
+
+    fs.unlinkSync(input);
+    fs.unlinkSync(output);
+  })
+  .on('error', async (err) => {
+    console.error(err);
+    await sock.sendMessage(remoteJid, {
+      text: '❌ Error al convertir a sticker'
+    }, { quoted: msg });
+  });
