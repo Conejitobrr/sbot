@@ -137,7 +137,7 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
-    // Solo comandos si hay texto real
+    // Solo procesar comandos
     if (!body) return
 
     const parsed = detectPrefix(body)
@@ -198,8 +198,16 @@ async function messageHandler(sock, msg, store) {
       config,
       isOwner,
       isAdmin,
-      isPremium
+      isPremium,
+      fromGroup
     })
+
+    // ═══════════════════════════════════
+    // XP AUTOMÁTICA POR COMANDO
+    // ═══════════════════════════════════
+
+    const gainedXP = Math.floor(Math.random() * 16) + 5
+    await db.addXP(sender, gainedXP)
 
   } catch (err) {
     console.log(chalk.red('❌ Error en handler:'), err)
