@@ -15,7 +15,7 @@ module.exports = {
 
       if (!text) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Escribe algo\nEjemplo: .tts hola'
+          text: '❌ Ejemplo: .tts hola mundo'
         }, { quoted: msg });
       }
 
@@ -25,15 +25,28 @@ module.exports = {
       const img = path.join(tempDir, 'text.png');
       const webp = path.join(tempDir, 'sticker.webp');
 
-      // 🔥 CREAR IMAGEN CON TEXTO (ImageMagick)
+      // 🔥 CALCULAR TAMAÑO AUTOMÁTICO
+      const length = text.length;
+
+      let fontSize;
+
+      if (length <= 10) fontSize = 110;
+      else if (length <= 20) fontSize = 90;
+      else if (length <= 40) fontSize = 70;
+      else if (length <= 80) fontSize = 50;
+      else fontSize = 35;
+
+      // 🔥 CREAR IMAGEN CON AUTO-AJUSTE
       const createImg = `
       magick -size 512x512 xc:none \
       -gravity center \
       -fill white \
       -stroke black \
-      -strokewidth 2 \
-      -pointsize 48 \
-      -annotate 0 "${text.replace(/"/g, '\\"')}" \
+      -strokewidth 3 \
+      -font DejaVu-Sans-Bold \
+      -pointsize ${fontSize} \
+      -interline-spacing 4 \
+      -annotate +0+0 "${text.replace(/"/g, '\\"')}" \
       "${img}"
       `;
 
@@ -42,7 +55,7 @@ module.exports = {
       ffmpeg -y -i "${img}" \
       -vcodec libwebp \
       -vf "scale=512:512:flags=lanczos,format=rgba" \
-      -q:v 80 \
+      -q:v 90 \
       -compression_level 6 \
       -preset picture \
       -loop 0 \
@@ -86,7 +99,7 @@ module.exports = {
       console.log('ERROR GENERAL:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general en tts'
+        text: '❌ Error general'
       }, { quoted: msg });
     }
   }
