@@ -44,18 +44,20 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      ffmpeg(input)
-      .outputOptions([
-  '-vcodec libwebp',
-  '-vf scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos',
-  '-lossless 0',
-  '-qscale 0',
-  '-compression_level 6',
-  '-loop 0',
-  '-preset default',
-  '-an',
-  '-vsync 0'
-])
+      const isImage = type === 'imageMessage';
+
+ffmpeg(input)
+  .outputOptions([
+    '-vcodec libwebp',
+    `-vf ${isImage ? vfImage : vfVideo}`,
+    '-lossless 0',
+    '-qscale 0',
+    '-compression_level 6',
+    '-loop 0',
+    '-preset picture',
+    '-an',
+    '-vsync 0'
+  ])
         .toFormat('webp')
         .save(output)
         .on('end', async () => {
