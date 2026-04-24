@@ -46,10 +46,16 @@ module.exports = {
 
       const isImage = type === 'imageMessage';
 
-ffmpeg(input)
+const command = ffmpeg(input);
+
+if (!isImage) {
+  command.setStartTime(0).setDuration(6);
+}
+
+command
   .outputOptions([
     '-vcodec libwebp',
-    `-vf ${isImage ? vfImage : vfVideo}`,
+    `-vf scale=512:-1:flags=lanczos${isImage ? '' : ',fps=18'}`,
     '-lossless 0',
     '-qscale 0',
     '-compression_level 6',
@@ -58,26 +64,27 @@ ffmpeg(input)
     '-an',
     '-vsync 0'
   ])
-        .toFormat('webp')
-        .save(output)
-        .on('end', async () => {
-          const sticker = fs.readFileSync(output);
+  .toFormat('webp')
+  .save(output)
+  .on('end', async () => {
+    const sticker = fs.readFileSync(output);
 
-          await sock.sendMessage(remoteJid, {
-            sticker
-          }, { quoted: msg });
+    await sock.sendMessage(remoteJid, {
+      sticker
+    }, { quoted: msg });
 
-          fs.unlinkSync(input);
-          fs.unlinkSync(output);
-        })
-        .on('error', async (err) => {
-          console.error(err);
-          await sock.sendMessage(remoteJid, {
-            text: '❌ Error al convertir a sticker'
-          }, { quoted: msg });
+    fs.unlinkSync(input);
+    fs.unlinkSync(output);
+  })
+  .on('error', async (err) => {
+    console.error('FFMPEG ERROR:', err);
 
-          if (fs.existsSync(input)) fs.unlinkSync(input);
-        });
+    await sock.sendMessage(remoteJid, {
+      text: '❌ Error al convertir a sticker'
+    }, { quoted: msg });
+
+    if (fs.existsSync(input)) fs.unlinkSync(input);
+  });
 
     } catch (err) {
       console.error(err);
