@@ -14,7 +14,7 @@ module.exports = {
 
     try {
       const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash' // 👈 IMPORTANTE
+        model: 'gemini-1.5-pro' // 👈 IMPORTANTE
       });
 
       const result = await model.generateContent(
