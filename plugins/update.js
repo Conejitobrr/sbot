@@ -8,26 +8,29 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, msg } = ctx;
 
+    // ⏳ Mensaje inicial
     await sock.sendMessage(remoteJid, {
-      text: '🔄 Actualizando bot...'
+      text: '🔄 Actualizando bot desde GitHub...'
     }, { quoted: msg });
 
-    exec('git pull', (err, stdout) => {
+    // 🚀 Ejecutar git pull
+    exec('git pull', (err) => {
 
       if (err) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Error:\n' + err.message
+          text: '❌ Error al actualizar:\n' + err.message
         }, { quoted: msg });
       }
 
+      // 📦 Instalar dependencias
       exec('npm install', async () => {
 
         await sock.sendMessage(remoteJid, {
-          text: '✅ Actualizado\n♻️ Reiniciando con PM2...'
+          text: '✅ Bot actualizado correctamente\n\n🔁 Reiniciando...'
         }, { quoted: msg });
 
-        // 🔁 RESTART SIN APAGARSE
-        exec('pm2 restart siriusbot');
+        // 🔁 Reiniciar bot
+        process.exit(0);
       });
     });
   }
