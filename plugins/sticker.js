@@ -53,9 +53,8 @@ module.exports = {
 
       // 🔥 ESCALA + PADDING TRANSPARENTE (NO DEFORMA)
       const vf = isImage
-        ? 'scale=512:-1:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
-        : 'scale=512:-1:flags=lanczos,fps=18,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
-
+  ? 'scale=512:-1:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
+  : 'scale=512:-1:flags=lanczos,fps=18,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
       const command = ffmpeg(input);
 
       if (!isImage) {
@@ -64,16 +63,17 @@ module.exports = {
 
       command
         .outputOptions([
-          '-vcodec libwebp',
-          '-vf ' + vf,
-          '-lossless 0',
-          '-qscale 0',
-          '-compression_level 6',
-          '-loop 0',
-          '-preset picture',
-          '-an',
-          '-vsync 0'
-        ])
+  '-vcodec libwebp',
+  '-vf ' + vf,
+  '-pix_fmt yuva420p',
+  '-lossless 0',
+  '-qscale 0',
+  '-compression_level 6',
+  '-loop 0',
+  '-preset picture',
+  '-an',
+  '-vsync 0'
+])
         .toFormat('webp')
         .save(output)
         .on('end', async () => {
