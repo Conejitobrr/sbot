@@ -14,7 +14,7 @@ module.exports = {
 
     try {
       const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-pro' // 👈 IMPORTANTE
+        model: 'gemini-pro' // 👈 ESTE SÍ FUNCIONA
       });
 
       const result = await model.generateContent(
@@ -26,7 +26,7 @@ module.exports = {
     } catch (err) {
       console.log('ERROR GEMINI:', err.message);
 
-      // 🔁 FALLBACK
+      // 🔁 fallback
       const piropos = [
         'Eres como wifi sin contraseña 😍',
         'Si la belleza fuera delito, ya estarías presa 💘',
