@@ -1,56 +1,57 @@
 'use strict';
 
-const { exec } = require('child_process');
+const axios = require('axios');
+
+let previousCommitSHA = '';
+let previousMessage = '';
+
+const owner = 'Conejitobrr';
+const repo = 'siriusbot';
+
+let intervalStarted = false;
 
 module.exports = {
-  commands: ['update'],
+  commands: ['actualizar', 'actualizacion'],
 
   async execute(ctx) {
-    const { sock, remoteJid, msg } = ctx;
+    const { sock, msg, remoteJid } = ctx;
 
-    try {
-      await sock.sendMessage(remoteJid, {
-        text: '🔄 Actualizando bot desde GitHub...'
-      }, { quoted: msg });
+    await sock.sendMessage(remoteJid, {
+      text: '🔄 Iniciando monitoreo del repositorio...'
+    }, { quoted: msg });
 
-      // 🔥 git pull
-      exec('git pull', (err, stdout) => {
-        if (err) {
-          return sock.sendMessage(remoteJid, {
-            text: '❌ Error en git pull:\n' + err.message
-          }, { quoted: msg });
-        }
+    if (intervalStarted) return;
+    intervalStarted = true;
 
-        sock.sendMessage(remoteJid, {
-          text: '📦 Repositorio actualizado\n📥 Instalando dependencias...'
-        }, { quoted: msg });
+    setInterval(async () => {
+      try {
+        const res = await axios.get(
+          `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1`
+        );
 
-        // 🔥 npm install
-        exec('npm install', async (err2) => {
-          if (err2) {
-            return sock.sendMessage(remoteJid, {
-              text: '❌ Error en npm install:\n' + err2.message
-            }, { quoted: msg });
-          }
+        const commit = res.data[0];
+        const sha = commit.sha;
+        const message = commit.commit.message;
+        const url = commit.html_url;
+
+        if (sha !== previousCommitSHA || message !== previousMessage) {
+          previousCommitSHA = sha;
+          previousMessage = message;
 
           await sock.sendMessage(remoteJid, {
             text:
-`✅ Bot actualizado correctamente
+`🚀 *Actualización detectada*
 
-⚠️ Reinicio automático no activo
-👉 Ejecuta manualmente:
-
-node index.js`
+📦 Repo: ${repo}
+📝 Commit: ${message}
+🔗 Link: ${url}`
           }, { quoted: msg });
+        }
 
-          // ❌ NO matamos el proceso (evita cierre)
-        });
-      });
+      } catch (e) {
+        console.log('Git watcher error:', e.message);
+      }
 
-    } catch (e) {
-      await sock.sendMessage(remoteJid, {
-        text: '❌ Error inesperado:\n' + e.message
-      }, { quoted: msg });
-    }
+    }, 60000);
   }
 };
