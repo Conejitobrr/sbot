@@ -39,56 +39,62 @@ module.exports = {
       const tempDir = path.join(__dirname, '../temp');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-      const input = path.join(tempDir, 'input');
+      // 🔥 EXTENSIÓN CORRECTA (CLAVE)
+      const input = path.join(
+        tempDir,
+        `input.${type === 'imageMessage' ? 'jpg' : 'mp4'}`
+      );
+
       const output = path.join(tempDir, 'output.webp');
 
       fs.writeFileSync(input, buffer);
 
       const isImage = type === 'imageMessage';
 
-const vf = isImage
-  ? 'scale=512:-1:flags=lanczos'
-  : 'scale=512:-1:flags=lanczos,fps=18';
+      // 🔥 ESCALA + PADDING TRANSPARENTE (NO DEFORMA)
+      const vf = isImage
+        ? 'scale=512:-1:flags=lanczos,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
+        : 'scale=512:-1:flags=lanczos,fps=18,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000';
 
-const command = ffmpeg(input);
+      const command = ffmpeg(input);
 
-if (!isImage) {
-  command.setStartTime(0).setDuration(6);
-}
+      if (!isImage) {
+        command.setStartTime(0).setDuration(6);
+      }
 
-command
-  .outputOptions([
-    '-vcodec libwebp',
-    '-vf ' + vf,
-    '-lossless 0',
-    '-qscale 0',
-    '-compression_level 6',
-    '-loop 0',
-    '-preset picture',
-    '-an',
-    '-vsync 0'
-  ])
-  .toFormat('webp')
-  .save(output)
-  .on('end', async () => {
-    const sticker = fs.readFileSync(output);
+      command
+        .outputOptions([
+          '-vcodec libwebp',
+          '-vf ' + vf,
+          '-lossless 0',
+          '-qscale 0',
+          '-compression_level 6',
+          '-loop 0',
+          '-preset picture',
+          '-an',
+          '-vsync 0'
+        ])
+        .toFormat('webp')
+        .save(output)
+        .on('end', async () => {
+          const sticker = fs.readFileSync(output);
 
-    await sock.sendMessage(remoteJid, {
-      sticker
-    }, { quoted: msg });
+          await sock.sendMessage(remoteJid, {
+            sticker
+          }, { quoted: msg });
 
-    fs.unlinkSync(input);
-    fs.unlinkSync(output);
-  })
-  .on('error', async (err) => {
-    console.error('FFMPEG ERROR:', err);
+          fs.unlinkSync(input);
+          fs.unlinkSync(output);
+        })
+        .on('error', async (err) => {
+          console.error('FFMPEG ERROR:', err);
 
-    await sock.sendMessage(remoteJid, {
-      text: '❌ Error al convertir a sticker'
-    }, { quoted: msg });
+          await sock.sendMessage(remoteJid, {
+            text: '❌ Error al convertir a sticker'
+          }, { quoted: msg });
 
-    if (fs.existsSync(input)) fs.unlinkSync(input);
-  });
+          if (fs.existsSync(input)) fs.unlinkSync(input);
+        });
 
     } catch (err) {
       console.error(err);
