@@ -20,29 +20,29 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    const text = args.join(' ') || '📢 Atención';
+    const text = args.join(' ');
+    if (!text) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Escribe un mensaje'
+      }, { quoted: msg });
+    }
 
     try {
       const metadata = await sock.groupMetadata(remoteJid);
-      const participants = metadata.participants;
+      const users = metadata.participants.map(p => p.id);
 
-      const users = participants.map(p => p.id);
-
-      // 🔥 INVISIBLE (TRUCO)
+      // 🔥 INVISIBLE PARA EMPUJAR NOTIFICACIÓN
       const invisible = String.fromCharCode(8206).repeat(1000);
 
       const content = {
         extendedTextMessage: {
-          text: `${invisible}\n📢 *NOTIFICACIÓN*\n\n${text}`,
+          text: invisible + text, // 👈 SOLO TU MENSAJE
           contextInfo: {
-            mentionedJid: users,
-            forwardingScore: 999,
-            isForwarded: true
+            mentionedJid: users
           }
         }
       };
 
-      // 🔥 GENERAR MENSAJE CORRECTO
       const msgGen = generateWAMessageFromContent(
         remoteJid,
         content,
@@ -52,7 +52,6 @@ module.exports = {
         }
       );
 
-      // 🔥 ENVIAR BIEN
       await sock.relayMessage(
         remoteJid,
         msgGen.message,
@@ -60,23 +59,21 @@ module.exports = {
       );
 
     } catch (e) {
-      console.log('ERROR PRINCIPAL:', e);
+      console.log('ERROR:', e);
 
-      // 🔥 FALLBACK (SI FALLA)
+      // 🔥 FALLBACK
       try {
         const metadata = await sock.groupMetadata(remoteJid);
         const users = metadata.participants.map(p => p.id);
 
         await sock.sendMessage(remoteJid, {
-          text: `📢 ${text}`,
+          text: text,
           mentions: users
         }, { quoted: msg });
 
-      } catch (err) {
-        console.log('ERROR FALLBACK:', err);
-
+      } catch {
         await sock.sendMessage(remoteJid, {
-          text: '❌ Error al notificar'
+          text: '❌ Error al enviar'
         }, { quoted: msg });
       }
     }
