@@ -10,17 +10,17 @@ module.exports = {
   commands: ['piropop'],
 
   async execute(ctx) {
-    const { sock, remoteJid, msg } = ctx;
+    const { sock, remoteJid, msg, pushName } = ctx;
 
     let texto = '';
 
     try {
       const completion = await groq.chat.completions.create({
-        model: 'llama3-8b-8192', // 🔥 rápido y gratis
+        model: 'mixtral-8x7b-32768', // ✅ ACTUAL
         messages: [
           {
             role: 'user',
-            content: 'Dame un piropo corto, romántico y creativo'
+            content: `Dame un piropo corto, romántico y creativo para alguien llamado ${pushName || 'bebé'}`
           }
         ]
       });
