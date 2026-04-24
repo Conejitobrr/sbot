@@ -2,7 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const axios = require('axios');
+const FormData = require('form-data');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
@@ -40,43 +41,44 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 FILTRO ESTILO ANIME MEJORADO (COLOR + SUAVIZADO)
-      const cmd = `
-        magick "${input}" \
-        -resize 512x512 \
-        -colorspace RGB \
-        -brightness-contrast 10x20 \
-        -modulate 110,120,100 \
-        -posterize 6 \
-        -bilateral-blur 0x3 \
-        -sharpen 0x1 \
-        "${output}"
-      `;
+      // 🔥 TU API KEY (CREAR EN DEEPAI)
+      const API_KEY = '66a1401d-3e3b-42f5-ab9f-a4e15db5044a';
 
-      exec(cmd, async (err) => {
-        if (err) {
-          console.log('ANIME ERROR:', err);
-          return sock.sendMessage(remoteJid, {
-            text: '❌ Error al aplicar filtro anime'
-          }, { quoted: msg });
+      const form = new FormData();
+      form.append('image', fs.createReadStream(input));
+
+      const response = await axios.post(
+        'https://api.deepai.org/api/toonify',
+        form,
+        {
+          headers: {
+            ...form.getHeaders(),
+            'api-key': API_KEY
+          }
         }
+      );
 
-        const img = fs.readFileSync(output);
+      const imageUrl = response.data.output_url;
 
-        await sock.sendMessage(remoteJid, {
-          image: img,
-          caption: '✨ Anime style aplicado'
-        }, { quoted: msg });
-
-        fs.unlinkSync(input);
-        fs.unlinkSync(output);
+      const result = await axios.get(imageUrl, {
+        responseType: 'arraybuffer'
       });
 
-    } catch (err) {
-      console.log('GENERAL ERROR:', err);
+      fs.writeFileSync(output, result.data);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general'
+        image: fs.readFileSync(output),
+        caption: '✨ Anime IA aplicado'
+      }, { quoted: msg });
+
+      fs.unlinkSync(input);
+      fs.unlinkSync(output);
+
+    } catch (err) {
+      console.log('ANIME API ERROR:', err.response?.data || err.message);
+
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error con API anime'
       }, { quoted: msg });
     }
   }
