@@ -29,7 +29,7 @@ function loadPlugins() {
   plugins.clear()
 
   const files = fs.readdirSync(PLUGINS_DIR)
-    .filter(file => file.endsWith('.js'))
+    .filter(f => f.endsWith('.js'))
 
   for (const file of files) {
     try {
@@ -38,17 +38,23 @@ function loadPlugins() {
       delete require.cache[require.resolve(filepath)]
 
       const plugin = require(filepath)
+      const commands = plugin.commands || []
 
-      for (const cmd of (plugin.commands || [])) {
+      for (const cmd of commands) {
         plugins.set(cmd.toLowerCase(), plugin)
       }
 
-    } catch (err) {
-      console.log(chalk.red(`Error cargando plugin ${file}:`), err.message)
+    } catch (e) {
+      console.log(
+        chalk.red(`Error cargando plugin ${file}:`),
+        e.message
+      )
     }
   }
 
-  console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size}`))
+  console.log(
+    chalk.green(`♻️ Plugins cargados: ${plugins.size}`)
+  )
 }
 
 global.loadPlugins = loadPlugins
@@ -58,8 +64,8 @@ loadPlugins()
 // HELPERS
 // ═══════════════════════════════════════
 
-const normalize = txt =>
-  (txt || '').replace(/[^0-9]/g, '')
+const normalize = n =>
+  (n || '').replace(/[^0-9]/g, '')
 
 // ═══════════════════════════════════════
 // HANDLER
@@ -81,28 +87,25 @@ async function messageHandler(sock, msg, store) {
 
     const pushName =
       msg.pushName ||
-      store.contacts?.[sender]?.name ||
-      store.contacts?.[sender]?.notify ||
+      store.contacts[sender]?.name ||
+      store.contacts[sender]?.notify ||
       'Sin nombre'
 
     const body = getBody(msg)
 
     // ═══════════════════════════════════
-    // DEBUG GLOBAL: SIEMPRE MUESTRA TODO
+    // DEBUG GLOBAL
     // ═══════════════════════════════════
 
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('👤 NOMBRE   :', pushName)
-    console.log('📞 NÚMERO   :', sender)
-    console.log('💬 MENSAJE  :', body || '[Sin texto]')
-    console.log('📦 TIPO     :', Object.keys(message))
-    console.log('📄 RAW KEY  :', key)
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('👤 NOMBRE  :', pushName)
+    console.log('📞 NÚMERO  :', sender)
+    console.log('💬 MENSAJE :', body || '[Sin texto]')
+    console.log('📦 TIPO    :', Object.keys(message))
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
-    // Si no tiene texto, no continuar
     if (!body) return
 
-    // Solo procesar comandos desde aquí
     const parsed = detectPrefix(body)
     if (!parsed) return
 
@@ -112,17 +115,28 @@ async function messageHandler(sock, msg, store) {
     if (!command) return
 
     const plugin = plugins.get(command)
-    if (!plugin) return
+
+    if (!plugin) {
+      console.log(
+        chalk.yellow(`⚠️ Comando no encontrado: ${command}`)
+      )
+      return
+    }
 
     // ═══════════════════════════════════
     // PERMISOS
     // ═══════════════════════════════════
 
     const senderNum = normalize(sender)
-    const botNumber = normalize(sock.user?.id?.split(':')[0])
+    const botNumber = normalize(
+      sock.user?.id?.split(':')[0]
+    )
 
-    const ownerList = (config.owner || []).map(normalize)
-    const rownerList = (config.rowner || []).map(normalize)
+    const ownerList =
+      (config.owner || []).map(normalize)
+
+    const rownerList =
+      (config.rowner || []).map(normalize)
 
     const isOwner =
       senderNum === botNumber ||
@@ -133,8 +147,12 @@ async function messageHandler(sock, msg, store) {
 
     if (fromGroup) {
       try {
-        const metadata = await sock.groupMetadata(remoteJid)
-        groupAdmins = getGroupAdmins(metadata.participants)
+        const metadata =
+          await sock.groupMetadata(remoteJid)
+
+        groupAdmins =
+          getGroupAdmins(metadata.participants)
+
       } catch {}
     }
 
@@ -143,13 +161,14 @@ async function messageHandler(sock, msg, store) {
       : isOwner
 
     const isPremium =
-      (await db.isPremium?.(sender).catch(() => false)) || isOwner
+      (await db.isPremium?.(sender)
+        .catch(() => false)) || isOwner
 
     // ═══════════════════════════════════
-    // EJECUTAR PLUGIN
+    // CONTEXTO
     // ═══════════════════════════════════
 
-    await plugin.execute({
+    const ctx = {
       sock,
       msg,
       remoteJid,
@@ -162,10 +181,19 @@ async function messageHandler(sock, msg, store) {
       isOwner,
       isAdmin,
       isPremium
-    })
+    }
 
-  } catch (err) {
-    console.log(chalk.red('❌ Error en handler:'), err)
+    // ═══════════════════════════════════
+    // EJECUTAR PLUGIN
+    // ═══════════════════════════════════
+
+    await plugin.execute(ctx)
+
+  } catch (e) {
+    console.log(
+      chalk.red('❌ Error en handler:'),
+      e
+    )
   }
 }
 
