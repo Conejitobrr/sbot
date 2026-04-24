@@ -7,7 +7,7 @@ const config  = require('./config');
 const db      = require('./lib/database');
 
 const {
-  getBody, isGroup, getGroupAdmins, getBotJid, isBotAdmin,
+  getBody, isGroup, getGroupAdmins, getBotJid,
   normalizeJid,
   detectPrefix,
 } = require('./lib/utils');
@@ -60,35 +60,35 @@ async function messageHandler(sock, msg, store) {
   if (!message) return;
 
   const remoteJid = key.remoteJid;
-  const fromGroup = isGroup(remoteJid);
+  const fromGroup = remoteJid?.endsWith('@g.us');
 
   let sender = fromGroup ? key.participant : remoteJid;
   sender = normalizeJid(sender);
 
-  const botJid = getBotJid(sock);
-
-  // ⚠️ YA NO BLOQUEAMOS TODOS LOS MENSAJES PROPIOS
   const isFromMe = key.fromMe;
 
   const body = getBody(msg);
   if (!body) return;
 
-  // 👇 Detectar comando antes de bloquear
   const parsed = detectPrefix(body);
 
-  // 🔥 SOLO ignorar si es tuyo y NO es comando
+  // Permitir comandos propios
   if (isFromMe && !parsed) return;
 
-  // ── Permisos ─────────────────────────
+  // ── PERMISOS ─────────────────────────
   const senderNum = sender.replace(/[^0-9]/g, '');
 
-  const isRowner = (config.rowner || []).includes(senderNum);
-  const isOwner  = (config.owner  || []).includes(senderNum) || isRowner;
+  const botNumber = sock.user.id.split(':')[0];
 
-  const isMod = isOwner;
+  const isRowner = (config.rowner || []).includes(senderNum);
+
+  const isOwner =
+    senderNum === botNumber ||
+    (config.owner || []).includes(senderNum) ||
+    isRowner;
 
   let groupAdmins = [];
-  if (fromGroup && msg.message) {
+  if (fromGroup) {
     try {
       const metadata = await sock.groupMetadata(remoteJid);
       groupAdmins = getGroupAdmins(metadata.participants);
@@ -96,22 +96,25 @@ async function messageHandler(sock, msg, store) {
   }
 
   const isAdmin = groupAdmins.includes(sender) || isOwner;
-  const isPremium = (await db.isPremium?.(sender).catch(() => false)) || isOwner;
+
+  // 🔥 PREMIUM
+  const isPremium =
+    (await db.isPremium?.(sender).catch(() => false)) || isOwner;
 
   const contact = store?.contacts?.[sender] || {};
   const name = pushName || contact.name || contact.notify || senderNum;
 
   // 📝 LOG
   console.log(
-    chalk.cyan('📩 Mensaje recibido'),
+    chalk.cyan('📩 Mensaje'),
     '\n',
-    chalk.yellow('👤 Nombre :'), name,
+    chalk.yellow('👤'), name,
     '\n',
-    chalk.green('📞 Número :'), senderNum,
+    chalk.green('📞'), senderNum,
     '\n',
-    chalk.magenta('💬 Mensaje:'), body,
+    chalk.magenta('💬'), body,
     '\n',
-    chalk.gray('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    chalk.gray('━━━━━━━━━━━━━━━━━━')
   );
 
   if (config.readMessages) {
@@ -129,6 +132,7 @@ async function messageHandler(sock, msg, store) {
   const plugin = plugins.get(command);
   if (!plugin) return;
 
+  // 🔥 CONTEXTO COMPLETO
   const ctx = {
     sock,
     msg,
@@ -139,7 +143,11 @@ async function messageHandler(sock, msg, store) {
     command,
     store,
     config,
-    isOwner
+
+    // permisos
+    isOwner,
+    isAdmin,
+    isPremium
   };
 
   try {
