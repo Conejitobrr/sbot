@@ -25,6 +25,7 @@ if (!fs.existsSync(PLUGINS_DIR)) {
 
 const plugins = new Map();
 
+// 🔥 CARGA DE PLUGINS
 function loadPlugins() {
   plugins.clear();
 
@@ -54,15 +55,20 @@ function loadPlugins() {
 // 🔥 GLOBAL PARA UPDATE
 global.loadPlugins = loadPlugins;
 
-// carga inicial
 loadPlugins();
+
+// ═══════════════════════════════════════
+// 🔐 NORMALIZADOR DE NÚMEROS
+// ═══════════════════════════════════════
+
+const normalize = (n) => (n || '').replace(/[^0-9]/g, '');
 
 // ═══════════════════════════════════════
 // 🚀 HANDLER PRINCIPAL
 // ═══════════════════════════════════════
 
 async function messageHandler(sock, msg, store) {
-  const { key, message, pushName } = msg;
+  const { key, message } = msg;
   if (!message) return;
 
   const remoteJid = key.remoteJid;
@@ -85,16 +91,25 @@ async function messageHandler(sock, msg, store) {
   if (!plugin) return;
 
   // ═══════════════════════════════════
-  // 🔐 PERMISOS REALES
+  // 🔥 PERMISOS REALES (FIX TOTAL)
   // ═══════════════════════════════════
 
-  const senderNum = sender.replace(/[^0-9]/g, '');
-  const botNumber = (config.defaultPhone || '').replace(/[^0-9]/g, '');
+  const senderNum = normalize(sender);
 
+  // 🔥 BOT NUMBER REAL
+  const botNumber = normalize(sock.user?.id);
+
+  // 🔥 LISTAS OWNER
+  const ownerList = (config.owner || []).map(normalize);
+  const rownerList = (config.rowner || []).map(normalize);
+
+  // 🔥 OWNER FINAL (BLINDADO)
   const isOwner =
     senderNum === botNumber ||
-    (config.owner || []).includes(senderNum);
+    ownerList.includes(senderNum) ||
+    rownerList.includes(senderNum);
 
+  // 🔥 ADMIN GRUPOS
   let groupAdmins = [];
 
   if (fromGroup) {
@@ -108,6 +123,7 @@ async function messageHandler(sock, msg, store) {
     ? groupAdmins.includes(sender) || isOwner
     : isOwner;
 
+  // 🔥 PREMIUM
   const isPremium =
     (await db.isPremium?.(sender).catch(() => false)) || isOwner;
 
