@@ -1,8 +1,5 @@
 'use strict';
-require('dotenv').config(); // 👈 AQUÍ
-
-
-// resto de tu código...
+require('dotenv').config();
 
 const {
   default: makeWASocket,
@@ -20,7 +17,6 @@ const qrcode = require('qrcode-terminal');
 const fs     = require('fs');
 const path   = require('path');
 
-// 👇 handler
 const { messageHandler } = require('./handler');
 
 // ═══════════════════════════════════════
@@ -33,7 +29,7 @@ if (!fs.existsSync(SESSION_DIR)) {
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
 
-// 🧠 STORE SIMPLE (nuevo reemplazo)
+// STORE SIMPLE
 const store = { contacts: {}, messages: {} };
 
 // ═══════════════════════════════════════
@@ -84,19 +80,16 @@ async function startBot(opts = {}) {
   sock.ev.on('connection.update', (update) => {
     const { connection, qr, lastDisconnect } = update;
 
-    // 🔥 QR
     if (qr && !useCode) {
       console.log(chalk.yellow('\nEscanea este QR:\n'));
       qrcode.generate(qr, { small: true });
     }
 
-    // ✅ CONECTADO
     if (connection === 'open') {
       const num = jidNormalizedUser(sock.user.id).split('@')[0];
       console.log(chalk.green('\n✅ Conectado como:'), num, '\n');
     }
 
-    // 🔁 RECONEXIÓN
     if (connection === 'close') {
       const reason = lastDisconnect?.error instanceof Boom
         ? lastDisconnect.error.output?.statusCode
@@ -111,11 +104,10 @@ async function startBot(opts = {}) {
     }
   });
 
-  // 💾 GUARDAR SESIÓN
   sock.ev.on('creds.update', saveCreds);
 
   // ═══════════════════════════════════
-  // CONTACTOS (reemplazo de store.bind)
+  // CONTACTOS
   // ═══════════════════════════════════
 
   sock.ev.on('contacts.upsert', contacts => {
@@ -125,12 +117,10 @@ async function startBot(opts = {}) {
   });
 
   // ═══════════════════════════════════
-  // MENSAJES
+  // MENSAJES (🔥 CORREGIDO)
   // ═══════════════════════════════════
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
-
+  sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
       if (!msg.message) continue;
 
