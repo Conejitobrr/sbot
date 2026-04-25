@@ -131,18 +131,19 @@ async function startBot(opts = {}) {
 
         // 🔥 EVENTOS AUTOMÁTICOS (ANTES DEL HANDLER)
         await events.onMessage({
-          sock,
-          remoteJid: msg.key.remoteJid,
-          body:
-            msg.message?.conversation ||
-            msg.message?.extendedTextMessage?.text ||
-            msg.message?.imageMessage?.caption ||
-            msg.message?.videoMessage?.caption ||
-            '',
-          sender: msg.key.participant || msg.key.remoteJid,
-          pushName: msg.pushName || 'Usuario',
-          fromGroup: msg.key.remoteJid.endsWith('@g.us')
-        })
+  sock,
+  remoteJid: msg.key.remoteJid,
+  body:
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    msg.message?.imageMessage?.caption ||
+    msg.message?.videoMessage?.caption ||
+    '',
+  sender: msg.key.participant || msg.key.remoteJid,
+  pushName: msg.pushName || 'Usuario',
+  fromGroup: msg.key.remoteJid.endsWith('@g.us'),
+  msg // 🔥 CLAVE PARA AUDIOS Y REPLY
+})
 
         // 🔥 HANDLER NORMAL
         await messageHandler(sock, msg, store)
