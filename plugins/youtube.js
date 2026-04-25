@@ -1,6 +1,6 @@
 'use strict'
 
-const ytdl = require('@distube/ytdl-core')
+const fetch = require('node-fetch')
 
 module.exports = {
   commands: ['yt', 'play', 'youtube'],
@@ -15,52 +15,25 @@ module.exports = {
 
     const url = args[0]
 
-    if (!ytdl.validateURL(url)) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Link inválido'
-      })
-    }
-
     try {
-      const agent = ytdl.createAgent()
-
-      const info = await ytdl.getInfo(url, { agent })
-
-      const title = info.videoDetails.title
-      const length = parseInt(info.videoDetails.lengthSeconds)
-      const minutes = Math.floor(length / 60)
-
       await sock.sendMessage(remoteJid, {
-        text: `🎬 *${title}*\n⏱️ ${minutes} min\n\n🎧 Enviando audio...`
+        text: '⏳ Procesando video...'
       })
 
-      const stream = ytdl(url, {
-        filter: 'audioonly',
-        quality: 'highestaudio',
-        agent
-      })
+      // 🔥 API estable
+      const api = `https://api.vevioz.com/api/button/mp3/${url}`
 
-      return await sock.sendMessage(remoteJid, {
-        audio: { stream },
-        mimetype: 'audio/mp4'
+      // 👉 solo mandamos link directo limpio
+      await sock.sendMessage(remoteJid, {
+        text: `🎧 Descarga tu audio aquí:\n${api}`
       })
 
     } catch (err) {
-      console.log('YT FALLÓ, USANDO API...', err.message)
+      console.log('YT ERROR:', err)
 
-      // 🔥 FALLBACK API (rápido y funciona mejor)
-      try {
-        const api = `https://api.vevioz.com/api/button/mp3/${url}`
-
-        await sock.sendMessage(remoteJid, {
-          text: `⚠️ No pude procesar directo\n\n🔗 Descárgalo aquí:\n${api}`
-        })
-
-      } catch (e) {
-        await sock.sendMessage(remoteJid, {
-          text: `❌ Error total\n\n🔗 Usa este link:\n${url}`
-        })
-      }
+      await sock.sendMessage(remoteJid, {
+        text: `❌ Error\n\n🔗 Usa este link:\n${url}`
+      })
     }
   }
 }
