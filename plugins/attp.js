@@ -5,7 +5,7 @@ const path = require('path');
 const { exec } = require('child_process');
 
 module.exports = {
-  commands: ['tts'],
+  commands: ['attp'],
 
   async execute(ctx) {
     const { sock, msg, remoteJid, args } = ctx;
