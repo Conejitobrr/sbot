@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('fs');
 const path = require('path');
 
@@ -12,28 +10,23 @@ module.exports = {
     const text = body.toLowerCase().trim();
 
     const audios = {
-  'hola': 'hola.mp3',
-  'autoestima': 'Autoestima.mp3'
-};
+      'hola': 'hola.mp3',
+      'autoestima': 'Autoestima.mp3'
+    };
 
     const file = audios[text];
     if (!file) return;
 
     const filePath = path.join(__dirname, '../media', file);
 
-    console.log('📁 buscando audio en:', filePath);
+    if (!fs.existsSync(filePath)) return;
 
-    if (!fs.existsSync(filePath)) {
-      console.log('❌ audio no existe');
-      return;
-    }
-
-    const audio = fs.readFileSync(filePath);
+    const audioBuffer = fs.readFileSync(filePath);
 
     await sock.sendMessage(remoteJid, {
-      audio,
-      mimetype: 'audio/mpeg',
-      ptt: true
+      audio: audioBuffer,
+      mimetype: 'audio/mp4', // 🔥 clave para WhatsApp
+      ptt: true // 🎤 lo convierte en nota de voz
     });
   }
 };
