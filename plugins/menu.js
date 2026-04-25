@@ -51,6 +51,7 @@ Bienvenido a *${config.botName}*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}piropo* → Enviar piropo 💘  
 ➤ *${p}pregunta* → Responder preguntas  
+➤ *${p}bot* → chatear con el bot
 
 ━━━━━━━━━━━━━━━━━━━
 🎵 *DESCARGAS*
