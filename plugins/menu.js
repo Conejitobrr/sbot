@@ -50,7 +50,8 @@ Bienvenido a *${config.botName}*
 😂 *DIVERSIÓN*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}piropo* → Enviar piropo 💘  
-➤ *${p}pregunta* → Responder preguntas  
+➤ *${p}pregunta* → Responder preguntas 
+➤ *${p}trivia* → juega preguntados con todos
 ➤ *${p}bot* → chatear con el bot
 
 ━━━━━━━━━━━━━━━━━━━
