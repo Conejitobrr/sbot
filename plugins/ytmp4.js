@@ -109,23 +109,14 @@ module.exports = {
           fs.unlinkSync(rawFile)
           fs.unlinkSync(finalFile)
 
-          // ⭐ SISTEMA XP EXTRA
+          // ⭐ XP SILENCIOSO
           let xp = Math.floor(Math.random() * 20) + 10
 
-          // ⚡ SI HAY EVENTO DOUBLE XP
           if (events?.state?.active?.type === 'double') {
             xp *= 2
-
-            await sock.sendMessage(remoteJid, {
-              text: '⚡ Evento Double XP activo!'
-            })
           }
 
           await db.addXP(sender, xp)
-
-          await sock.sendMessage(remoteJid, {
-            text: `⭐ Ganaste +${xp} XP por usar video`
-          })
 
         })
 
