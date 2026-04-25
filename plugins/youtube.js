@@ -3,28 +3,54 @@
 const { exec } = require('child_process')
 const fs = require('fs')
 const path = require('path')
+const yts = require('yt-search')
 
 module.exports = {
   commands: ['yt', 'play', 'youtube'],
 
   async execute({ sock, remoteJid, args }) {
 
-    if (!args[0]) {
+    if (!args.length) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Envía un link de YouTube'
+        text: '❌ Envía un link o nombre de canción\nEjemplo:\n.play bad bunny'
       })
     }
 
-    const url = args[0]
-
+    const query = args.join(' ')
     const file = path.join(__dirname, '../tmp/audio.mp3')
 
     try {
-      await sock.sendMessage(remoteJid, {
-        text: '⏳ Descargando audio...'
-      })
+      let url = query
 
-      // 🔥 descargar con yt-dlp
+      // 🔍 si NO es link → buscar
+      if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
+
+        await sock.sendMessage(remoteJid, {
+          text: '🔍 Buscando en YouTube...'
+        })
+
+        const res = await yts(query)
+        const video = res.videos[0]
+
+        if (!video) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ No se encontraron resultados'
+          })
+        }
+
+        url = video.url
+
+        await sock.sendMessage(remoteJid, {
+          text: `🎬 *${video.title}*\n⏱️ ${video.timestamp}\n\n⏳ Descargando...`
+        })
+
+      } else {
+        await sock.sendMessage(remoteJid, {
+          text: '⏳ Descargando audio...'
+        })
+      }
+
+      // 🎧 descargar con yt-dlp
       exec(`yt-dlp -x --audio-format mp3 -o "${file}" "${url}"`, async (err) => {
 
         if (err) {
@@ -34,13 +60,11 @@ module.exports = {
           })
         }
 
-        // 📤 enviar audio
         await sock.sendMessage(remoteJid, {
           audio: fs.readFileSync(file),
           mimetype: 'audio/mpeg'
         })
 
-        // 🧹 borrar archivo
         fs.unlinkSync(file)
       })
 
