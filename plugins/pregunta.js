@@ -18,6 +18,9 @@ module.exports = {
         }, { quoted: msg });
       }
 
+      const mentioned =
+        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+
       const respuestas = [
         'Sí',
         'Tal vez sí',
@@ -27,7 +30,8 @@ module.exports = {
         'Imposible'
       ];
 
-      const random = respuestas[Math.floor(Math.random() * respuestas.length)];
+      const random =
+        respuestas[Math.floor(Math.random() * respuestas.length)];
 
       const respuesta =
 `⁉️ *PREGUNTA* ⁉️
@@ -35,9 +39,14 @@ module.exports = {
 🧠 *Pregunta:* ${text}
 🤖 *Respuesta:* ${random}`;
 
-      await sock.sendMessage(remoteJid, {
-        text: respuesta
-      }, { quoted: msg });
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text: respuesta,
+          mentions: mentioned
+        },
+        { quoted: msg }
+      );
 
     } catch (err) {
       console.log('PREGUNTA ERROR:', err.message);
