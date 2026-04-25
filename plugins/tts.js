@@ -6,14 +6,14 @@ const path = require('path');
 
 module.exports = {
   commands: ['tts'],
-  description: 'Convierte texto a voz',
+  description: 'Texto a voz en español',
 
   async execute(ctx) {
     const { sock, remoteJid, args, msg } = ctx;
 
     if (!args.length) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Escribe un texto\nEjemplo:\n.tts Hola mundo'
+        text: '❌ Ejemplo:\n.tts Hola mundo'
       }, { quoted: msg });
     }
 
@@ -23,28 +23,30 @@ module.exports = {
     try {
       const tts = new gTTS(text, 'es');
 
-      // Guardar audio temporal
-      tts.save(filePath, async (err) => {
-        if (err) {
-          return sock.sendMessage(remoteJid, {
-            text: '❌ Error generando audio'
-          }, { quoted: msg });
-        }
-
-        // Enviar audio
-        await sock.sendMessage(remoteJid, {
-          audio: fs.readFileSync(filePath),
-          mimetype: 'audio/mpeg',
-          ptt: true
-        }, { quoted: msg });
-
-        // Borrar archivo
-        fs.unlinkSync(filePath);
+      // 🔥 Convertimos a PROMESA para evitar archivo corrupto
+      await new Promise((resolve, reject) => {
+        tts.save(filePath, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
       });
 
-    } catch (e) {
+      // 🔥 Leer archivo ya completo
+      const audio = fs.readFileSync(filePath);
+
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error en TTS'
+        audio: audio,
+        mimetype: 'audio/mpeg',
+        ptt: true
+      }, { quoted: msg });
+
+      // borrar después
+      fs.unlinkSync(filePath);
+
+    } catch (e) {
+      console.log(e);
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error generando el audio'
       }, { quoted: msg });
     }
   }
