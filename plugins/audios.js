@@ -13,42 +13,42 @@ module.exports = {
     const text = body.toLowerCase();
 
     const audios = {
-      'autoestima': 'Autoestima.mp3',
-      'hola': 'hola.mp3'
+      autoestima: 'Autoestima.mp3',
+      hola: 'hola.mp3'
     };
 
-    const match = Object.keys(audios).find(key =>
-      text.includes(key)
+    const match = Object.keys(audios).find(k =>
+      text.includes(k)
     );
 
     if (!match) return;
 
-    const inputPath = path.join(__dirname, '../media', audios[match]);
+    const filePath = path.join(__dirname, '../media', audios[match]);
 
-    if (!fs.existsSync(inputPath)) return;
+    if (!fs.existsSync(filePath)) return;
 
-    const tempPath = path.join(__dirname, '../media/temp.opus');
+    const output = path.join(__dirname, '../media/temp.ogg');
 
     try {
-      // 🔥 convertir MP3 → OPUS
+      // 🔥 convertir a nota de voz real WhatsApp
       execSync(
-        `ffmpeg -y -i "${inputPath}" -c:a libopus -b:a 64k "${tempPath}"`
+        `ffmpeg -y -i "${filePath}" -c:a libopus -b:a 64k "${output}"`
       );
 
-      const audio = fs.readFileSync(tempPath);
+      const audio = fs.readFileSync(output);
 
       await sock.sendMessage(remoteJid, {
         audio,
         mimetype: 'audio/ogg; codecs=opus',
         ptt: true
       }, {
-        quoted: msg || undefined   // 🔥 FIX REAL
+        quoted: msg || null   // 🔥 CLAVE
       });
 
-      fs.unlinkSync(tempPath);
+      fs.unlinkSync(output);
 
-    } catch (err) {
-      console.log('❌ error audio:', err);
+    } catch (e) {
+      console.log('❌ error audio:', e);
     }
   }
 };
