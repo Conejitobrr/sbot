@@ -30,20 +30,19 @@ module.exports = {
     const tempPath = path.join(__dirname, '../media/temp.opus');
 
     try {
-      // 🔥 convertir mp3 → opus
+      // 🔥 convertir MP3 → OPUS
       execSync(
         `ffmpeg -y -i "${inputPath}" -c:a libopus -b:a 64k "${tempPath}"`
       );
 
       const audio = fs.readFileSync(tempPath);
 
-      // 🎤 ENVIAR COMO NOTA DE VOZ RESPONDIENDO AL MENSAJE
       await sock.sendMessage(remoteJid, {
         audio,
         mimetype: 'audio/ogg; codecs=opus',
         ptt: true
       }, {
-        quoted: msg   // 👈 ESTO ES LO IMPORTANTE
+        quoted: msg || undefined   // 🔥 FIX REAL
       });
 
       fs.unlinkSync(tempPath);
