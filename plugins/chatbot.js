@@ -21,7 +21,7 @@ module.exports = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer TU_API_KEY"
+          "Authorization": "Bearer gsk_C355Hq0SOP5zxJzh0jHWGdyb3FYn9pK9nBXstWsOz7B28rt1p1m"
         },
         body: JSON.stringify({
           model: "llama3-70b-8192",
