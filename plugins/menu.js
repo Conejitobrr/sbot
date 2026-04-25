@@ -22,56 +22,55 @@ module.exports = {
       eventText = map[active.type] || '🎮 Evento activo'
     }
 
+    // Prefijo dinámico (tomará "." automáticamente)
+    const p = Array.isArray(config.prefix) ? config.prefix[0] : config.prefix;
+
     const text = `
-╔═══════════════════╗
-   🌌 *SIRIUSBOT MENU*
-╚═══════════════════╝
+╭━━━〔 🌌 *SiriusBot* 〕━━━⬣
 
-👤 Hola ${pushName} ✨
-Bienvenido a ${config.botName}
+👋 Hola *${pushName}*
+✨ Bienvenido al sistema
 
-━━━━━━━━━━━━━━━━━━━
-🎮 *EVENTOS EN VIVO*
-━━━━━━━━━━━━━━━━━━━
+╰━━━━━━━━━━━━━━━━━━━━⬣
+
+🎮 *EVENTOS*
+┈┈┈┈┈┈┈┈┈┈
 ➤ ${eventText}
 
-━━━━━━━━━━━━━━━━━━━
 💰 *ECONOMÍA*
-━━━━━━━━━━━━━━━━━━━
-➤ .xp
-➤ .rank
-➤ .claim
-➤ .robar
-➤ .addxp
-➤ .dar
+┈┈┈┈┈┈┈┈┈┈
+➤ *${p}xp*
+➤ *${p}rank*
+➤ *${p}claim*
+➤ *${p}robar*
+➤ *${p}addxp*
+➤ *${p}dar*
 
-━━━━━━━━━━━━━━━━━━━
 😂 *DIVERSIÓN*
-━━━━━━━━━━━━━━━━━━━
-➤ .piropo
-➤ .pregunta
+┈┈┈┈┈┈┈┈┈┈
+➤ *${p}piropo*
+➤ *${p}pregunta*
 
-━━━━━━━━━━━━━━━━━━━
 🎨 *MULTIMEDIA*
-━━━━━━━━━━━━━━━━━━━
-➤ .sticker
-➤ .play nombre de la canción/enlace
-➤ .ytmp4 nombre del video/enlace
-➤ .toimage
-➤ .tovideo
-➤ .toanime
-➤ .tts
+┈┈┈┈┈┈┈┈┈┈
+➤ *${p}sticker*
+➤ *${p}play* nombre/enlace
+➤ *${p}ytmp4* nombre/enlace
+➤ *${p}toimage*
+➤ *${p}tovideo*
+➤ *${p}toanime*
+➤ *${p}tts*
 
-━━━━━━━━━━━━━━━━━━━
 ⚙️ *SISTEMA*
-━━━━━━━━━━━━━━━━━━━
-➤ .premium
-➤ .notify
-➤ .update
+┈┈┈┈┈┈┈┈┈┈
+➤ *${p}premium*
+➤ *${p}notify*
+➤ *${p}update*
 
-━━━━━━━━━━━━━━━━━━━
-🚀 Usa los comandos y sube de nivel
-👑 Conviértete en leyenda del chat
+╭━━━━━━━━━━━━━━━━━━⬣
+🚀 Usa comandos y sube de nivel  
+👑 Conviértete en leyenda
+╰━━━━━━━━━━━━━━━━━━⬣
 `
 
     await sock.sendMessage(remoteJid, { text })
