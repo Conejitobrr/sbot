@@ -3,35 +3,68 @@
 const { exec } = require('child_process')
 const fs = require('fs')
 const path = require('path')
+const yts = require('yt-search')
+const db = require('../lib/database')
+
+// 👉 intenta cargar eventos (opcional)
+let events = null
+try {
+  events = require('../lib/events')
+} catch {}
 
 module.exports = {
   commands: ['ytmp4', 'video', 'ytvideo'],
 
-  async execute({ sock, remoteJid, args }) {
+  async execute({ sock, remoteJid, args, sender }) {
 
-    if (!args[0]) {
+    if (!args.length) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Envía un link de YouTube'
+        text: '❌ Envía un link o nombre del video'
       })
     }
 
-    const url = args[0]
-
-    if (url.includes('list=')) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ No se permiten playlists'
-      })
-    }
-
-    const rawFile = path.join(__dirname, '../tmp/raw.mp4')
-    const finalFile = path.join(__dirname, '../tmp/final.mp4')
+    let query = args.join(' ')
+    let url = query
 
     try {
-      await sock.sendMessage(remoteJid, {
-        text: '⏳ Descargando video...'
-      })
+      // 🔍 SI NO ES LINK → BUSCAR
+      if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
 
-      // 1️⃣ Descargar
+        await sock.sendMessage(remoteJid, {
+          text: '🔍 Buscando video...'
+        })
+
+        const res = await yts(query)
+        const video = res.videos[0]
+
+        if (!video) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ No se encontraron resultados'
+          })
+        }
+
+        url = video.url
+
+        await sock.sendMessage(remoteJid, {
+          text: `🎬 *${video.title}*\n⏱️ ${video.timestamp}\n\n⏳ Descargando...`
+        })
+
+      } else {
+        await sock.sendMessage(remoteJid, {
+          text: '⏳ Descargando video...'
+        })
+      }
+
+      if (url.includes('list=')) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se permiten playlists'
+        })
+      }
+
+      const rawFile = path.join(__dirname, '../tmp/raw.mp4')
+      const finalFile = path.join(__dirname, '../tmp/final.mp4')
+
+      // 1️⃣ DESCARGAR
       const download = `yt-dlp -f "bv*[height<=480]+ba/best[height<=480]" --merge-output-format mp4 --no-playlist -o "${rawFile}" "${url}"`
 
       exec(download, (err) => {
@@ -43,7 +76,7 @@ module.exports = {
           })
         }
 
-        // 2️⃣ RE-ENCODAR (LA CLAVE 🔥)
+        // 2️⃣ CONVERTIR
         const convert = `ffmpeg -i "${rawFile}" -c:v libx264 -c:a aac -preset veryfast -crf 28 "${finalFile}" -y`
 
         exec(convert, async (err2) => {
@@ -66,7 +99,7 @@ module.exports = {
             })
           }
 
-          // 3️⃣ Enviar
+          // 📤 ENVIAR
           await sock.sendMessage(remoteJid, {
             video: fs.readFileSync(finalFile),
             mimetype: 'video/mp4'
@@ -76,12 +109,31 @@ module.exports = {
           fs.unlinkSync(rawFile)
           fs.unlinkSync(finalFile)
 
+          // ⭐ SISTEMA XP EXTRA
+          let xp = Math.floor(Math.random() * 20) + 10
+
+          // ⚡ SI HAY EVENTO DOUBLE XP
+          if (events?.state?.active?.type === 'double') {
+            xp *= 2
+
+            await sock.sendMessage(remoteJid, {
+              text: '⚡ Evento Double XP activo!'
+            })
+          }
+
+          await db.addXP(sender, xp)
+
+          await sock.sendMessage(remoteJid, {
+            text: `⭐ Ganaste +${xp} XP por usar video`
+          })
+
         })
 
       })
 
     } catch (err) {
       console.log(err)
+
       sock.sendMessage(remoteJid, {
         text: '❌ Error general'
       })
