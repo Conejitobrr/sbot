@@ -18,37 +18,54 @@ module.exports = {
     const { sock, msg, remoteJid, sender } = ctx;
 
     try {
-      // 🔥 Detectar mensaje citado o propio
-      let message =
-        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
-        msg.message;
+      let message = null;
+      let type = null;
 
-      // 🔥 FIX PRIVADO (ephemeral + viewOnce)
-      if (message?.ephemeralMessage) {
-        message = message.ephemeralMessage.message;
+      // 🔥 1. Si responde a un mensaje
+      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+
+      if (quoted) {
+        const qType = Object.keys(quoted)[0];
+
+        if (qType === 'viewOnceMessage') {
+          const inner = quoted[qType]?.message;
+          const innerType = Object.keys(inner || {})[0];
+          message = inner;
+          type = innerType;
+        } else {
+          message = quoted;
+          type = qType;
+        }
       }
 
-      if (message?.viewOnceMessage) {
-        message = message.viewOnceMessage.message;
+      // 🔥 2. Si NO respondió, usar el propio mensaje
+      else {
+        const m = msg.message;
+
+        if (m?.imageMessage) {
+          message = m;
+          type = 'imageMessage';
+        } else if (m?.videoMessage) {
+          message = m;
+          type = 'videoMessage';
+        } else if (m?.viewOnceMessage) {
+          const inner = m.viewOnceMessage.message;
+          const innerType = Object.keys(inner || {})[0];
+          message = inner;
+          type = innerType;
+        }
       }
 
-      if (!message) {
+      // ❌ Validación
+      if (!message || !['imageMessage', 'videoMessage'].includes(type)) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Envía o responde a una imagen o video'
-        }, { quoted: msg });
-      }
-
-      const type = Object.keys(message)[0];
-
-      if (!['imageMessage', 'videoMessage'].includes(type)) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ Usa *.s* con imagen o video'
+          text: '❌ Envía o responde a una imagen/video con *.s*'
         }, { quoted: msg });
       }
 
       const media = message[type];
 
-      // 📥 Descargar
+      // 📥 Descargar media
       const stream = await downloadContentFromMessage(
         media,
         type === 'imageMessage' ? 'image' : 'video'
@@ -59,7 +76,7 @@ module.exports = {
         buffer = Buffer.concat([buffer, chunk]);
       }
 
-      // 📁 Temp
+      // 📁 temp
       const tempDir = path.join(__dirname, '../temp');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
@@ -70,16 +87,16 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🎬 FFMPEG
+      // 🎬 ffmpeg
       const cmd = isImage
-        ? `ffmpeg -y -i "${input}" -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -loop 0 -preset default -an -vsync 0 "${output}"`
+        ? `ffmpeg -y -i "${input}" -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -loop 0 -an -vsync 0 "${output}"`
         : `ffmpeg -y -i "${input}" -t 5 -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=10,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -loop 0 -an -vsync 0 "${output}"`;
 
       exec(cmd, async (err) => {
         if (err) {
           console.log('❌ FFMPEG ERROR:', err);
           return sock.sendMessage(remoteJid, {
-            text: '❌ Error creando sticker'
+            text: '❌ Error al crear sticker'
           }, { quoted: msg });
         }
 
@@ -93,8 +110,8 @@ module.exports = {
           // ⭐ XP
           let xp = Math.floor(Math.random() * 10) + 5;
 
-          if (events?.isActive?.('double')) {
-            xp *= events.getMultiplier?.() || 2;
+          if (events?.state?.active?.type === 'double') {
+            xp *= 2;
           }
 
           await db.addXP(sender, xp);
@@ -114,7 +131,7 @@ module.exports = {
       console.log('❌ GENERAL ERROR:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error inesperado'
+        text: '❌ Error general'
       }, { quoted: msg });
     }
   }
