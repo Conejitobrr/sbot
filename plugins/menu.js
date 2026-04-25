@@ -7,7 +7,7 @@ module.exports = {
 
   async execute({ sock, remoteJid, pushName, config, prefix }) {
 
-    const p = prefix
+    const p = prefix || '.' // ← FIX AQUÍ
 
     const active = events.getState?.()
 
