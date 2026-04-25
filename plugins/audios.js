@@ -10,8 +10,8 @@ module.exports = {
     const text = body.toLowerCase().trim();
 
     const audios = {
-      'hola': 'hola.mp3',
-      'autoestima': 'Autoestima.mp3'
+      'hola': 'hola.opus',
+      'autoestima': 'Autoestima.opus'
     };
 
     const file = audios[text];
@@ -21,12 +21,12 @@ module.exports = {
 
     if (!fs.existsSync(filePath)) return;
 
-    const audioBuffer = fs.readFileSync(filePath);
+    const audio = fs.readFileSync(filePath);
 
     await sock.sendMessage(remoteJid, {
-      audio: audioBuffer,
-      mimetype: 'audio/mp4', // 🔥 clave para WhatsApp
-      ptt: true // 🎤 lo convierte en nota de voz
+      audio,
+      mimetype: 'audio/ogg; codecs=opus', // 🔥 clave real de WhatsApp
+      ptt: true // 🎤 nota de voz
     });
   }
 };
