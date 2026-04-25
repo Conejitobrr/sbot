@@ -36,32 +36,18 @@ module.exports = {
       remoteJid,
       sender,
       pushName,
-      msg,
-      store
+      msg
     } = ctx;
 
     let target = sender;
     let targetName = pushName;
 
-    // Respuesta a mensaje
     if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
-      target =
-        msg.message.extendedTextMessage.contextInfo.participant;
-    }
-
-    // Mención
-    else if (
+      target = msg.message.extendedTextMessage.contextInfo.participant;
+    } else if (
       msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length
     ) {
-      target =
-        msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
-    }
-
-    if (target !== sender) {
-      targetName =
-        store.contacts?.[target]?.name ||
-        store.contacts?.[target]?.notify ||
-        target.split('@')[0];
+      target = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
     }
 
     const user = await db.getUser(target);
@@ -78,12 +64,18 @@ module.exports = {
     const role = getRole(level);
     const bar = makeBar(progress, 1000);
 
+    const number = target.split('@')[0];
+    const displayUser =
+      target === sender
+        ? `👤 ${pushName}`
+        : `👤 @${number}`;
+
     await sock.sendMessage(remoteJid, {
       text:
 `╔════════════════════╗
 ║      🎖️ PERFIL RANK
 ╠════════════════════╣
-║ 👤 ${targetName}
+║ ${displayUser}
 ║
 ║ ⭐ XP: ${xp}
 ║ 📈 Nivel: ${level}
@@ -94,7 +86,7 @@ module.exports = {
 ║
 ║ ⏳ Faltan: ${needed} XP
 ╚════════════════════╝`,
-      mentions: target !== sender ? [target] : []
+      mentions: [target]
     }, { quoted: msg });
   }
 };
