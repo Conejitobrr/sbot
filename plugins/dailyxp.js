@@ -3,7 +3,7 @@
 const db = require('../lib/database');
 
 module.exports = {
-  commands: ['dailyxp', 'daily'],
+  commands: ['claim', 'daily'],
   description: 'Reclama tu recompensa diaria de XP',
 
   async execute(ctx) {
