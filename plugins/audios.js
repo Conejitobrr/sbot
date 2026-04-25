@@ -13,6 +13,7 @@ module.exports = {
 
     const audios = {
       'hola': 'hola.mp3'
+      'autoestima': 'autoestima.mp3'
     };
 
     const file = audios[text];
