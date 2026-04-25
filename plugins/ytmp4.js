@@ -11,64 +11,78 @@ module.exports = {
 
     if (!args[0]) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Envía un link de YouTube\nEjemplo:\n.ytmp4 https://youtube.com/...'
+        text: '❌ Envía un link de YouTube'
       })
     }
 
     const url = args[0]
 
-    // 🚫 evitar playlists
     if (url.includes('list=')) {
       return sock.sendMessage(remoteJid, {
         text: '❌ No se permiten playlists'
       })
     }
 
-    const file = path.join(__dirname, '../tmp/video.mp4')
+    const rawFile = path.join(__dirname, '../tmp/raw.mp4')
+    const finalFile = path.join(__dirname, '../tmp/final.mp4')
 
     try {
       await sock.sendMessage(remoteJid, {
-        text: '⏳ Descargando video en 480p...'
+        text: '⏳ Descargando video...'
       })
 
-      // 🎥 480p con audio fusionado
-      const cmd = `yt-dlp -f "bv*[height<=480]+ba/best[height<=480]" --merge-output-format mp4 --no-playlist -o "${file}" "${url}"`
+      // 1️⃣ Descargar
+      const download = `yt-dlp -f "bv*[height<=480]+ba/best[height<=480]" --merge-output-format mp4 --no-playlist -o "${rawFile}" "${url}"`
 
-      exec(cmd, async (err) => {
+      exec(download, (err) => {
 
         if (err) {
-          console.log('YT VIDEO ERROR:', err)
+          console.log(err)
           return sock.sendMessage(remoteJid, {
-            text: '❌ Error al descargar el video'
+            text: '❌ Error al descargar'
           })
         }
 
-        // 📦 verificar tamaño
-        const stats = fs.statSync(file)
-        const sizeMB = stats.size / (1024 * 1024)
+        // 2️⃣ RE-ENCODAR (LA CLAVE 🔥)
+        const convert = `ffmpeg -i "${rawFile}" -c:v libx264 -c:a aac -preset veryfast -crf 28 "${finalFile}" -y`
 
-        if (sizeMB > 30) {
-          fs.unlinkSync(file)
-          return sock.sendMessage(remoteJid, {
-            text: `⚠️ El video pesa ${sizeMB.toFixed(1)}MB\nNo se puede enviar por WhatsApp`
+        exec(convert, async (err2) => {
+
+          if (err2) {
+            console.log(err2)
+            return sock.sendMessage(remoteJid, {
+              text: '❌ Error al convertir'
+            })
+          }
+
+          const stats = fs.statSync(finalFile)
+          const sizeMB = stats.size / (1024 * 1024)
+
+          if (sizeMB > 30) {
+            fs.unlinkSync(rawFile)
+            fs.unlinkSync(finalFile)
+            return sock.sendMessage(remoteJid, {
+              text: `⚠️ Video muy pesado (${sizeMB.toFixed(1)}MB)`
+            })
+          }
+
+          // 3️⃣ Enviar
+          await sock.sendMessage(remoteJid, {
+            video: fs.readFileSync(finalFile),
+            mimetype: 'video/mp4'
           })
-        }
 
-        // 📤 enviar video
-        await sock.sendMessage(remoteJid, {
-          video: fs.readFileSync(file),
-          mimetype: 'video/mp4'
+          // 🧹 limpiar
+          fs.unlinkSync(rawFile)
+          fs.unlinkSync(finalFile)
+
         })
-
-        // 🧹 limpiar archivo
-        fs.unlinkSync(file)
 
       })
 
     } catch (err) {
       console.log(err)
-
-      await sock.sendMessage(remoteJid, {
+      sock.sendMessage(remoteJid, {
         text: '❌ Error general'
       })
     }
