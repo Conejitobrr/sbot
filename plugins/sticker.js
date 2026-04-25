@@ -4,12 +4,19 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const db = require('../lib/database');
+
+// 👉 eventos opcional
+let events = null;
+try {
+  events = require('../lib/events');
+} catch {}
 
 module.exports = {
   commands: ['s'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid } = ctx;
+    const { sock, msg, remoteJid, sender } = ctx;
 
     try {
       const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -45,7 +52,6 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 COMANDO FFmpeg DIRECTO (SIN BUGS)
       const cmd = isImage
         ? `ffmpeg -y -i "${input}" -vf "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -q:v 60 -compression_level 6 -preset picture -loop 0 "${output}"`
         : `ffmpeg -y -i "${input}" -t 4 -vf "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=10,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -fs 700k -loop 0 -an "${output}"`;
@@ -65,6 +71,16 @@ module.exports = {
           await sock.sendMessage(remoteJid, {
             sticker
           }, { quoted: msg });
+
+          // ⭐ XP BASE
+          let xp = Math.floor(Math.random() * 10) + 5;
+
+          // ⚡ DOUBLE XP SI HAY EVENTO
+          if (events?.state?.active?.type === 'double') {
+            xp *= 2;
+          }
+
+          await db.addXP(sender, xp);
 
         } catch (e) {
           console.log('SEND ERROR:', e);
