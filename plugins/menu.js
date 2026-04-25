@@ -5,7 +5,9 @@ const events = require('../lib/events')
 module.exports = {
   commands: ['menu', 'help'],
 
-  async execute({ sock, remoteJid, pushName, config }) {
+  async execute({ sock, remoteJid, pushName, config, prefix }) {
+
+    const p = prefix
 
     const active = events.getState?.()
 
@@ -22,60 +24,64 @@ module.exports = {
       eventText = map[active.type] || '🎮 Evento activo'
     }
 
-    const p = Array.isArray(config.prefix) ? config.prefix[0] : config.prefix;
-
     const text = `
-╭━━━〔 🌌 *SiriusBot* 〕━━━⬣
+╔══════════════════════╗
+     🌌 *SiriusBot*
+╚══════════════════════╝
 
-👋 Hola *${pushName}*
-✨ Bienvenido al sistema
+👤 Hola *${pushName}* ✨
+Bienvenido a *${config.botName}*
 
-╰━━━━━━━━━━━━━━━━━━━━⬣
-
+━━━━━━━━━━━━━━━━━━━
 🎮 *EVENTOS*
-┈┈┈┈┈┈┈┈┈┈
+━━━━━━━━━━━━━━━━━━━
 ➤ ${eventText}
 
+━━━━━━━━━━━━━━━━━━━
 💰 *ECONOMÍA*
-┈┈┈┈┈┈┈┈┈┈
-➤ *${p}xp*
-➤ *${p}rank*
-➤ *${p}claim*
-➤ *${p}robar*
-➤ *${p}addxp*
-➤ *${p}dar*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}xp* → Ver tu experiencia  
+➤ *${p}rank* → Ranking del chat  
+➤ *${p}claim* → Recompensa diaria  
+➤ *${p}robar* → Robar monedas  
+➤ *${p}dar* → Transferir dinero  
 
+━━━━━━━━━━━━━━━━━━━
 😂 *DIVERSIÓN*
-┈┈┈┈┈┈┈┈┈┈
-➤ *${p}piropo*
-➤ *${p}pregunta*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}piropo* → Enviar piropo 💘  
+➤ *${p}pregunta* → Responder preguntas  
 
-🎧 *DESCARGAS AUDIO*
-┈┈┈┈┈┈┈┈┈┈
-➤ *${p}play* nombre/enlace
+━━━━━━━━━━━━━━━━━━━
+🎵 *DESCARGAS*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}play* → Descargar audio 🎧  
+➤ *${p}ytmp4* → Descargar video 🎬  
 
-🎬 *DESCARGAS VIDEO*
-┈┈┈┈┈┈┈┈┈┈
-➤ *${p}ytmp4* nombre/enlace
-
+━━━━━━━━━━━━━━━━━━━
 🎨 *MULTIMEDIA*
-┈┈┈┈┈┈┈┈┈┈
-➤ *${p}sticker*
-➤ *${p}toimage*
-➤ *${p}tovideo*
-➤ *${p}toanime*
-➤ *${p}tts*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}sticker* → Crear sticker  
+➤ *${p}toimage* → Sticker a imagen  
+➤ *${p}tovideo* → Sticker a video  
+➤ *${p}toanime* → Estilo anime  
+➤ *${p}tts* → Texto a voz  
 
+━━━━━━━━━━━━━━━━━━━
 ⚙️ *SISTEMA*
-┈┈┈┈┈┈┈┈┈┈
-➤ *${p}premium*
-➤ *${p}notify*
-➤ *${p}update*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}premium* → Estado premium  
+➤ *${p}notify* → Notificaciones  
 
-╭━━━━━━━━━━━━━━━━━━⬣
-🚀 Usa comandos y sube de nivel  
-👑 Conviértete en leyenda
-╰━━━━━━━━━━━━━━━━━━⬣
+━━━━━━━━━━━━━━━━━━━
+👑 *OWNER*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}addxp* → Añadir experiencia  
+➤ *${p}update* → Actualizar bot  
+
+━━━━━━━━━━━━━━━━━━━
+🚀 Usa los comandos y sube de nivel  
+👑 Conviértete en leyenda del chat
 `
 
     await sock.sendMessage(remoteJid, { text })
