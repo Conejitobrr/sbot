@@ -1,9 +1,26 @@
 'use strict'
 
+const events = require('../lib/events')
+
 module.exports = {
   commands: ['menu', 'help'],
 
   async execute({ sock, remoteJid, pushName, config }) {
+
+    const active = events.getState?.()
+
+    let eventText = '🔕 Sin eventos activos'
+
+    if (active) {
+      const map = {
+        bonus: '💰 Bonus XP activo',
+        rob: '😈 Robo activo',
+        double: '⚡ Doble XP activo',
+        trivia: '🎯 Trivia en curso'
+      }
+
+      eventText = map[active.type] || '🎮 Evento activo'
+    }
 
     const text = `
 ╔═══════════════════╗
@@ -12,6 +29,11 @@ module.exports = {
 
 👤 Hola ${pushName} ✨
 Bienvenido a ${config.botName}
+
+━━━━━━━━━━━━━━━━━━━
+🎮 *EVENTOS EN VIVO*
+━━━━━━━━━━━━━━━━━━━
+➤ ${eventText}
 
 ━━━━━━━━━━━━━━━━━━━
 💰 *ECONOMÍA*
@@ -33,6 +55,8 @@ Bienvenido a ${config.botName}
 🎨 *MULTIMEDIA*
 ━━━━━━━━━━━━━━━━━━━
 ➤ .sticker
+➤ .play nombre de la canción/enlace
+➤ .ytmp4 nombre del video/enlace
 ➤ .toimage
 ➤ .tovideo
 ➤ .toanime
