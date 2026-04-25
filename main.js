@@ -126,7 +126,6 @@ async function startBot(opts = {}) {
         if (!msg.message) continue
         if (!msg.key?.remoteJid) continue
         if (msg.key.remoteJid === 'status@broadcast') continue
-        if (msg.key.fromMe) continue // 🔥 evitar loops
 
         // 🔥 EVENTOS AUTOMÁTICOS (ANTES DEL HANDLER)
         await events.onMessage({
