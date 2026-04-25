@@ -66,6 +66,7 @@ Bienvenido a *${config.botName}*
 ➤ *${p}tovideo* → Sticker a video  
 ➤ *${p}toanime* → Estilo anime  
 ➤ *${p}tts* → Texto a voz  
+➤ *${p}attp* → Texto a sticker
 
 ━━━━━━━━━━━━━━━━━━━
 ⚙️ *SISTEMA*
