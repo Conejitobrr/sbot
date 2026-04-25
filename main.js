@@ -17,6 +17,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { messageHandler } = require('./handler')
+const events = require('./lib/events') // 🔥 NUEVO
 
 const SESSION_DIR = path.resolve('./session')
 
@@ -76,6 +77,9 @@ async function startBot(opts = {}) {
     if (connection === 'open') {
       const num = jidNormalizedUser(sock.user.id).split('@')[0]
       console.log(chalk.green('\n✅ Conectado como:'), num, '\n')
+
+      // 🔥 INICIAR EVENTOS AUTOMÁTICOS
+      events.init(sock)
     }
 
     if (connection === 'close') {
@@ -103,7 +107,7 @@ async function startBot(opts = {}) {
     }
   })
 
-  // DEBUG DIRECTO DE EVENTOS
+  // 📩 MENSAJES
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     console.log(chalk.blue('📨 messages.upsert type:'), type)
 
@@ -119,7 +123,24 @@ async function startBot(opts = {}) {
         if (!msg.message) continue
         if (!msg.key?.remoteJid) continue
         if (msg.key.remoteJid === 'status@broadcast') continue
+        if (msg.key.fromMe) continue // 🔥 evitar loops
 
+        // 🔥 EVENTOS AUTOMÁTICOS (ANTES DEL HANDLER)
+        await events.onMessage({
+          sock,
+          remoteJid: msg.key.remoteJid,
+          body:
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            msg.message?.imageMessage?.caption ||
+            msg.message?.videoMessage?.caption ||
+            '',
+          sender: msg.key.participant || msg.key.remoteJid,
+          pushName: msg.pushName || 'Usuario',
+          fromGroup: msg.key.remoteJid.endsWith('@g.us')
+        })
+
+        // 🔥 HANDLER NORMAL
         await messageHandler(sock, msg, store)
 
       } catch (e) {
