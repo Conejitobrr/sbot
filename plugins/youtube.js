@@ -9,7 +9,7 @@ module.exports = {
 
     if (!args[0]) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Envía un link de YouTube\nEjemplo:\n.yt https://youtube.com/...'
+        text: '❌ Envía un link de YouTube'
       })
     }
 
@@ -17,12 +17,11 @@ module.exports = {
 
     if (!ytdl.validateURL(url)) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Link inválido de YouTube'
+        text: '❌ Link inválido'
       })
     }
 
     try {
-      // 🔐 evitar bloqueos
       const agent = ytdl.createAgent()
 
       const info = await ytdl.getInfo(url, { agent })
@@ -30,37 +29,38 @@ module.exports = {
       const title = info.videoDetails.title
       const length = parseInt(info.videoDetails.lengthSeconds)
       const minutes = Math.floor(length / 60)
-      const views = info.videoDetails.viewCount
 
       await sock.sendMessage(remoteJid, {
-        text: `🎬 *${title}*\n⏱️ ${minutes} min\n👀 ${views} vistas\n\n⏳ Procesando...`
+        text: `🎬 *${title}*\n⏱️ ${minutes} min\n\n🎧 Enviando audio...`
       })
 
-      // 🎧 AUDIO (estable)
-      const audioStream = ytdl(url, {
+      const stream = ytdl(url, {
         filter: 'audioonly',
         quality: 'highestaudio',
         agent
       })
 
-      // ⚠️ límite aproximado seguro para WhatsApp (~16MB)
-      if (length > 600) {
-        return sock.sendMessage(remoteJid, {
-          text: `⚠️ El video es muy largo.\n\n🔗 Descárgalo aquí:\n${url}`
-        })
-      }
-
-      await sock.sendMessage(remoteJid, {
-        audio: { stream: audioStream },
+      return await sock.sendMessage(remoteJid, {
+        audio: { stream },
         mimetype: 'audio/mp4'
       })
 
     } catch (err) {
-      console.log('YT ERROR:', err)
+      console.log('YT FALLÓ, USANDO API...', err.message)
 
-      await sock.sendMessage(remoteJid, {
-        text: '❌ Error al descargar el contenido.\n🔁 Intenta con otro video o más corto.'
-      })
+      // 🔥 FALLBACK API (rápido y funciona mejor)
+      try {
+        const api = `https://api.vevioz.com/api/button/mp3/${url}`
+
+        await sock.sendMessage(remoteJid, {
+          text: `⚠️ No pude procesar directo\n\n🔗 Descárgalo aquí:\n${api}`
+        })
+
+      } catch (e) {
+        await sock.sendMessage(remoteJid, {
+          text: `❌ Error total\n\n🔗 Usa este link:\n${url}`
+        })
+      }
     }
   }
 }
