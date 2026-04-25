@@ -3,10 +3,11 @@
 const gTTS = require('gtts');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 
 module.exports = {
   commands: ['tts'],
-  description: 'Texto a voz en español',
+  description: 'Texto a voz (nota de voz real)',
 
   async execute(ctx) {
     const { sock, remoteJid, args, msg } = ctx;
@@ -18,35 +19,43 @@ module.exports = {
     }
 
     const text = args.join(' ');
-    const filePath = path.join(__dirname, '../tmp/tts.mp3');
+
+    const mp3 = path.join(__dirname, '../tmp/tts.mp3');
+    const ogg = path.join(__dirname, '../tmp/tts.ogg');
 
     try {
+      // 1. Crear mp3
       const tts = new gTTS(text, 'es');
 
-      // 🔥 Convertimos a PROMESA para evitar archivo corrupto
       await new Promise((resolve, reject) => {
-        tts.save(filePath, (err) => {
+        tts.save(mp3, (err) => err ? reject(err) : resolve());
+      });
+
+      // 2. Convertir a OPUS (clave 🔥)
+      await new Promise((resolve, reject) => {
+        exec(`ffmpeg -i ${mp3} -c:a libopus -b:a 128k ${ogg} -y`, (err) => {
           if (err) reject(err);
           else resolve();
         });
       });
 
-      // 🔥 Leer archivo ya completo
-      const audio = fs.readFileSync(filePath);
+      const audio = fs.readFileSync(ogg);
 
+      // 3. Enviar como nota de voz REAL
       await sock.sendMessage(remoteJid, {
         audio: audio,
-        mimetype: 'audio/mpeg',
+        mimetype: 'audio/ogg; codecs=opus',
         ptt: true
       }, { quoted: msg });
 
-      // borrar después
-      fs.unlinkSync(filePath);
+      // 4. limpiar
+      fs.unlinkSync(mp3);
+      fs.unlinkSync(ogg);
 
     } catch (e) {
       console.log(e);
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error generando el audio'
+        text: '❌ Error en TTS (revisa ffmpeg)'
       }, { quoted: msg });
     }
   }
