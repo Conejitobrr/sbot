@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = {
-  name: 'autoaudio',
+  name: 'audios',
 
   async onMessage(ctx) {
     const { sock, remoteJid, body } = ctx;
@@ -13,23 +13,19 @@ module.exports = {
 
     const text = body.toLowerCase().trim();
 
-    // 🎧 mapa de palabras → audios
+    // 🎧 palabras clave → archivos de audio
     const audios = {
       'hola': 'hola.mp3',
-      'buenos dias': 'buenosdias.mp3',
-      'adios': 'adios.mp3'
+      'adios': 'adios.mp3',
+      'buenos dias': 'buenosdias.mp3'
     };
 
     const file = audios[text];
-
     if (!file) return;
 
     const filePath = path.join(__dirname, '../media', file);
 
-    if (!fs.existsSync(filePath)) {
-      console.log('❌ Audio no existe:', filePath);
-      return;
-    }
+    if (!fs.existsSync(filePath)) return;
 
     const audio = fs.readFileSync(filePath);
 
