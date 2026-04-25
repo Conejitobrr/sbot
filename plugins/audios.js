@@ -12,9 +12,9 @@ module.exports = {
     const text = body.toLowerCase().trim();
 
     const audios = {
-      'hola': 'hola.mp3'
-      'autoestima': 'Autoestima.mp3'
-    };
+  'hola': 'hola.mp3',
+  'autoestima': 'Autoestima.mp3'
+};
 
     const file = audios[text];
     if (!file) return;
