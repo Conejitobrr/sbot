@@ -16,7 +16,7 @@ module.exports = {
     // 🎧 palabras clave → archivos de audio
     const audios = {
       'hola': 'hola.mp3',
-      'adios': 'adios.mp3',
+      'autoestima': 'autoestima.mp3',
       'buenos dias': 'buenosdias.mp3'
     };
 
