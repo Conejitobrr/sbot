@@ -15,35 +15,45 @@ module.exports = {
       });
     }
 
-    await sock.sendMessage(remoteJid, {
-      text: `
-🎯 *TRIVIA ACTIVADA*
+    sendQuestion(sock, remoteJid, game);
+  }
+};
+
+// 🔥 función para enviar preguntas + tiempo
+function sendQuestion(sock, jid, game) {
+
+  sock.sendMessage(jid, {
+    text: `
+🎯 *TRIVIA*
 
 ❓ ${game.question}
 
+⏱️ 60 segundos
 💬 Todos pueden responder
-⏱️ Tienes 60 segundos
-🏆 El primero gana XP
 `
-    });
+  });
 
-    // ⏱️ TIEMPO LÍMITE
-    setTimeout(async () => {
-      const current = trivia.get();
+  // ⏱️ tiempo límite
+  game.timeout = setTimeout(async () => {
 
-      if (current && current.chat === remoteJid) {
+    const current = require('../lib/trivia').get();
 
-        await sock.sendMessage(remoteJid, {
-          text: `
+    if (current && current.chat === jid) {
+
+      await sock.sendMessage(jid, {
+        text: `
 ⏰ *TIEMPO TERMINADO*
 
 ❓ ${current.question}
-✅ Respuesta correcta: *${current.answer}*
-`
-        });
+❌ Nadie respondió
+✅ Respuesta: *${current.answer}*
 
-        trivia.stop();
-      }
-    }, 60000); // 60s
-  }
-};
+🎮 Escribe *.trivia* para jugar de nuevo
+`
+      });
+
+      require('../lib/trivia').stop();
+    }
+
+  }, 60000);
+}
