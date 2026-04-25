@@ -1,7 +1,5 @@
 'use strict'
 
-const fetch = require('node-fetch')
-
 module.exports = {
   commands: ['yt', 'play', 'youtube'],
 
@@ -17,22 +15,22 @@ module.exports = {
 
     try {
       await sock.sendMessage(remoteJid, {
-        text: '⏳ Procesando video...'
+        text: '⏳ Descargando...'
       })
 
-      // 🔥 API estable
-      const api = `https://api.vevioz.com/api/button/mp3/${url}`
+      // 🔥 API directa (mp3 real)
+      const api = `https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`
 
-      // 👉 solo mandamos link directo limpio
       await sock.sendMessage(remoteJid, {
-        text: `🎧 Descarga tu audio aquí:\n${api}`
+        audio: { url: api },
+        mimetype: 'audio/mpeg'
       })
 
     } catch (err) {
       console.log('YT ERROR:', err)
 
       await sock.sendMessage(remoteJid, {
-        text: `❌ Error\n\n🔗 Usa este link:\n${url}`
+        text: `❌ No se pudo enviar audio\n🔗 ${url}`
       })
     }
   }
