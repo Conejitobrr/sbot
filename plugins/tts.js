@@ -1,6 +1,8 @@
 'use strict';
 
-const axios = require('axios');
+const gTTS = require('gtts');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
   commands: ['tts'],
@@ -16,26 +18,33 @@ module.exports = {
     }
 
     const text = args.join(' ');
+    const filePath = path.join(__dirname, '../tmp/tts.mp3');
 
     try {
-      // API gratuita de TTS
-      const url = `https://api.streamelements.com/kappa/v2/speech?voice=es-ES-Standard-A&text=${encodeURIComponent(text)}`;
+      const tts = new gTTS(text, 'es');
 
-      const response = await axios.get(url, {
-        responseType: 'arraybuffer'
+      // Guardar audio temporal
+      tts.save(filePath, async (err) => {
+        if (err) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ Error generando audio'
+          }, { quoted: msg });
+        }
+
+        // Enviar audio
+        await sock.sendMessage(remoteJid, {
+          audio: fs.readFileSync(filePath),
+          mimetype: 'audio/mpeg',
+          ptt: true
+        }, { quoted: msg });
+
+        // Borrar archivo
+        fs.unlinkSync(filePath);
       });
-
-      const audioBuffer = Buffer.from(response.data);
-
-      await sock.sendMessage(remoteJid, {
-        audio: audioBuffer,
-        mimetype: 'audio/mpeg',
-        ptt: true // ← lo envía como nota de voz
-      }, { quoted: msg });
 
     } catch (e) {
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error generando el audio'
+        text: '❌ Error en TTS'
       }, { quoted: msg });
     }
   }
