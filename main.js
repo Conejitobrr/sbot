@@ -38,20 +38,23 @@ async function startBot(opts = {}) {
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
-    version,
-    logger: pino({ level: 'silent' }),
-    browser: useCode
-      ? ['Ubuntu', 'Chrome', '20.0.04']
-      : ['SiriusBot', 'Safari', '2.0.0'],
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(
-        state.keys,
-        pino({ level: 'silent' })
-      )
-    },
-    printQRInTerminal: false
-  })
+  version,
+  logger: pino({ level: 'silent' }),
+  browser: useCode
+    ? ['Ubuntu', 'Chrome', '20.0.04']
+    : ['SiriusBot', 'Safari', '2.0.0'],
+  auth: {
+    creds: state.creds,
+    keys: makeCacheableSignalKeyStore(
+      state.keys,
+      pino({ level: 'silent' })
+    )
+  },
+  printQRInTerminal: false,
+
+  // 🔥 ESTO ES LO IMPORTANTE
+  emitOwnEvents: true
+})
 
   if (useCode && phoneNum && !state.creds?.registered) {
     setTimeout(async () => {
