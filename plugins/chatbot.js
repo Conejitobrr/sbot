@@ -1,49 +1,56 @@
 'use strict';
 
-const axios = require('axios');
+const fetch = require('node-fetch');
 
 module.exports = {
-  commands: ['chat', 'ia'],
+  name: 'ai',
+  description: 'IA natural tipo ChatGPT',
+  command: ['ai', 'bot', 'ia'],
 
-  async execute({ sock, msg, remoteJid, args, pushName }) {
-
+  async execute(sock, msg, args) {
     const text = args.join(' ');
 
     if (!text) {
-      return sock.sendMessage(remoteJid, {
-        text: '💬 Escribe algo\nEjemplo: .chat Hola'
-      }, { quoted: msg });
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: '🤖 Escribe algo para responderte.\nEjemplo: !ai qué es el amor'
+      });
     }
 
     try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer TU_API_KEY"
+        },
+        body: JSON.stringify({
+          model: "llama3-70b-8192",
+          messages: [
+            {
+              role: "system",
+              content: "Eres un bot tipo Simsimi pero más natural, divertido y humano. Responde de forma corta, casual y conversacional."
+            },
+            {
+              role: "user",
+              content: text
+            }
+          ],
+          temperature: 0.9
+        })
+      });
 
-      await sock.sendMessage(remoteJid, {
-        text: '🤖 Pensando...'
-      }, { quoted: msg });
+      const data = await response.json();
+      const reply = data.choices?.[0]?.message?.content;
 
-      // 🔥 API GRATUITA (no key)
-      const res = await axios.get(
-        `https://api.simsimi.vn/v2/simtalk`,
-        {
-          params: {
-            text,
-            lc: 'es'
-          }
-        }
-      );
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: reply || "No pude responder 😅"
+      });
 
-      let reply = res.data?.message || 'No tengo respuesta 😅';
-
-      await sock.sendMessage(remoteJid, {
-        text: `🤖 ${reply}`
-      }, { quoted: msg });
-
-    } catch (e) {
-      console.log('IA ERROR:', e.message);
-
-      await sock.sendMessage(remoteJid, {
-        text: '❌ Error con la IA'
-      }, { quoted: msg });
+    } catch (err) {
+      console.error(err);
+      return sock.sendMessage(msg.key.remoteJid, {
+        text: "⚠️ Error conectando con la IA"
+      });
     }
   }
 };
