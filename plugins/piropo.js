@@ -1,11 +1,19 @@
 'use strict';
 
+const db = require('../lib/database');
+
+// 👉 eventos opcional
+let events = null;
+try {
+  events = require('../lib/events');
+} catch {}
+
 module.exports = {
   commands: ['piropo'],
   description: 'Envía un piropo mencionando a alguien',
 
   async execute(ctx) {
-    const { sock, remoteJid, msg } = ctx;
+    const { sock, remoteJid, msg, sender } = ctx;
 
     const piropos = [
       'Me gustaría ser papel para poder envolver ese bombón.',
@@ -22,19 +30,17 @@ module.exports = {
 
     const random = piropos[Math.floor(Math.random() * piropos.length)];
 
-    // 🔥 Detectar usuario mencionado o respondido
     let target;
 
-    // si responde a alguien
+    // responder
     if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
       target = msg.message.extendedTextMessage.contextInfo.participant;
     }
-    // si menciona con @
+    // mencionar
     else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length) {
       target = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
     }
 
-    // ❌ si no hay usuario
     if (!target) {
       return sock.sendMessage(remoteJid, {
         text: '❌ Menciona o responde a alguien para enviarle un piropo'
@@ -43,10 +49,20 @@ module.exports = {
 
     const numero = target.split('@')[0];
 
-    // 💌 enviar piropo con mención
+    // 💌 enviar piropo
     await sock.sendMessage(remoteJid, {
       text: `@${numero} ${random}`,
       mentions: [target]
     }, { quoted: msg });
+
+    // ⭐ XP BASE
+    let xp = Math.floor(Math.random() * 10) + 5;
+
+    // ⚡ DOUBLE XP
+    if (events?.state?.active?.type === 'double') {
+      xp *= 2;
+    }
+
+    await db.addXP(sender, xp);
   }
 };
