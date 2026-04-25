@@ -91,18 +91,8 @@ module.exports = {
 
     const numero = target.split('@')[0];
 
-    // 💌 mensaje visual mejorado
-    const text = `
-${emoji} ════════ 💘 ════════ ${emoji}
-        💌 *PIROPO*
-${emoji} ════════ 💘 ════════ ${emoji}
-
-@${numero}
-${emoji} ${randomPiropo}
-
-${emoji} ═══════════════════ ${emoji}
-💫 Enviado con cariño digital
-`;
+    // 💌 mensaje limpio con mención integrada
+    const text = `${emoji} @${numero} ${randomPiropo}`;
 
     await sock.sendMessage(remoteJid, {
       text,
