@@ -3,7 +3,7 @@
 const db = require('../lib/database');
 
 module.exports = {
-  commands: ['robarxp'],
+  commands: ['robar'],
   description: 'Roba experiencia a otro usuario',
 
   async execute(ctx) {
