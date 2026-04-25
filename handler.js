@@ -5,7 +5,7 @@ const fs = require('fs')
 const chalk = require('chalk')
 const config = require('./config')
 const db = require('./lib/database')
-const trivia = require('./lib/trivia') // 👈 IMPORTANTE
+const trivia = require('./lib/trivia') // 🔥 IMPORTANTE
 
 const {
   getBody,
@@ -45,7 +45,10 @@ function loadPlugins() {
       }
 
     } catch (err) {
-      console.log(chalk.red(`Error cargando plugin ${file}:`), err.message)
+      console.log(
+        chalk.red(`Error cargando plugin ${file}:`),
+        err.message
+      )
     }
   }
 
@@ -59,7 +62,8 @@ loadPlugins()
 // HELPERS
 // ═══════════════════════════════════════
 
-const normalize = txt => (txt || '').replace(/[^0-9]/g, '')
+const normalize = txt =>
+  (txt || '').replace(/[^0-9]/g, '')
 
 function getReadableMessage(msg) {
   const body = getBody(msg)
@@ -92,7 +96,10 @@ async function messageHandler(sock, msg, store) {
     const remoteJid = key.remoteJid
     const fromGroup = remoteJid?.endsWith('@g.us')
 
-    let sender = fromGroup ? key.participant : remoteJid
+    let sender = fromGroup
+      ? key.participant
+      : remoteJid
+
     sender = normalizeJid(sender)
 
     const pushName =
@@ -106,7 +113,7 @@ async function messageHandler(sock, msg, store) {
     const number = sender.replace(/@.+/, '')
 
     // ═══════════════════════════════════
-    // 🧾 LOGGER (SIEMPRE SE EJECUTA)
+    // LOGGER
     // ═══════════════════════════════════
 
     let chatLabel = chalk.blue('PRIVADO')
@@ -114,6 +121,7 @@ async function messageHandler(sock, msg, store) {
 
     if (fromGroup) {
       chatLabel = chalk.magenta('GRUPO')
+
       try {
         const metadata = await sock.groupMetadata(remoteJid)
         chatName = metadata.subject || 'Grupo'
@@ -131,13 +139,14 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
     // ═══════════════════════════════════
-    // 🎯 TRIVIA (NO BLOQUEA)
+    // 🎯 TRIVIA GLOBAL (ANTES DE COMANDOS)
     // ═══════════════════════════════════
 
     if (body) {
       const game = trivia.get()
 
       if (game && game.chat === remoteJid) {
+
         if (trivia.check(body)) {
 
           clearTimeout(game.timeout)
@@ -155,6 +164,7 @@ async function messageHandler(sock, msg, store) {
 
           const next = trivia.next()
 
+          // enviar siguiente pregunta
           next.timeout = setTimeout(async () => {
             const current = trivia.get()
 
@@ -175,7 +185,7 @@ async function messageHandler(sock, msg, store) {
             }
           }, 60000)
 
-          await sock.sendMessage(remoteJid, {
+          return sock.sendMessage(remoteJid, {
             text: `
 🎯 *TRIVIA*
 
@@ -190,7 +200,7 @@ async function messageHandler(sock, msg, store) {
     }
 
     // ═══════════════════════════════════
-    // ❌ SI NO ES TEXTO → NO COMANDO
+    // COMANDOS
     // ═══════════════════════════════════
 
     if (!body) return
@@ -200,6 +210,7 @@ async function messageHandler(sock, msg, store) {
 
     const args = parsed.body.trim().split(/\s+/)
     const command = args.shift()?.toLowerCase()
+
     if (!command) return
 
     const plugin = plugins.get(command)
