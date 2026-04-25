@@ -5,6 +5,7 @@ const fs = require('fs')
 const chalk = require('chalk')
 const config = require('./config')
 const db = require('./lib/database')
+const trivia = require('./lib/trivia') // 🔥 IMPORTANTE
 
 const {
   getBody,
@@ -112,7 +113,7 @@ async function messageHandler(sock, msg, store) {
     const number = sender.replace(/@.+/, '')
 
     // ═══════════════════════════════════
-    // LOGGER VISUAL
+    // LOGGER
     // ═══════════════════════════════════
 
     let chatLabel = chalk.blue('PRIVADO')
@@ -137,7 +138,71 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
-    // Solo procesar comandos
+    // ═══════════════════════════════════
+    // 🎯 TRIVIA GLOBAL (ANTES DE COMANDOS)
+    // ═══════════════════════════════════
+
+    if (body) {
+      const game = trivia.get()
+
+      if (game && game.chat === remoteJid) {
+
+        if (trivia.check(body)) {
+
+          clearTimeout(game.timeout)
+
+          await sock.sendMessage(remoteJid, {
+            text: `
+🎉 *RESPUESTA CORRECTA*
+
+👤 ${pushName}
+✅ Respuesta: *${game.answer}*
+
+🔥 Nueva pregunta...
+`
+          })
+
+          const next = trivia.next()
+
+          // enviar siguiente pregunta
+          next.timeout = setTimeout(async () => {
+            const current = trivia.get()
+
+            if (current && current.chat === remoteJid) {
+              await sock.sendMessage(remoteJid, {
+                text: `
+⏰ *TIEMPO TERMINADO*
+
+❓ ${current.question}
+❌ Nadie respondió
+✅ Respuesta: *${current.answer}*
+
+🎮 Escribe *.trivia* para jugar de nuevo
+`
+              })
+
+              trivia.stop()
+            }
+          }, 60000)
+
+          return sock.sendMessage(remoteJid, {
+            text: `
+🎯 *TRIVIA*
+
+❓ ${next.question}
+
+⏱️ 60 segundos
+💬 Todos pueden responder
+`
+          })
+        }
+      }
+    }
+
+    // ═══════════════════════════════════
+    // COMANDOS
+    // ═══════════════════════════════════
+
     if (!body) return
 
     const parsed = detectPrefix(body)
@@ -202,10 +267,7 @@ async function messageHandler(sock, msg, store) {
       fromGroup
     })
 
-    // ═══════════════════════════════════
-    // XP AUTOMÁTICA POR COMANDO
-    // ═══════════════════════════════════
-
+    // XP
     const gainedXP = Math.floor(Math.random() * 16) + 5
     await db.addXP(sender, gainedXP)
 
