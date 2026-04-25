@@ -1,18 +1,24 @@
 'use strict';
 
+const fetch = require('node-fetch');
+
 module.exports = {
-  name: 'ai',
-  command: ['ai', 'bot', 'ia'],
+  commands: ['ai', 'bot', 'ia'],
 
-  async execute(sock, msg, args) {
-    const text = args.join(' ').trim();
+  async execute(ctx) {
+    const { sock, msg, remoteJid } = ctx;
 
-    console.log('🧠 AI INPUT:', text);
+    const text =
+      msg.message?.conversation ||
+      msg.message?.extendedTextMessage?.text ||
+      '';
 
-    if (!text) {
-      return sock.sendMessage(msg.key.remoteJid, {
-        text: 'Escribe algo 😄'
-      });
+    const args = text.split(' ').slice(1).join(' ').trim();
+
+    if (!args) {
+      return sock.sendMessage(remoteJid, {
+        text: '🤖 Escribe algo:\nEjemplo: .ai hola'
+      }, { quoted: msg });
     }
 
     try {
@@ -27,38 +33,37 @@ module.exports = {
           messages: [
             {
               role: 'system',
-              content: 'Eres un bot natural tipo WhatsApp.'
+              content: 'Eres un bot tipo WhatsApp natural, corto, casual y humano.'
             },
             {
               role: 'user',
-              content: text
+              content: args
             }
-          ]
+          ],
+          temperature: 0.9
         })
       });
 
       const data = await response.json();
 
-      console.log('🧠 GROQ FULL RESPONSE:', JSON.stringify(data, null, 2));
-
       const reply = data?.choices?.[0]?.message?.content;
 
       if (!reply) {
-        return sock.sendMessage(msg.key.remoteJid, {
-          text: '⚠️ No llegó respuesta de la IA'
-        });
+        return sock.sendMessage(remoteJid, {
+          text: '⚠️ No hubo respuesta de la IA'
+        }, { quoted: msg });
       }
 
-      await sock.sendMessage(msg.key.remoteJid, {
+      await sock.sendMessage(remoteJid, {
         text: reply
-      });
+      }, { quoted: msg });
 
     } catch (err) {
-      console.error('❌ ERROR IA:', err);
+      console.error('❌ IA ERROR:', err);
 
-      return sock.sendMessage(msg.key.remoteJid, {
-        text: '⚠️ Error conectando con IA'
-      });
+      await sock.sendMessage(remoteJid, {
+        text: '⚠️ Error conectando con la IA'
+      }, { quoted: msg });
     }
   }
 };
