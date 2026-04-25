@@ -10,24 +10,28 @@ module.exports = {
 
     if (!body) return;
 
-    const text = body.toLowerCase().trim();
+    const text = body.toLowerCase();
 
     const audios = {
-      'hola': 'hola.mp3',
-      'autoestima': 'Autoestima.mp3'
+      'autoestima': 'Autoestima.mp3',
+      'hola': 'hola.mp3'
     };
 
-    const file = audios[text];
-    if (!file) return;
+    // 🔥 buscar palabra dentro del mensaje
+    const match = Object.keys(audios).find(key =>
+      text.includes(key)
+    );
 
-    const inputPath = path.join(__dirname, '../media', file);
+    if (!match) return;
+
+    const inputPath = path.join(__dirname, '../media', audios[match]);
 
     if (!fs.existsSync(inputPath)) return;
 
     const tempPath = path.join(__dirname, '../media/temp.opus');
 
     try {
-      // 🔥 CONVERTIR MP3 → OPUS (nota de voz real)
+      // 🔥 convertir MP3 → nota de voz
       execSync(
         `ffmpeg -y -i "${inputPath}" -c:a libopus -b:a 64k "${tempPath}"`
       );
@@ -40,11 +44,10 @@ module.exports = {
         ptt: true
       });
 
-      // 🧹 borrar temporal
       fs.unlinkSync(tempPath);
 
     } catch (err) {
-      console.log('❌ Error convirtiendo audio:', err);
+      console.log('❌ error audio:', err);
     }
   }
 };
