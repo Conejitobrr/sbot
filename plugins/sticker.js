@@ -102,14 +102,21 @@ module.exports = {
             sticker
           }, { quoted: msg });
 
-          // ⭐ XP
-          let xp = Math.floor(Math.random() * 10) + 5;
+          // ⭐ XP BASE
+let xp = Math.floor(Math.random() * 10) + 5;
 
-          if (events?.state?.active?.type === 'double') {
-            xp *= 2;
-          }
+// 🔥 detectar evento (compatible con varios sistemas)
+let multiplier = 1;
 
-          await db.addXP(sender, xp);
+if (events?.isActive?.('double')) {
+  multiplier = events.getMultiplier?.() || 2;
+} else if (events?.state?.active?.type === 'double') {
+  multiplier = 2;
+}
+
+xp *= multiplier;
+
+await db.addXP(sender, xp);
 
         } catch (e) {
           console.log('❌ SEND ERROR:', e);
