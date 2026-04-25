@@ -3,7 +3,7 @@
 const axios = require('axios');
 
 module.exports = {
-  commands: ['bot', 'chat'],
+  commands: ['chat', 'ia'],
 
   async execute({ sock, msg, remoteJid, args, pushName }) {
 
@@ -11,49 +11,39 @@ module.exports = {
 
     if (!text) {
       return sock.sendMessage(remoteJid, {
-        text: '💬 Escribe algo después del comando\n\nEjemplo:\n.bot hola'
+        text: '💬 Escribe algo\nEjemplo: .chat Hola'
       }, { quoted: msg });
     }
 
     try {
-      // 🔥 API GRATIS (SimSimi pública)
-      const res = await axios.get('https://api.simsimi.vn/v1/simtalk', {
-        params: {
-          text,
-          lc: 'es'
-        },
-        timeout: 10000
-      });
 
-      let reply = res.data?.message;
+      await sock.sendMessage(remoteJid, {
+        text: '🤖 Pensando...'
+      }, { quoted: msg });
 
-      if (!reply) throw 'Sin respuesta';
+      // 🔥 API GRATUITA (no key)
+      const res = await axios.get(
+        `https://api.simsimi.vn/v2/simtalk`,
+        {
+          params: {
+            text,
+            lc: 'es'
+          }
+        }
+      );
+
+      let reply = res.data?.message || 'No tengo respuesta 😅';
 
       await sock.sendMessage(remoteJid, {
         text: `🤖 ${reply}`
       }, { quoted: msg });
 
-    } catch (err) {
-
-      // 🔥 FALLBACK INTELIGENTE
-      const fallback = getFallback(text);
+    } catch (e) {
+      console.log('IA ERROR:', e.message);
 
       await sock.sendMessage(remoteJid, {
-        text: `🤖 ${fallback}`
+        text: '❌ Error con la IA'
       }, { quoted: msg });
     }
   }
 };
-
-// 🔥 RESPUESTAS LOCALES (por si falla la API)
-function getFallback(text) {
-  text = text.toLowerCase();
-
-  if (text.includes('hola')) return 'Hola 😄 ¿Cómo estás?';
-  if (text.includes('como estas')) return 'Estoy bien, gracias por preguntar 🤖';
-  if (text.includes('tu nombre')) return 'Soy un bot 😎';
-  if (text.includes('amor')) return 'El amor es complicado 💔 pero bonito';
-  if (text.includes('adios')) return 'Adiós 👋 vuelve pronto';
-
-  return 'No entendí 😅 intenta decirlo de otra forma';
-}
