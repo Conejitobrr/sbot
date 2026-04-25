@@ -1,3 +1,5 @@
+'use strict';
+
 const fs = require('fs');
 const path = require('path');
 
@@ -10,23 +12,28 @@ module.exports = {
     const text = body.toLowerCase().trim();
 
     const audios = {
-      'hola': 'hola.opus',
-      'autoestima': 'Autoestima.opus'
-    };
+  'hola': 'hola.mp3',
+  'autoestima': 'Autoestima.mp3'
+};
 
     const file = audios[text];
     if (!file) return;
 
     const filePath = path.join(__dirname, '../media', file);
 
-    if (!fs.existsSync(filePath)) return;
+    console.log('📁 buscando audio en:', filePath);
+
+    if (!fs.existsSync(filePath)) {
+      console.log('❌ audio no existe');
+      return;
+    }
 
     const audio = fs.readFileSync(filePath);
 
     await sock.sendMessage(remoteJid, {
       audio,
-      mimetype: 'audio/ogg; codecs=opus', // 🔥 clave real de WhatsApp
-      ptt: true // 🎤 nota de voz
+      mimetype: 'audio/mpeg',
+      ptt: true
     });
   }
 };
