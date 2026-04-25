@@ -22,7 +22,6 @@ module.exports = {
       eventText = map[active.type] || '🎮 Evento activo'
     }
 
-    // Prefijo dinámico (tomará "." automáticamente)
     const p = Array.isArray(config.prefix) ? config.prefix[0] : config.prefix;
 
     const text = `
@@ -51,11 +50,17 @@ module.exports = {
 ➤ *${p}piropo*
 ➤ *${p}pregunta*
 
+🎧 *DESCARGAS AUDIO*
+┈┈┈┈┈┈┈┈┈┈
+➤ *${p}play* nombre/enlace
+
+🎬 *DESCARGAS VIDEO*
+┈┈┈┈┈┈┈┈┈┈
+➤ *${p}ytmp4* nombre/enlace
+
 🎨 *MULTIMEDIA*
 ┈┈┈┈┈┈┈┈┈┈
 ➤ *${p}sticker*
-➤ *${p}play* nombre/enlace
-➤ *${p}ytmp4* nombre/enlace
 ➤ *${p}toimage*
 ➤ *${p}tovideo*
 ➤ *${p}toanime*
