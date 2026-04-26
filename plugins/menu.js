@@ -43,8 +43,8 @@ Bienvenido a *${config.botName}*
 ➤ *${p}xp* → Ver tu experiencia  
 ➤ *${p}rank* → Ranking del chat  
 ➤ *${p}claim* → Recompensa diaria  
-➤ *${p}robar* → Robar monedas  
-➤ *${p}dar* → Transferir dinero  
+➤ *${p}robar* → Robar monedas mencionando a alguien
+➤ *${p}dar* → Transferir dinero mencionando a alguien 
 
 ━━━━━━━━━━━━━━━━━━━
 😂 *DIVERSIÓN*
@@ -58,7 +58,9 @@ Bienvenido a *${config.botName}*
 🎵 *DESCARGAS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}play* → Descargar audio 🎧  
-➤ *${p}ytmp4* → Descargar video 🎬  
+➤ *${p}ytmp4* → Descargar video 🎬
+➤ *${p}tiktok* → Descarga video de tiktok por enlace  
+
 
 ━━━━━━━━━━━━━━━━━━━
 🎨 *MULTIMEDIA*
