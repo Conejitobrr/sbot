@@ -19,7 +19,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { messageHandler } = require('./handler')
-const events = require('./lib/events') // 🔥 NUEVO
+const events = require('./lib/events')
 
 const SESSION_DIR = path.resolve('./session')
 
@@ -32,6 +32,15 @@ const store = {
   messages: {}
 }
 
+// 🧠 Anti-crash global
+process.on('unhandledRejection', (e) => {
+  console.log('⚠️ unhandledRejection:', e)
+})
+
+process.on('uncaughtException', (e) => {
+  console.log('⚠️ uncaughtException:', e)
+})
+
 async function startBot(opts = {}) {
   const useCode = opts.method === 'code'
   const phoneNum = opts.phone || null
@@ -40,23 +49,21 @@ async function startBot(opts = {}) {
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
-  version,
-  logger: pino({ level: 'silent' }),
-  browser: useCode
-    ? ['Ubuntu', 'Chrome', '20.0.04']
-    : ['SiriusBot', 'Safari', '2.0.0'],
-  auth: {
-    creds: state.creds,
-    keys: makeCacheableSignalKeyStore(
-      state.keys,
-      pino({ level: 'silent' })
-    )
-  },
-  printQRInTerminal: false,
-
-  // 🔥 ESTO ES LO IMPORTANTE
-  emitOwnEvents: true
-})
+    version,
+    logger: pino({ level: 'silent' }),
+    browser: useCode
+      ? ['Ubuntu', 'Chrome', '20.0.04']
+      : ['SiriusBot', 'Safari', '2.0.0'],
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(
+        state.keys,
+        pino({ level: 'silent' })
+      )
+    },
+    printQRInTerminal: false,
+    emitOwnEvents: true
+  })
 
   if (useCode && phoneNum && !state.creds?.registered) {
     setTimeout(async () => {
@@ -83,7 +90,6 @@ async function startBot(opts = {}) {
       const num = jidNormalizedUser(sock.user.id).split('@')[0]
       console.log(chalk.green('\n✅ Conectado como:'), num, '\n')
 
-      // 🔥 INICIAR EVENTOS AUTOMÁTICOS
       events.init(sock)
     }
 
@@ -106,9 +112,7 @@ async function startBot(opts = {}) {
 
   sock.ev.on('contacts.upsert', contacts => {
     for (const c of contacts) {
-      if (c.id) {
-        store.contacts[c.id] = c
-      }
+      if (c.id) store.contacts[c.id] = c
     }
   })
 
@@ -129,24 +133,32 @@ async function startBot(opts = {}) {
         if (!msg.key?.remoteJid) continue
         if (msg.key.remoteJid === 'status@broadcast') continue
 
-        // 🔥 EVENTOS AUTOMÁTICOS (ANTES DEL HANDLER)
-        await events.onMessage({
-  sock,
-  remoteJid: msg.key.remoteJid,
-  body:
-    msg.message?.conversation ||
-    msg.message?.extendedTextMessage?.text ||
-    msg.message?.imageMessage?.caption ||
-    msg.message?.videoMessage?.caption ||
-    '',
-  sender: msg.key.participant || msg.key.remoteJid,
-  pushName: msg.pushName || 'Usuario',
-  fromGroup: msg.key.remoteJid.endsWith('@g.us'),
-  msg // 🔥 CLAVE PARA AUDIOS Y REPLY
-})
+        // 🔥 EVENTS (NO BLOQUEA EL BOT)
+        try {
+          events.onMessage({
+            sock,
+            remoteJid: msg.key.remoteJid,
+            body:
+              msg.message?.conversation ||
+              msg.message?.extendedTextMessage?.text ||
+              msg.message?.imageMessage?.caption ||
+              msg.message?.videoMessage?.caption ||
+              '',
+            sender: msg.key.participant || msg.key.remoteJid,
+            pushName: msg.pushName || 'Usuario',
+            fromGroup: msg.key.remoteJid.endsWith('@g.us'),
+            msg
+          })
+        } catch (e) {
+          console.log('⚠️ Error events.onMessage:', e.message)
+        }
 
-        // 🔥 HANDLER NORMAL
-        await messageHandler(sock, msg, store)
+        // 🔥 HANDLER (PROTEGIDO)
+        try {
+          await messageHandler(sock, msg, store)
+        } catch (e) {
+          console.log('❌ Error messageHandler:', e.message)
+        }
 
       } catch (e) {
         console.log(chalk.red('Error en handler:'), e)
