@@ -1,54 +1,36 @@
-'use strict';
+'use strict'
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+const fs = require('fs')
+const path = require('path')
 
 module.exports = {
   async onMessage(ctx) {
-    const { sock, remoteJid, body, msg } = ctx;
+    const { sock, remoteJid, body, msg } = ctx
 
-    if (!body) return;
+    if (!body) return
 
-    const text = body.toLowerCase();
+    const text = body.toLowerCase()
 
     const audios = {
-      autoestima: 'Autoestima.mp3',
-      hola: 'hola.mp3'
-    };
-
-    const match = Object.keys(audios).find(k =>
-      text.includes(k)
-    );
-
-    if (!match) return;
-
-    const filePath = path.join(__dirname, '../media', audios[match]);
-
-    if (!fs.existsSync(filePath)) return;
-
-    const output = path.join(__dirname, '../media/temp.ogg');
-
-    try {
-      // 🔥 convertir a nota de voz real WhatsApp
-      execSync(
-        `ffmpeg -y -i "${filePath}" -c:a libopus -b:a 64k "${output}"`
-      );
-
-      const audio = fs.readFileSync(output);
-
-      await sock.sendMessage(remoteJid, {
-        audio,
-        mimetype: 'audio/ogg; codecs=opus',
-        ptt: true
-      }, {
-        quoted: msg || null   // 🔥 CLAVE
-      });
-
-      fs.unlinkSync(output);
-
-    } catch (e) {
-      console.log('❌ error audio:', e);
+      'hola': 'hola.mp3',
+      'autoestima': 'autoestima.mp3'
     }
+
+    // 🔍 buscar si contiene la palabra clave
+    const key = Object.keys(audios).find(k => text.includes(k))
+    if (!key) return
+
+    const filePath = path.join(__dirname, '../media', audios[key])
+
+    if (!fs.existsSync(filePath)) return
+
+    const audio = fs.readFileSync(filePath)
+
+    await sock.sendMessage(remoteJid, {
+      audio,
+      mimetype: 'audio/mpeg',
+      ptt: true, // 🎙️ nota de voz
+      quoted: msg // ✅ RESPONDE al mensaje
+    })
   }
-};
+}
