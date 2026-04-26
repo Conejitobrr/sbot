@@ -32,14 +32,10 @@ const store = {
   messages: {}
 }
 
-// 🧠 Anti-crash global
-process.on('unhandledRejection', (e) => {
-  console.log('⚠️ unhandledRejection:', e)
-})
+process.on('unhandledRejection', (e) => console.log('⚠️ unhandledRejection:', e))
+process.on('uncaughtException', (e) => console.log('⚠️ uncaughtException:', e))
 
-process.on('uncaughtException', (e) => {
-  console.log('⚠️ uncaughtException:', e)
-})
+let botInstance = null // 🔥 EVITA DOBLE BOT
 
 async function startBot(opts = {}) {
   const useCode = opts.method === 'code'
@@ -65,18 +61,17 @@ async function startBot(opts = {}) {
     emitOwnEvents: true
   })
 
-  if (useCode && phoneNum && !state.creds?.registered) {
-    setTimeout(async () => {
-      try {
-        const rawCode = await sock.requestPairingCode(phoneNum)
+  botInstance = sock // 🔥 GUARDAR INSTANCIA
 
-        console.log(chalk.cyan('\nCódigo de emparejamiento:\n'))
-        console.log(chalk.bgCyan.black(`   ${rawCode}   \n`))
-      } catch {
-        console.log(chalk.red('Error al generar código'))
-      }
-    }, 3000)
-  }
+  // 🧠 WATCHDOG (detecta bot congelado)
+  let lastPing = Date.now()
+  setInterval(() => {
+    if (Date.now() - lastPing > 120000) {
+      console.log('⚠️ Bot posiblemente congelado → reiniciando...')
+      try { sock.end() } catch {}
+      startBot({ method: 'saved' })
+    }
+  }, 60000)
 
   sock.ev.on('connection.update', update => {
     const { connection, qr, lastDisconnect } = update
@@ -88,9 +83,13 @@ async function startBot(opts = {}) {
 
     if (connection === 'open') {
       const num = jidNormalizedUser(sock.user.id).split('@')[0]
-      console.log(chalk.green('\n✅ Conectado como:'), num, '\n')
+      console.log(chalk.green('\n✅ Conectado como:'), num)
 
-      events.init(sock)
+      try {
+        events.init(sock)
+      } catch (e) {
+        console.log('❌ events.init error:', e)
+      }
     }
 
     if (connection === 'close') {
@@ -99,11 +98,11 @@ async function startBot(opts = {}) {
           ? lastDisconnect.error.output?.statusCode
           : 0
 
+      console.log(chalk.red('Conexión cerrada:'), reason)
+
       if (reason !== DisconnectReason.loggedOut) {
-        console.log(chalk.yellow('Reconectando...\n'))
+        if (botInstance) try { botInstance.end() } catch {}
         startBot({ method: 'saved' })
-      } else {
-        console.log(chalk.red('Sesión cerrada. Borra /session\n'))
       }
     }
   })
@@ -118,50 +117,47 @@ async function startBot(opts = {}) {
 
   // 📩 MENSAJES
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    console.log(chalk.blue('📨 messages.upsert type:'), type)
-
     if (type !== 'notify') return
 
     for (const msg of messages) {
       try {
-        console.log(
-          chalk.magenta('➡️ Mensaje recibido en main:'),
-          JSON.stringify(msg.message, null, 2)
-        )
+        lastPing = Date.now() // 🔥 ACTUALIZA VIDA DEL BOT
 
         if (!msg.message) continue
         if (!msg.key?.remoteJid) continue
         if (msg.key.remoteJid === 'status@broadcast') continue
 
-        // 🔥 EVENTS (NO BLOQUEA EL BOT)
+        const body =
+          msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption ||
+          msg.message?.videoMessage?.caption ||
+          ''
+
+        // 🔥 EVENTS PROTEGIDO + ASYNC REAL
         try {
-          events.onMessage({
+          await events.onMessage({
             sock,
             remoteJid: msg.key.remoteJid,
-            body:
-              msg.message?.conversation ||
-              msg.message?.extendedTextMessage?.text ||
-              msg.message?.imageMessage?.caption ||
-              msg.message?.videoMessage?.caption ||
-              '',
+            body,
             sender: msg.key.participant || msg.key.remoteJid,
             pushName: msg.pushName || 'Usuario',
             fromGroup: msg.key.remoteJid.endsWith('@g.us'),
             msg
           })
         } catch (e) {
-          console.log('⚠️ Error events.onMessage:', e.message)
+          console.log('⚠️ events.onMessage:', e)
         }
 
-        // 🔥 HANDLER (PROTEGIDO)
+        // 🔥 HANDLER PROTEGIDO
         try {
           await messageHandler(sock, msg, store)
         } catch (e) {
-          console.log('❌ Error messageHandler:', e.message)
+          console.log('❌ messageHandler:', e)
         }
 
       } catch (e) {
-        console.log(chalk.red('Error en handler:'), e)
+        console.log(chalk.red('Error general:'), e)
       }
     }
   })
