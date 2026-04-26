@@ -59,7 +59,10 @@ Bienvenido a *${config.botName}*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}play* → Descargar audio 🎧  
 ➤ *${p}ytmp4* → Descargar video 🎬
-➤ *${p}tiktok* → Descarga video de tiktok por enlace  
+➤ *${p}tiktok* → Descarga video de Tiktok por enlace
+➤ *${p}fb* → Descarga video de Facebook por enlace  
+➤ *${p}ig* → Descarga video de Instagram por enlace  
+
 
 
 ━━━━━━━━━━━━━━━━━━━
