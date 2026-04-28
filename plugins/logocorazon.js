@@ -1,58 +1,60 @@
 'use strict';
 
-const axios = require('axios');
+import { Maker } from 'imagemaker.js';
 
-module.exports = {
+export default {
   commands: ['logocorazon', 'logochristmas'],
 
   async execute(ctx) {
-    const { sock, remoteJid, msg, command, args } = ctx;
+    const { sock, remoteJid, msg, args, command } = ctx;
 
-    const text = args.join(' ').trim();
-
+    const text = args.join(' ');
     if (!text) {
       return sock.sendMessage(remoteJid, {
-        text:
-`❌ Debes escribir un texto
-
-Ejemplo:
-.logocorazon Sirius`
+        text: '❌ Ingresa un texto\nEjemplo: .logocorazon Sirius'
       }, { quoted: msg });
     }
 
     try {
+      // 🔥 MENSAJE DE CARGA
       await sock.sendMessage(remoteJid, {
-        text: '🎨 Generando logo...'
+        text: '⏳ Creando diseño, espera...'
       }, { quoted: msg });
 
-      let url = '';
+      let result;
 
-      // 🔥 API QUE SÍ FUNCIONA
+      // ❤️ CORAZÓN
       if (command === 'logocorazon') {
-        url = `https://api.erdwpe.com/api/maker/heart?text=${encodeURIComponent(text)}`;
+        result = await new Maker().Ephoto360(
+          'https://en.ephoto360.com/text-heart-flashlight-188.html',
+          [text]
+        );
       }
 
+      // 🎄 NAVIDAD
       if (command === 'logochristmas') {
-        url = `https://api.erdwpe.com/api/maker/christmas?text=${encodeURIComponent(text)}`;
+        result = await new Maker().Ephoto360(
+          'https://en.ephoto360.com/christmas-effect-by-name-376.html',
+          [text]
+        );
       }
 
-      // 🔥 DESCARGAR COMO BUFFER (CLAVE)
-      const res = await axios.get(url, {
-        responseType: 'arraybuffer'
-      });
+      // 🔥 VALIDAR RESPUESTA
+      if (!result || !result.imageUrl) {
+        throw 'No se pudo generar la imagen';
+      }
 
-      const buffer = Buffer.from(res.data);
-
+      // 🔥 ENVIAR IMAGEN
       await sock.sendMessage(remoteJid, {
-        image: buffer,
-        caption: `✨ Logo generado:\n${text}`
+        image: { url: result.imageUrl },
+        caption: '✨ Aquí tienes tu diseño'
       }, { quoted: msg });
 
-    } catch (e) {
-      console.log('Error logo:', e.message);
+    } catch (err) {
+      console.error('Error logo:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al generar el logo (API caída o inválida)'
+        text: '❌ Error al generar la imagen, intenta nuevamente'
       }, { quoted: msg });
     }
   }
