@@ -1,111 +1,125 @@
 'use strict';
 
+const { performance } = require('perf_hooks');
+
 module.exports = {
-  commands: ['doxx','doxear','doxeame'],
+  commands: ['doxear', 'doxxeo', 'doxeo'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid } = ctx;
+    const { sock, msg, remoteJid, sender, body } = ctx;
 
-    const target =
-      msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
-      msg.key.participant ||
-      msg.key.remoteJid;
+    const start = performance.now();
+    const end = performance.now();
+    const executionTime = (end - start).toFixed(2);
 
-    const name = '@' + target.split('@')[0];
-
-    const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
-    // 🔥 INICIO
-    await sock.sendMessage(remoteJid, {
-      text: `☠️ INICIANDO DOXXEO...\n🎯 Objetivo: ${name}`,
-      mentions: [target]
-    }, { quoted: msg });
-
-    const loading = [
-      '《 █▒▒▒▒▒▒▒▒▒▒▒》10%',
-      '《 ████▒▒▒▒▒▒▒▒》30%',
-      '《 ███████▒▒▒▒▒》50%',
-      '《 ██████████▒▒》80%',
-      '《 ████████████》100%'
-    ];
-
-    for (let step of loading) {
-      await delay(900);
-      await sock.sendMessage(remoteJid, { text: step });
+    function randIP() {
+      return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
     }
 
-    // 🔥 GENERADOR FAKE
-    const fake = generateFake(target);
-
-    await delay(1000);
-
-    const result = `☠️ *DOXXEO COMPLETADO*
-
-👤 Nombre: ${name}
-🌐 IP: ${fake.ip}
-🧬 ID: ${fake.id}
-📡 IPV6: ${fake.ipv6}
-📱 Dispositivo: ${fake.device}
-📍 Ubicación: ${fake.location}
-
-🔐 DATOS DE RED:
-• MAC: ${fake.mac}
-• ISP: ${fake.isp}
-• DNS: ${fake.dns}
-• GATEWAY: ${fake.gateway}
-
-📂 SISTEMA:
-• Puertos TCP: ${fake.tcp}
-• Puertos UDP: ${fake.udp}
-• Router: ${fake.router}
-• Conexión: ${fake.connection}
-
-📸 ACCESO:
-• Cámara: ${fake.camera}
-
-💀 Datos extraídos correctamente`;
-
-    await sock.sendMessage(remoteJid, {
-      text: result,
-      mentions: [target]
-    }, { quoted: msg });
-
-    await delay(1500);
-
-    // 😂 REMATE
-    await sock.sendMessage(remoteJid, {
-      text: `😂 Tranquilo ${name}, es solo una broma`,
-      mentions: [target]
-    });
-
-    // 🔥 FUNCIONES
-    function rand(min, max) {
-      return Math.floor(Math.random() * (max - min + 1)) + min;
-    }
-
-    function pick(arr) {
+    function getRandomValue(arr) {
       return arr[Math.floor(Math.random() * arr.length)];
     }
 
-    function generateFake(user) {
-      const ip = `${rand(10,255)}.${rand(0,255)}.${rand(0,255)}.${rand(0,255)}`;
+    const ipAddress = randIP();
 
-      return {
-        ip,
-        id: Math.random().toString(36).substring(2, 10).toUpperCase(),
-        ipv6: `fe80:${rand(1000,9999).toString(16)}:${rand(1000,9999).toString(16)}::1`,
-        device: pick(['Android','iPhone','Windows','Linux']),
-        location: pick(['Perú','México','Colombia','España']),
-        mac: `${rand(0,255).toString(16)}:${rand(0,255).toString(16)}:${rand(0,255).toString(16)}`,
-        isp: pick(['Claro','Movistar','Entel','Bitel']),
-        dns: `${rand(1,255)}.${rand(1,255)}.${rand(1,255)}.${rand(1,255)}`,
-        gateway: `192.168.${rand(0,255)}.1`,
-        tcp: rand(1000,9999),
-        udp: rand(1000,9999),
-        router: pick(['TP-Link','Cisco','Huawei']),
-        connection: pick(['Privada','Pública','NAT']),
-        camera: `http://${ip}/camera`
-      };
+    const fakeData = {
+      name_tag: body.replace(/^\.\w+\s*/i, '') || sender.split('@')[0],
+      ip: randIP(),
+      fakeCameraLink: `http://${ipAddress}.com/camera-feed`,
+      n: Math.floor(Math.random() * 100000),
+      w: (Math.random() * (20 - 10) + 10).toFixed(4),
+      ssNumber: Math.floor(Math.random() * 10000000000000000),
+      ipv6: `fe80:${(Math.random() * 65535).toString(16)}:${(Math.random() * 65535).toString(16)}:${(Math.random() * 65535).toString(16)}:${(Math.random() * 65535).toString(16)}%${Math.floor(Math.random() * 100)}`,
+      upnp: getRandomValue(['Enabled', 'Disabled']),
+      dmz: randIP(),
+      mac: Array.from({ length: 6 }, () =>
+        Math.floor(Math.random() * 256).toString(16).toUpperCase()
+      ).join(':'),
+      isp: getRandomValue(['Ucom universal', 'ISP Co', 'Internet Solutions Inc']),
+      dns: randIP(),
+      altDns: randIP(),
+      dnsSuffix: getRandomValue(['Dlink', 'DNS', 'ISPsuffix']),
+      wan: randIP(),
+      wanType: getRandomValue(['private nat', 'public nat', 'Dynamic IP']),
+      gateway: `192.${Math.floor(Math.random() * 256)}.0.1`,
+      subnetMask: `255.255.${Math.floor(Math.random() * 256)}.0`,
+      udpOpenPorts: `${Math.floor(Math.random() * 10000)}.${Math.floor(Math.random() * 10000)}`,
+      tcpOpenPorts: `${Math.floor(Math.random() * 10000)}`,
+      routerVendor: getRandomValue(['ERICCSON', 'TPLINK', 'Cisco']),
+      deviceVendor: getRandomValue(['WIN32-X', 'Device Co', 'SecureTech']),
+      connectionType: getRandomValue(['TPLINK COMPANY', 'ISP Connect', 'Home Network']),
+      icmphops: `192.${Math.floor(Math.random() * 256)}.0.1 192.${Math.floor(Math.random() * 256)}.1.1`,
+      http: `192.168.${Math.floor(Math.random() * 256)}.1:433-->92.28.211.234:80`,
+      http2: `192.168.${Math.floor(Math.random() * 256)}.625-->92.28.211.455:80`,
+      http3: `192.168.${Math.floor(Math.random() * 256)}.817-->92.28.211.8:971`,
+      udp: `192.168.${Math.floor(Math.random() * 256)}.452-->92.28.211.7265288`,
+      tcp1: `192.168.${Math.floor(Math.random() * 256)}.682-->92.28.211.62227.7`,
+      tcp2: `192.168.${Math.floor(Math.random() * 256)}.725-->92.28.211.67wu2`,
+      tcp3: `192.168.${Math.floor(Math.random() * 256)}.629-->92.28.211.167:8615`,
+      externalMac: Array.from({ length: 6 }, () =>
+        Math.floor(Math.random() * 256).toString(16).toUpperCase()
+      ).join(':'),
+      modemJumps: Math.floor(Math.random() * 100)
+    };
+
+    const doxeo = `*[ ✔ ] Persona doxxeada con éxito.*
+
+*—◉ Doxxeo realizado en:*
+*◉ ${executionTime} segundos.*
+
+*—◉ Resultados obtenidos:*
+
+*Nombre:* ${fakeData.name_tag}
+*Ip:* ${fakeData.ip}
+*N:* ${fakeData.n}
+*W:* ${fakeData.w}
+*SS NUMBER:* ${fakeData.ssNumber}
+*CAMARA:* ${fakeData.fakeCameraLink}
+*IPV6:* ${fakeData.ipv6}
+*UPNP:* ${fakeData.upnp}
+*DMZ:* ${fakeData.dmz}
+*MAC:* ${fakeData.mac}
+*ISP:* ${fakeData.isp}
+*DNS:* ${fakeData.dns}
+*ALT DNS:* ${fakeData.altDns}
+*WAN:* ${fakeData.wan}
+*GATEWAY:* ${fakeData.gateway}
+*SUBNET:* ${fakeData.subnetMask}
+*UDP PORTS:* ${fakeData.udpOpenPorts}
+*TCP PORTS:* ${fakeData.tcpOpenPorts}
+*ROUTER:* ${fakeData.routerVendor}
+*DEVICE:* ${fakeData.deviceVendor}
+*CONNECTION:* ${fakeData.connectionType}
+*HTTP:* ${fakeData.http}
+*TCP:* ${fakeData.tcp1}
+*MAC EXT:* ${fakeData.externalMac}
+*MODEM JUMPS:* ${fakeData.modemJumps}`;
+
+    // 🔥 animación tipo original
+    const loading = [
+      "《 █▒▒▒▒▒▒▒▒▒▒▒》10%",
+      "《 ████▒▒▒▒▒▒▒▒》30%",
+      "《 ███████▒▒▒▒▒》50%",
+      "《 ██████████▒▒》80%",
+      "《 ████████████》100%"
+    ];
+
+    const sent = await sock.sendMessage(remoteJid, {
+      text: '*☠ ¡¡INICIANDO DOXXEO!! ☠*'
+    }, { quoted: msg });
+
+    for (let i = 0; i < loading.length; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+
+      await sock.sendMessage(remoteJid, {
+        text: loading[i],
+        edit: sent.key
+      });
     }
+
+    await sock.sendMessage(remoteJid, {
+      text: doxeo,
+      edit: sent.key
+    });
   }
 };
