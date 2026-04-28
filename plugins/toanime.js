@@ -1,30 +1,35 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
-  commands: ['toanime'],
+  commands: ['toanime', 'jadianime'],
 
   async execute(ctx) {
     const { sock, msg, remoteJid } = ctx;
 
     try {
-      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-      const message = quoted || msg.message;
+      // 📌 detectar mensaje citado o actual
+      const quoted = msg.message?.extendedTextMessage?.contextInfo;
+      const message = quoted?.quotedMessage || msg.message;
 
-      const type = Object.keys(message || {})[0];
-
-      if (!type || type !== 'imageMessage') {
+      if (!message) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Responde a una imagen con .toanime'
+          text: '❌ Responde a una imagen'
+        }, { quoted: msg });
+      }
+
+      const type = Object.keys(message)[0];
+
+      if (type !== 'imageMessage') {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Solo funciona con imágenes'
         }, { quoted: msg });
       }
 
       const media = message[type];
 
+      // 📥 descargar imagen
       const stream = await downloadContentFromMessage(media, 'image');
 
       let buffer = Buffer.from([]);
@@ -32,47 +37,64 @@ module.exports = {
         buffer = Buffer.concat([buffer, chunk]);
       }
 
-      const tempDir = path.join(__dirname, '../temp');
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-      const input = path.join(tempDir, 'input.jpg');
-      const output = path.join(tempDir, 'anime.jpg');
-
-      fs.writeFileSync(input, buffer);
-
-      // 🎨 FILTRO ANIME LOCAL (SIN IA)
-      await new Promise((resolve, reject) => {
-        const cmd = `
-          magick "${input}" \
-          -resize 512x512 \
-          -modulate 110,120,100 \
-          -sharpen 0x1 \
-          -contrast \
-          -edge 1 \
-          -colorspace RGB \
-          -posterize 12 \
-          "${output}"
-        `;
-
-        exec(cmd, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      if (!buffer.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Error descargando imagen'
+        }, { quoted: msg });
+      }
 
       await sock.sendMessage(remoteJid, {
-        image: fs.readFileSync(output),
-        caption: '✨ Anime aplicado (modo local sin API)'
+        text: '🎨 Convirtiendo a anime...'
       }, { quoted: msg });
 
-      fs.unlinkSync(input);
-      fs.unlinkSync(output);
+      // 🔥 subir imagen a algún host simple
+      const upload = await fetch('https://api.imgbb.com/1/upload?key=free', {
+        method: 'POST',
+        body: new URLSearchParams({
+          image: buffer.toString('base64')
+        })
+      }).then(res => res.json()).catch(() => null);
+
+      if (!upload?.data?.url) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Error subiendo imagen'
+        }, { quoted: msg });
+      }
+
+      const imageUrl = upload.data.url;
+
+      // 🔥 APIs (fallback)
+      const apis = [
+        `https://api.lolhuman.xyz/api/imagetoanime?apikey=demo&img=${imageUrl}`,
+        `https://api.zahwazein.xyz/photoeditor/jadianime?url=${imageUrl}&apikey=demo`,
+        `https://api.caliph.biz.id/api/animeai?img=${imageUrl}&apikey=caliphkey`
+      ];
+
+      let sent = false;
+
+      for (const api of apis) {
+        try {
+          await sock.sendMessage(remoteJid, {
+            image: { url: api },
+            caption: '✨ Resultado anime'
+          }, { quoted: msg });
+
+          sent = true;
+          break;
+        } catch {}
+      }
+
+      if (!sent) {
+        await sock.sendMessage(remoteJid, {
+          text: '❌ Todas las APIs fallaron'
+        }, { quoted: msg });
+      }
 
     } catch (err) {
-      console.log('LOCAL ANIME ERROR:', err.message);
+      console.log('❌ Error en toanime:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error en filtro local (¿tienes ImageMagick instalado?)'
+        text: '❌ Error general'
       }, { quoted: msg });
     }
   }
