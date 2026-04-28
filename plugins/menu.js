@@ -52,7 +52,12 @@ Bienvenido a *${config.botName}*
 ➤ *${p}piropo* → Enviar piropo 💘  
 ➤ *${p}pregunta* → Responder preguntas 
 ➤ *${p}trivia* → juega preguntados con todos
-➤ *${p}bot* → chatear con el bot
+➤ *${p}formarpareja* → forma pareja al azar
+➤ *${p}formarparejas* → forma parejas en grupo
+➤ *${p}gay* → mencionando a alguien
+➤ *${p}topgays* → top gays del grupo
+➤ *${p}hornycard* → carta horny
+
 
 ━━━━━━━━━━━━━━━━━━━
 🎵 *DESCARGAS*
