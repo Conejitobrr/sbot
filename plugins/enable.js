@@ -10,6 +10,7 @@ module.exports = {
       sock,
       msg,
       remoteJid,
+      sender,
       args,
       fromGroup,
       isAdmin,
@@ -24,24 +25,27 @@ module.exports = {
       }, { quoted: msg })
     }
 
-    // BOT puede activarse en grupos o privado
+    // BOT (grupo o privado)
     if (feature === 'bot') {
-      if (!isAdmin && !isOwner) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ Solo admins/owner pueden usar este comando.'
-        }, { quoted: msg })
-      }
+      if (fromGroup) {
+        if (!isAdmin && !isOwner) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ Solo admins/owner pueden usar este comando.'
+          }, { quoted: msg })
+        }
 
-      await db.setChat(remoteJid, {
-        botEnabled: true
-      })
+        await db.setGroupSetting(remoteJid, 'bot', true)
+
+      } else {
+        await db.setUserSetting(sender, 'bot', true)
+      }
 
       return sock.sendMessage(remoteJid, {
         text: '✅ *bot* activado.'
       }, { quoted: msg })
     }
 
-    // Resto solo grupos
+    // Otras funciones solo en grupos
     if (!fromGroup) {
       return sock.sendMessage(remoteJid, {
         text: '❌ Este comando solo funciona en grupos.'
@@ -62,9 +66,7 @@ module.exports = {
       }, { quoted: msg })
     }
 
-    await db.setGroup(remoteJid, {
-      [feature]: true
-    })
+    await db.setGroupSetting(remoteJid, feature, true)
 
     await sock.sendMessage(remoteJid, {
       text: `✅ *${feature}* activado.`
