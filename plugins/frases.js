@@ -64,9 +64,9 @@ ${historia}
   }
 };
 
-// 🔥 NUEVAS FRASES
-
-'Si volviera a nacer, te elegiría otra vez.',
+// 💖 100 FRASES REALES
+const frases = [
+'Eres la casualidad más bonita que llegó a mi vida.','Si volviera a nacer, te elegiría otra vez.',
 'Eres la parte bonita de mis días difíciles.',
 'No eres perfecto, pero eres perfecto para mí.',
 'Tu forma de existir ya me hace feliz.',
