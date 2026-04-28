@@ -13,7 +13,7 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    // 🔥 OBTENER PARTICIPANTES DEL GRUPO
+    // 🔥 OBTENER PARTICIPANTES
     let metadata;
     try {
       metadata = await sock.groupMetadata(remoteJid);
@@ -23,48 +23,43 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    const participants = metadata.participants.map(v => v.id);
+    let participants = metadata.participants.map(v => v.id);
 
-    // 🔥 FUNCIÓN RANDOM
-    const pick = () => participants[Math.floor(Math.random() * participants.length)];
+    // 🔥 EVITAR ERRORES SI HAY MENOS DE 10
+    if (participants.length < 2) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ No hay suficientes usuarios en el grupo'
+      }, { quoted: msg });
+    }
 
-    const a = pick();
-    const b = pick();
-    const c = pick();
-    const d = pick();
-    const e = pick();
-    const f = pick();
-    const g = pick();
-    const h = pick();
-    const i = pick();
-    const j = pick();
+    // 🔥 SHUFFLE (MEZCLAR ARRAY)
+    for (let i = participants.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [participants[i], participants[j]] = [participants[j], participants[i]];
+    }
+
+    // 🔥 TOMAR SOLO 10 SIN REPETIR
+    const top10 = participants.slice(0, 10);
 
     const emojiList = ['🤓','😅','😂','😳','😎','🥵','😱','🤑','🙄','💩','🍑','🤨','🥴','🔥','👇🏻','😔','👀','🌚'];
     const emoji = emojiList[Math.floor(Math.random() * emojiList.length)];
 
     const tag = (u) => '@' + u.split('@')[0];
 
-    const topText =
-`*${emoji} TOP 10 ${text.toUpperCase()} ${emoji}*
+    let textTop = `*${emoji} TOP 10 ${text.toUpperCase()} ${emoji}*\n\n`;
 
-🥇 1. ${tag(a)}
-🥈 2. ${tag(b)}
-🥉 3. ${tag(c)}
-4. ${tag(d)}
-5. ${tag(e)}
-6. ${tag(f)}
-7. ${tag(g)}
-8. ${tag(h)}
-9. ${tag(i)}
-10. ${tag(j)}`;
+    top10.forEach((user, i) => {
+      const pos = ['🥇','🥈','🥉'][i] || `${i + 1}.`;
+      textTop += `${pos} ${tag(user)}\n`;
+    });
 
-    // 🔥 ENVIAR MENSAJE CON MENCIONES
+    // 🔥 ENVIAR
     await sock.sendMessage(remoteJid, {
-      text: topText,
-      mentions: [a,b,c,d,e,f,g,h,i,j]
+      text: textTop,
+      mentions: top10
     }, { quoted: msg });
 
-    // 🔥 AUDIO RANDOM (OPCIONAL)
+    // 🔥 AUDIO OPCIONAL
     const k = Math.floor(Math.random() * 70);
     const vn = `https://hansxd.nasihosting.com/sound/sound${k}.mp3`;
 
