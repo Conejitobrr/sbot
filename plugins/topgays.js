@@ -1,5 +1,9 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
 module.exports = {
   commands: ['topgays', 'topotakus'],
 
@@ -24,7 +28,7 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    // 🔥 SHUFFLE (SIN REPETIR)
+    // 🔥 SHUFFLE SIN REPETIR
     for (let i = participants.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [participants[i], participants[j]] = [participants[j], participants[i]];
@@ -35,17 +39,16 @@ module.exports = {
     const tag = (u) => '@' + u.split('@')[0];
 
     let title = '';
-    let audioPath = '';
+    let inputFile = '';
 
-    // 🔥 COMANDOS
     if (command === 'topgays') {
       title = '🌈 TOP 10 GAYS/LESBIANAS DEL GRUPO 🌈';
-      audioPath = './media/gay2.mp3';
+      inputFile = 'gay2.mp3';
     }
 
     if (command === 'topotakus') {
       title = '🌸 TOP 10 OTAKUS DEL GRUPO 🌸';
-      audioPath = './media/otaku.mp3';
+      inputFile = 'otaku.mp3';
     }
 
     let textTop = `*${title}*\n\n`;
@@ -54,18 +57,30 @@ module.exports = {
       textTop += `*_ ${i + 1}.- ${tag(user)}_*\n`;
     });
 
-    // 🔥 ENVIAR MENSAJE
+    // 🔥 MENSAJE
     await sock.sendMessage(remoteJid, {
       text: textTop,
       mentions: top10
     }, { quoted: msg });
 
-    // 🔥 ENVIAR AUDIO
-    await sock.sendMessage(remoteJid, {
-      audio: { url: audioPath },
-      mimetype: 'audio/mpeg',
-      ptt: true
-    }, { quoted: msg });
+    // 🔥 CONVERTIR MP3 → OPUS (NOTA DE VOZ REAL)
+    try {
+      const inputPath = path.join(process.cwd(), 'media', inputFile);
+      const outputPath = inputPath.replace('.mp3', '.opus');
 
+      // convertir con ffmpeg
+      execSync(`ffmpeg -y -i "${inputPath}" -vn -c:a libopus "${outputPath}"`);
+
+      const buffer = fs.readFileSync(outputPath);
+
+      await sock.sendMessage(remoteJid, {
+        audio: buffer,
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: true // 🔥 nota de voz real
+      }, { quoted: msg });
+
+    } catch (e) {
+      console.log('❌ Error convirtiendo/enviando audio:', e.message);
+    }
   }
 };
