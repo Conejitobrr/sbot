@@ -1,6 +1,8 @@
 'use strict';
 
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const FormData = require('form-data');
+const fetch = require('node-fetch');
 
 module.exports = {
   commands: ['toanime', 'jadianime'],
@@ -9,7 +11,6 @@ module.exports = {
     const { sock, msg, remoteJid } = ctx;
 
     try {
-      // 📌 detectar mensaje citado o actual
       const quoted = msg.message?.extendedTextMessage?.contextInfo;
       const message = quoted?.quotedMessage || msg.message;
 
@@ -31,8 +32,8 @@ module.exports = {
 
       // 📥 descargar imagen
       const stream = await downloadContentFromMessage(media, 'image');
-
       let buffer = Buffer.from([]);
+
       for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
       }
@@ -47,21 +48,24 @@ module.exports = {
         text: '🎨 Convirtiendo a anime...'
       }, { quoted: msg });
 
-      // 🔥 subir imagen a algún host simple
-      const upload = await fetch('https://api.imgbb.com/1/upload?key=free', {
-        method: 'POST',
-        body: new URLSearchParams({
-          image: buffer.toString('base64')
-        })
-      }).then(res => res.json()).catch(() => null);
+      // 🔥 SUBIR A TELEGRAPH (MUCHO MÁS ESTABLE)
+      const form = new FormData();
+      form.append('file', buffer, 'image.jpg');
 
-      if (!upload?.data?.url) {
+      const res = await fetch('https://telegra.ph/upload', {
+        method: 'POST',
+        body: form
+      });
+
+      const json = await res.json();
+
+      if (!json[0]?.src) {
         return sock.sendMessage(remoteJid, {
           text: '❌ Error subiendo imagen'
         }, { quoted: msg });
       }
 
-      const imageUrl = upload.data.url;
+      const imageUrl = 'https://telegra.ph' + json[0].src;
 
       // 🔥 APIs (fallback)
       const apis = [
