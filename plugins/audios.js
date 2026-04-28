@@ -2,35 +2,21 @@
 
 const fs = require('fs')
 const path = require('path')
-const db = require('../lib/database')
 
 module.exports = {
   async onMessage(ctx) {
-    const {
-      sock,
-      remoteJid,
-      body,
-      msg,
-      fromGroup,
-      sender
-    } = ctx
+    const { sock, remoteJid, body, msg } = ctx
 
     if (!body) return
-
-    // Verificar si audios están habilitados
-    const audiosEnabled = fromGroup
-      ? await db.getGroupSetting(remoteJid, 'audios')
-      : await db.getUserSetting(sender, 'audios')
-
-    if (audiosEnabled === false) return
 
     const text = body.toLowerCase()
 
     const audios = {
-      hola: 'hola.mp3',
-      autoestima: 'autoestima.mp3'
+      'hola': 'hola.mp3',
+      'autoestima': 'autoestima.mp3'
     }
 
+    // 🔍 buscar si contiene la palabra clave
     const key = Object.keys(audios).find(k => text.includes(k))
     if (!key) return
 
@@ -40,16 +26,11 @@ module.exports = {
 
     const audio = fs.readFileSync(filePath)
 
-    await sock.sendMessage(
-      remoteJid,
-      {
-        audio,
-        mimetype: 'audio/mpeg',
-        ptt: true
-      },
-      {
-        quoted: msg
-      }
-    )
+    await sock.sendMessage(remoteJid, {
+      audio,
+      mimetype: 'audio/mpeg',
+      ptt: true, // 🎙️ nota de voz
+      quoted: msg // ✅ RESPONDE al mensaje
+    })
   }
 }
