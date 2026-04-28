@@ -12,6 +12,9 @@ module.exports = {
     const end = performance.now();
     const executionTime = (end - start).toFixed(2);
 
+    // 🔥 FIX: asegurar body
+    const text = (body && typeof body === 'string') ? body.trim() : '';
+
     function randIP() {
       return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
     }
@@ -23,7 +26,7 @@ module.exports = {
     const ipAddress = randIP();
 
     const fakeData = {
-      name_tag: body.replace(/^\.\w+\s*/i, '') || sender.split('@')[0],
+      name_tag: text.replace(/^\.\w+\s*/i, '') || sender.split('@')[0],
       ip: randIP(),
       fakeCameraLink: `http://${ipAddress}.com/camera-feed`,
       n: Math.floor(Math.random() * 100000),
@@ -95,7 +98,6 @@ module.exports = {
 *MAC EXT:* ${fakeData.externalMac}
 *MODEM JUMPS:* ${fakeData.modemJumps}`;
 
-    // 🔥 animación tipo original
     const loading = [
       "《 █▒▒▒▒▒▒▒▒▒▒▒》10%",
       "《 ████▒▒▒▒▒▒▒▒》30%",
