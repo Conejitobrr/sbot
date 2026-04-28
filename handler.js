@@ -231,15 +231,49 @@ async function messageHandler(sock, msg, store) {
         if (botEnabled === false && command !== 'enable' && command !== 'disable') {
           return
         }
+
+        // 🔥 FIX AUDIOS GROUP
+        const audiosEnabled = await db.getGroupSetting(remoteJid, 'audios')
+        if (audiosEnabled === false && plugin?.onMessage) {
+          return
+        }
+
       } else {
         const botEnabled = await db.getUserSetting(sender, 'bot')
         if (botEnabled === false && command !== 'enable' && command !== 'disable') {
           return
         }
+
+        // 🔥 FIX AUDIOS USER
+        const audiosEnabled = await db.getUserSetting(sender, 'audios')
+        if (audiosEnabled === false && plugin?.onMessage) {
+          return
+        }
       }
     }
 
-    // EJECUTAR PLUGIN
+    // ═══════════════════════════════════════
+    // GLOBAL AUDIOS TRIGGER
+    // ═══════════════════════════════════════
+    for (const plugin of new Set(plugins.values())) {
+      if (typeof plugin.onMessage === 'function') {
+        try {
+          await plugin.onMessage({
+            sock,
+            msg,
+            remoteJid,
+            sender,
+            body,
+            pushName,
+            fromGroup
+          })
+        } catch (e) {
+          console.log('❌ Error audios:', e?.message || e)
+        }
+      }
+    }
+
+    // EJECUTAR PLUGIN (COMANDOS)
     try {
       await plugin.execute({
         sock,
