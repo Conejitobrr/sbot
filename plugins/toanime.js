@@ -2,7 +2,6 @@
 
 const axios = require('axios');
 const FormData = require('form-data');
-const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
   commands: ['toanime', 'jadianime'],
@@ -11,57 +10,66 @@ module.exports = {
     const { sock, msg, remoteJid } = ctx;
 
     try {
-      const m = msg.message || {};
+      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+      const message = quoted ? { message: quoted } : msg;
 
-      // 🔥 detectar imagen (directa o reply)
-      let imageMessage =
-        m.imageMessage ||
-        m.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+      const mime =
+        message.message?.imageMessage?.mimetype ||
+        msg.message?.imageMessage?.mimetype;
 
-      if (!imageMessage) {
+      if (!mime || !/image/.test(mime)) {
         return await sock.sendMessage(remoteJid, {
-          text: '❌ Responde o envía una imagen'
+          text: '⚠️ Responde a una imagen o envía una imagen con el comando.'
         }, { quoted: msg });
       }
 
-      await sock.sendMessage(remoteJid, {
-        text: '🎨 Convirtiendo a anime...'
-      }, { quoted: msg });
-
-      // 📥 descargar imagen correctamente
-      const stream = await downloadContentFromMessage(imageMessage, 'image');
+      // 🔥 descargar imagen correctamente (BAILEYS)
+      const stream = await require('@whiskeysockets/baileys').downloadContentFromMessage(
+        message.message.imageMessage,
+        'image'
+      );
 
       let buffer = Buffer.from([]);
       for await (const chunk of stream) {
         buffer = Buffer.concat([buffer, chunk]);
       }
 
-      // 📤 subir a Catbox
+      // 🔥 subir a Catbox (ESTABLE)
       const form = new FormData();
       form.append('fileToUpload', buffer, 'image.jpg');
       form.append('reqtype', 'fileupload');
 
-      const upload = await axios.post(
-        'https://catbox.moe/user/api.php',
-        form,
-        { headers: form.getHeaders() }
-      );
+      const upload = await axios.post('https://catbox.moe/user/api.php', form, {
+        headers: form.getHeaders()
+      });
 
       const imageUrl = upload.data;
 
-      // 🎌 API anime
-      const api = `https://api.nekorinn.my.id/tools/toanime?url=${encodeURIComponent(imageUrl)}`;
+      // 🔥 API PRINCIPAL
+      let api = `https://api.itsrose.life/image/anime?url=${encodeURIComponent(imageUrl)}`;
+
+      try {
+        await sock.sendMessage(remoteJid, {
+          image: { url: api },
+          caption: '✨ Aquí tienes tu imagen estilo anime'
+        }, { quoted: msg });
+
+      } catch (err) {
+
+        // 🔥 FALLBACK AUTOMÁTICO
+        const backup = `https://api.popcat.xyz/waifu?image=${encodeURIComponent(imageUrl)}`;
+
+        await sock.sendMessage(remoteJid, {
+          image: { url: backup },
+          caption: '✨ (Modo respaldo) Imagen estilo anime'
+        }, { quoted: msg });
+      }
+
+    } catch (e) {
+      console.log('Error en toanime:', e);
 
       await sock.sendMessage(remoteJid, {
-        image: { url: api },
-        caption: '✨ Aquí tienes tu imagen estilo anime'
-      }, { quoted: msg });
-
-    } catch (err) {
-      console.log('Error en toanime:', err);
-
-      await sock.sendMessage(remoteJid, {
-        text: '❌ Error al convertir la imagen'
+        text: '❌ Error al convertir la imagen a anime.'
       }, { quoted: msg });
     }
   }
