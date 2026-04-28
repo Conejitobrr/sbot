@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 module.exports = {
   commands: ['gay'],
@@ -37,17 +38,26 @@ module.exports = {
 
     // 🔥 ENVIAR AUDIO COMO NOTA DE VOZ REAL
     try {
-      const audioPath = path.join(process.cwd(), 'media', 'gay2.mp3');
-      const buffer = fs.readFileSync(audioPath);
+      const input = path.join(process.cwd(), 'media', 'gay2.mp3');
+      const output = path.join(process.cwd(), 'media', 'gay2.ogg');
+
+      // 🔥 CONVERTIR MP3 → OGG OPUS
+      execSync(`ffmpeg -i "${input}" -vn -c:a libopus -b:a 128k "${output}" -y`);
+
+      const buffer = fs.readFileSync(output);
 
       await sock.sendMessage(remoteJid, {
         audio: buffer,
-        mimetype: 'audio/mpeg',
-        ptt: true // 🎤 nota de voz
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: true
       }, { quoted: msg });
 
     } catch (e) {
       console.log('❌ Error audio:', e.message);
+
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error al convertir el audio'
+      }, { quoted: msg });
     }
 
   }
