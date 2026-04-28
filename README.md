@@ -14,7 +14,7 @@ do
 
   echo "❌ El bot se detuvo o se cayó"
   echo "🔄 Reiniciando en 5 segundos..."
-  sleep 5
+  sleep 2
 done
 ```
 
