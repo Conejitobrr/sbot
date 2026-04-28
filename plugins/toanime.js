@@ -24,7 +24,7 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 🔥 descargar imagen
+      // 🔥 descargar imagen correctamente
       const stream = await downloadContentFromMessage(
         message.message.imageMessage,
         'image'
@@ -35,7 +35,7 @@ module.exports = {
         buffer = Buffer.concat([buffer, chunk]);
       }
 
-      // 🔥 subir a Catbox
+      // 🔥 subir a Catbox (estable)
       const form = new FormData();
       form.append('fileToUpload', buffer, 'image.jpg');
       form.append('reqtype', 'fileupload');
@@ -48,42 +48,25 @@ module.exports = {
 
       const imageUrl = upload.data;
 
-      // 🔥 APIs (ordenadas por estabilidad)
-      const apis = [
-        `https://api.popcat.xyz/waifu?image=${encodeURIComponent(imageUrl)}`,
-        `https://api.itsrose.life/image/anime?url=${encodeURIComponent(imageUrl)}`
-      ];
+      // 🔥 API QUE SÍ FUNCIONA (devuelve imagen directa)
+      const api = `https://api.popcat.xyz/waifu?image=${encodeURIComponent(imageUrl)}`;
 
-      let success = false;
+      // 🔥 descargar resultado como BUFFER (NO URL)
+      const res = await axios.get(api, { responseType: 'arraybuffer' });
 
-      for (const api of apis) {
-        try {
-          await sock.sendMessage(remoteJid, {
-            image: { url: api },
-            caption: '✨ Imagen estilo anime'
-          }, { quoted: msg });
+      const animeBuffer = Buffer.from(res.data);
 
-          success = true;
-          break;
-
-        } catch (err) {
-          console.log('API falló:', api);
-        }
-      }
-
-      // 🔥 SI TODAS FALLAN → ENVÍA ORIGINAL
-      if (!success) {
-        await sock.sendMessage(remoteJid, {
-          image: buffer,
-          caption: '⚠️ No se pudo convertir, pero aquí está tu imagen original.'
-        }, { quoted: msg });
-      }
+      // 🔥 enviar imagen REAL (no link)
+      await sock.sendMessage(remoteJid, {
+        image: animeBuffer,
+        caption: '✨ Imagen estilo anime'
+      }, { quoted: msg });
 
     } catch (e) {
       console.log('Error en toanime:', e);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al procesar la imagen.'
+        text: '❌ No se pudo convertir la imagen (API caída o inválida).'
       }, { quoted: msg });
     }
   }
