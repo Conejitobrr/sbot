@@ -25,18 +25,8 @@ module.exports = {
     // 🔥 prioridad: mencionado > reply > yo
     const target = mentioned[0] || quotedSender || sender;
 
-    // 🔥 obtener nombre real
-    let realName = '';
-    try {
-      realName = await sock.getName(target);
-    } catch {
-      realName = target.split('@')[0];
-    }
-
-    // 🔥 nombre visible mejorado
-    const nameTag = target
-      ? `${realName} (@${target.split('@')[0]})`
-      : 'Desconocido';
+    // 🔥 nombre visible correcto (@usuario)
+    const nameTag = target ? `@${target.split('@')[0]}` : 'Desconocido';
 
     function randIP() {
       return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
@@ -133,7 +123,7 @@ module.exports = {
     await sock.sendMessage(remoteJid, {
       text: doxeo,
       edit: sent.key,
-      mentions: [target]
+      mentions: [target] // 🔥 CLAVE
     });
   }
 };
