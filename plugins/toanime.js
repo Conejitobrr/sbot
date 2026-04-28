@@ -2,6 +2,7 @@
 
 const axios = require('axios');
 const FormData = require('form-data');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
   commands: ['toanime', 'jadianime'],
@@ -10,11 +11,14 @@ module.exports = {
     const { sock, msg, remoteJid } = ctx;
 
     try {
-      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-      const isQuotedImage = quoted?.imageMessage;
-      const isImage = msg.message?.imageMessage;
+      const m = msg.message || {};
 
-      if (!isImage && !isQuotedImage) {
+      // 🔥 detectar imagen (directa o reply)
+      let imageMessage =
+        m.imageMessage ||
+        m.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+
+      if (!imageMessage) {
         return await sock.sendMessage(remoteJid, {
           text: '❌ Responde o envía una imagen'
         }, { quoted: msg });
@@ -24,10 +28,15 @@ module.exports = {
         text: '🎨 Convirtiendo a anime...'
       }, { quoted: msg });
 
-      // 📥 descargar imagen
-      const buffer = await sock.downloadMediaMessage(msg);
+      // 📥 descargar imagen correctamente
+      const stream = await downloadContentFromMessage(imageMessage, 'image');
 
-      // 📤 subir a Catbox (MUCHO más estable)
+      let buffer = Buffer.from([]);
+      for await (const chunk of stream) {
+        buffer = Buffer.concat([buffer, chunk]);
+      }
+
+      // 📤 subir a Catbox
       const form = new FormData();
       form.append('fileToUpload', buffer, 'image.jpg');
       form.append('reqtype', 'fileupload');
@@ -40,7 +49,7 @@ module.exports = {
 
       const imageUrl = upload.data;
 
-      // 🎌 API ANIME (estable)
+      // 🎌 API anime
       const api = `https://api.nekorinn.my.id/tools/toanime?url=${encodeURIComponent(imageUrl)}`;
 
       await sock.sendMessage(remoteJid, {
