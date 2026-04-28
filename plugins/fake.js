@@ -4,32 +4,42 @@ module.exports = {
   commands: ['fake'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid, sender } = ctx;
+    const { sock, msg, remoteJid } = ctx;
 
     try {
-      const text = msg.message?.conversation || 
+      const text = msg.message?.conversation ||
                    msg.message?.extendedTextMessage?.text || '';
 
-      if (!text) {
+      const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+
+      if (!text || !mentioned.length) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Escribe el texto\nEjemplo: .fake Soy gay | No sabía :0'
+          text: '❌ Usa: .fake @usuario texto | respuesta'
         }, { quoted: msg });
       }
 
-      // separar mensaje fake y respuesta
-      let [fakeText, replyText] = text.split('|').map(v => v.trim());
+      // quitar comando
+      const clean = text.replace(/\.fake\s*/i, '').trim();
+
+      let [fakeText, replyText] = clean.split('|').map(v => v.trim());
 
       if (!fakeText || !replyText) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Usa: .fake textoFake | respuesta'
+          text: '❌ Formato: .fake @usuario texto | respuesta'
         }, { quoted: msg });
       }
 
-      // 🧠 crear mensaje falso (como si fuera otra persona)
+      // 🧠 usar el usuario mencionado
+      const user = mentioned[0];
+
+      // ❌ quitar @usuario del texto fake
+      fakeText = fakeText.replace(/@\S+/g, '').trim();
+
+      // 🧠 mensaje falso REALISTA
       const fakeQuoted = {
         key: {
           fromMe: false,
-          participant: '1234567890@s.whatsapp.net', // 👤 número fake
+          participant: user,
           remoteJid
         },
         message: {
@@ -37,9 +47,10 @@ module.exports = {
         }
       };
 
-      // 📩 enviar respuesta citando el fake
+      // 📩 respuesta citando al usuario mencionado
       await sock.sendMessage(remoteJid, {
-        text: replyText
+        text: replyText,
+        mentions: [user]
       }, { quoted: fakeQuoted });
 
     } catch (e) {
