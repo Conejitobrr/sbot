@@ -1,5 +1,7 @@
 'use strict';
 
+const axios = require('axios');
+
 module.exports = {
   commands: ['logocorazon', 'logochristmas'],
 
@@ -14,41 +16,43 @@ module.exports = {
 `❌ Debes escribir un texto
 
 Ejemplo:
-.logocorazon Sirius
-.logochristmas Sirius`
+.logocorazon Sirius`
       }, { quoted: msg });
     }
 
     try {
       await sock.sendMessage(remoteJid, {
-        text: '🎨 Generando diseño, espera un momento...'
+        text: '🎨 Generando logo...'
       }, { quoted: msg });
 
-      let imageUrl = '';
+      let url = '';
 
+      // 🔥 API QUE SÍ FUNCIONA
       if (command === 'logocorazon') {
-        imageUrl =
-`https://api.neoxr.eu/api/textpro/heart-flashlight?text=${encodeURIComponent(text)}&apikey=demo`;
+        url = `https://api.erdwpe.com/api/maker/heart?text=${encodeURIComponent(text)}`;
       }
 
       if (command === 'logochristmas') {
-        imageUrl =
-`https://api.neoxr.eu/api/textpro/christmas?text=${encodeURIComponent(text)}&apikey=demo`;
+        url = `https://api.erdwpe.com/api/maker/christmas?text=${encodeURIComponent(text)}`;
       }
 
-      await sock.sendMessage(remoteJid, {
-        image: { url: imageUrl },
-        caption:
-`✨ Logo generado correctamente
+      // 🔥 DESCARGAR COMO BUFFER (CLAVE)
+      const res = await axios.get(url, {
+        responseType: 'arraybuffer'
+      });
 
-📝 Texto: ${text}`
+      const buffer = Buffer.from(res.data);
+
+      await sock.sendMessage(remoteJid, {
+        image: buffer,
+        caption: `✨ Logo generado:\n${text}`
       }, { quoted: msg });
 
     } catch (e) {
       console.log('Error logo:', e.message);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al generar el logo'
+        text: '❌ Error al generar el logo (API caída o inválida)'
       }, { quoted: msg });
     }
   }
