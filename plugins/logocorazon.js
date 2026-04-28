@@ -1,8 +1,8 @@
 'use strict';
 
-import { Maker } from 'imagemaker.js';
+const { Maker } = require('imagemaker.js');
 
-export default {
+module.exports = {
   commands: ['logocorazon', 'logochristmas'],
 
   async execute(ctx) {
@@ -16,7 +16,7 @@ export default {
     }
 
     try {
-      // 🔥 MENSAJE DE CARGA
+      // ⏳ Mensaje de carga
       await sock.sendMessage(remoteJid, {
         text: '⏳ Creando diseño, espera...'
       }, { quoted: msg });
@@ -39,12 +39,11 @@ export default {
         );
       }
 
-      // 🔥 VALIDAR RESPUESTA
       if (!result || !result.imageUrl) {
-        throw 'No se pudo generar la imagen';
+        throw new Error('No se pudo generar la imagen');
       }
 
-      // 🔥 ENVIAR IMAGEN
+      // 📸 Enviar imagen
       await sock.sendMessage(remoteJid, {
         image: { url: result.imageUrl },
         caption: '✨ Aquí tienes tu diseño'
