@@ -222,7 +222,24 @@ async function messageHandler(sock, msg, store) {
     const isPremium =
       (await db.isPremium?.(sender).catch(() => false)) || isOwner
 
-    // 🔥 FIX: proteger plugins
+    // ═══════════════════════════════════════
+    // BOT ENABLE / DISABLE CHECK
+    // ═══════════════════════════════════════
+    if (!isOwner) {
+      if (fromGroup) {
+        const botEnabled = await db.getGroupSetting(remoteJid, 'bot')
+        if (botEnabled === false && command !== 'enable' && command !== 'disable') {
+          return
+        }
+      } else {
+        const botEnabled = await db.getUserSetting(sender, 'bot')
+        if (botEnabled === false && command !== 'enable' && command !== 'disable') {
+          return
+        }
+      }
+    }
+
+    // EJECUTAR PLUGIN
     try {
       await plugin.execute({
         sock,
