@@ -1,54 +1,59 @@
+
 'use strict';
 
 module.exports = {
-  commands: ['formarpareja'],
+  commands: ['formarpareja', 'pareja', 'ship'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid, fromGroup } = ctx;
-
-    if (!fromGroup) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Este comando solo funciona en grupos'
-      }, { quoted: msg });
-    }
+    const { sock, msg, remoteJid } = ctx;
 
     try {
-      // 🔥 obtener participantes del grupo
       const metadata = await sock.groupMetadata(remoteJid);
       const participants = metadata.participants.map(p => p.id);
 
       if (participants.length < 2) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ No hay suficientes personas en el grupo'
+          text: '❌ No hay suficientes personas'
         }, { quoted: msg });
       }
 
-      // 🔥 función random
-      const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
-      // 🔥 elegir 2 personas distintas
-      const a = getRandom(participants);
+      // 🎲 elegir 2 distintos
+      const a = participants[Math.floor(Math.random() * participants.length)];
       let b;
 
       do {
-        b = getRandom(participants);
+        b = participants[Math.floor(Math.random() * participants.length)];
       } while (b === a);
 
-      // 🔥 formato @usuario
-      const toM = (jid) => '@' + jid.split('@')[0];
+      const userA = `@${a.split('@')[0]}`;
+      const userB = `@${b.split('@')[0]}`;
 
-      const text = `*${toM(a)}, 𝙳𝙴𝙱𝙴𝚁𝙸𝙰𝚂 𝙲𝙰𝚂𝙰𝚁𝚃𝙴 💍 𝙲𝙾𝙽 ${toM(b)}, 𝙷𝙰𝙲𝙴𝙽 𝚄𝙽𝙰 𝙱𝚄𝙴𝙽𝙰 𝙿𝙰𝚁𝙴𝙹𝙰 💓*`;
+      // 💬 FRASES (incluye la original como principal)
+      const frases = [
+        `💍 ${userA}, deberías casarte con ${userB}, hacen una buena pareja 💓`, // ⭐ PRINCIPAL
+        `💘 ${userA} y ${userB} hacen una pareja perfecta 😍`,
+        `🔥 Entre ${userA} y ${userB} hay química 👀`,
+        `😏 ${userA} no lo niegues… ${userB} te gusta`,
+        `💕 ${userA} + ${userB} = amor confirmado`,
+        `🥰 ${userA} y ${userB} ya deberían estar juntos`,
+        `💓 Se siente la tensión entre ${userA} y ${userB}`,
+        `👀 Todos sabemos que ${userA} y ${userB} hacen match`,
+        `💖 ${userA} encontró a su media naranja: ${userB}`,
+        `😳 ${userA} y ${userB}... esto ya es sospechoso`
+      ];
+
+      const mensaje = frases[Math.floor(Math.random() * frases.length)];
 
       await sock.sendMessage(remoteJid, {
-        text,
+        text: mensaje,
         mentions: [a, b]
       }, { quoted: msg });
 
-    } catch (e) {
-      console.log('❌ ERROR formarpareja:', e);
+    } catch (err) {
+      console.log('❌ Error en pareja:', err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al formar la pareja'
+        text: '❌ Error al formar pareja'
       }, { quoted: msg });
     }
   }
