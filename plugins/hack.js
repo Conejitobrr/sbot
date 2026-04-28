@@ -12,8 +12,19 @@ module.exports = {
     const end = performance.now();
     const executionTime = (end - start).toFixed(2);
 
-    // 🔥 FIX: asegurar body
+    // 🔥 FIX body
     const text = (body && typeof body === 'string') ? body.trim() : '';
+
+    // 🔥 detectar mencionado
+    const mentioned =
+      msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+
+    // 🔥 detectar reply
+    const quotedSender =
+      msg.message?.extendedTextMessage?.contextInfo?.participant || null;
+
+    // 🔥 prioridad: mencionado > reply > yo
+    const target = mentioned[0] || quotedSender || sender;
 
     function randIP() {
       return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
@@ -26,7 +37,11 @@ module.exports = {
     const ipAddress = randIP();
 
     const fakeData = {
-      name_tag: text.replace(/^\.\w+\s*/i, '') || sender.split('@')[0],
+      name_tag:
+        mentioned[0] || quotedSender
+          ? `@${target.split('@')[0]}`
+          : text.replace(/^\.\w+\s*/i, '') || sender.split('@')[0],
+
       ip: randIP(),
       fakeCameraLink: `http://${ipAddress}.com/camera-feed`,
       n: Math.floor(Math.random() * 100000),
@@ -74,23 +89,11 @@ module.exports = {
 
 *Nombre:* ${fakeData.name_tag}
 *Ip:* ${fakeData.ip}
-*N:* ${fakeData.n}
-*W:* ${fakeData.w}
-*SS NUMBER:* ${fakeData.ssNumber}
-*CAMARA:* ${fakeData.fakeCameraLink}
-*IPV6:* ${fakeData.ipv6}
-*UPNP:* ${fakeData.upnp}
-*DMZ:* ${fakeData.dmz}
-*MAC:* ${fakeData.mac}
 *ISP:* ${fakeData.isp}
+*MAC:* ${fakeData.mac}
 *DNS:* ${fakeData.dns}
-*ALT DNS:* ${fakeData.altDns}
 *WAN:* ${fakeData.wan}
 *GATEWAY:* ${fakeData.gateway}
-*SUBNET:* ${fakeData.subnetMask}
-*UDP PORTS:* ${fakeData.udpOpenPorts}
-*TCP PORTS:* ${fakeData.tcpOpenPorts}
-*ROUTER:* ${fakeData.routerVendor}
 *DEVICE:* ${fakeData.deviceVendor}
 *CONNECTION:* ${fakeData.connectionType}
 *HTTP:* ${fakeData.http}
@@ -121,7 +124,8 @@ module.exports = {
 
     await sock.sendMessage(remoteJid, {
       text: doxeo,
-      edit: sent.key
+      edit: sent.key,
+      mentions: (mentioned[0] || quotedSender) ? [target] : []
     });
   }
 };
