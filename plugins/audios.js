@@ -16,21 +16,28 @@ module.exports = {
       'autoestima': 'autoestima.mp3'
     }
 
-    // 🔍 buscar si contiene la palabra clave
     const key = Object.keys(audios).find(k => text.includes(k))
     if (!key) return
 
-    const filePath = path.join(__dirname, '../media', audios[key])
+    const filePath = path.resolve(__dirname, '../media', audios[key])
 
-    if (!fs.existsSync(filePath)) return
+    // 🔥 DEBUG SILENCIOSO (quita después si quieres)
+    console.log('🎧 AUDIO CHECK:', key, filePath)
 
-    const audio = fs.readFileSync(filePath)
+    if (!fs.existsSync(filePath)) {
+      console.log('❌ Audio no encontrado:', filePath)
+      return
+    }
 
-    await sock.sendMessage(remoteJid, {
-      audio,
-      mimetype: 'audio/mpeg',
-      ptt: true, // 🎙️ nota de voz
-      quoted: msg // ✅ RESPONDE al mensaje
-    })
+    try {
+      await sock.sendMessage(remoteJid, {
+        audio: { url: filePath },
+        mimetype: 'audio/mpeg',
+        ptt: true,
+        quoted: msg
+      })
+    } catch (err) {
+      console.log('❌ Error enviando audio:', err?.message || err)
+    }
   }
 }
