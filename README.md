@@ -1,4 +1,4 @@
-agregar al bot para que no se detenga
+Agregar al repositorio clonado del bot en termux para que no se detenga
 
 ```bash
 nano start.sh
