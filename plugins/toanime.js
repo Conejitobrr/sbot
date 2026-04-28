@@ -2,6 +2,7 @@
 
 const axios = require('axios');
 const FormData = require('form-data');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 module.exports = {
   commands: ['toanime', 'jadianime'],
@@ -23,8 +24,8 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 🔥 descargar imagen correctamente (BAILEYS)
-      const stream = await require('@whiskeysockets/baileys').downloadContentFromMessage(
+      // 🔥 descargar imagen
+      const stream = await downloadContentFromMessage(
         message.message.imageMessage,
         'image'
       );
@@ -34,34 +35,47 @@ module.exports = {
         buffer = Buffer.concat([buffer, chunk]);
       }
 
-      // 🔥 subir a Catbox (ESTABLE)
+      // 🔥 subir a Catbox
       const form = new FormData();
       form.append('fileToUpload', buffer, 'image.jpg');
       form.append('reqtype', 'fileupload');
 
-      const upload = await axios.post('https://catbox.moe/user/api.php', form, {
-        headers: form.getHeaders()
-      });
+      const upload = await axios.post(
+        'https://catbox.moe/user/api.php',
+        form,
+        { headers: form.getHeaders() }
+      );
 
       const imageUrl = upload.data;
 
-      // 🔥 API PRINCIPAL
-      let api = `https://api.itsrose.life/image/anime?url=${encodeURIComponent(imageUrl)}`;
+      // 🔥 APIs (ordenadas por estabilidad)
+      const apis = [
+        `https://api.popcat.xyz/waifu?image=${encodeURIComponent(imageUrl)}`,
+        `https://api.itsrose.life/image/anime?url=${encodeURIComponent(imageUrl)}`
+      ];
 
-      try {
+      let success = false;
+
+      for (const api of apis) {
+        try {
+          await sock.sendMessage(remoteJid, {
+            image: { url: api },
+            caption: '✨ Imagen estilo anime'
+          }, { quoted: msg });
+
+          success = true;
+          break;
+
+        } catch (err) {
+          console.log('API falló:', api);
+        }
+      }
+
+      // 🔥 SI TODAS FALLAN → ENVÍA ORIGINAL
+      if (!success) {
         await sock.sendMessage(remoteJid, {
-          image: { url: api },
-          caption: '✨ Aquí tienes tu imagen estilo anime'
-        }, { quoted: msg });
-
-      } catch (err) {
-
-        // 🔥 FALLBACK AUTOMÁTICO
-        const backup = `https://api.popcat.xyz/waifu?image=${encodeURIComponent(imageUrl)}`;
-
-        await sock.sendMessage(remoteJid, {
-          image: { url: backup },
-          caption: '✨ (Modo respaldo) Imagen estilo anime'
+          image: buffer,
+          caption: '⚠️ No se pudo convertir, pero aquí está tu imagen original.'
         }, { quoted: msg });
       }
 
@@ -69,7 +83,7 @@ module.exports = {
       console.log('Error en toanime:', e);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al convertir la imagen a anime.'
+        text: '❌ Error al procesar la imagen.'
       }, { quoted: msg });
     }
   }
