@@ -59,15 +59,5 @@ module.exports = {
       mentions: top10
     }, { quoted: msg });
 
-    // 🔥 AUDIO OPCIONAL
-    const k = Math.floor(Math.random() * 70);
-    const vn = `https://hansxd.nasihosting.com/sound/sound${k}.mp3`;
-
-    await sock.sendMessage(remoteJid, {
-      audio: { url: vn },
-      mimetype: 'audio/mpeg',
-      ptt: true
-    }, { quoted: msg });
-
   }
 };
