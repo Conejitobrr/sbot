@@ -1,53 +1,50 @@
 'use strict';
 
-const { Maker } = require('imagemaker.js');
+const fetch = require('node-fetch');
 
 module.exports = {
   commands: ['logocorazon', 'logochristmas'],
 
   async execute(ctx) {
-    const { sock, remoteJid, msg, args, command } = ctx;
+    const { sock, remoteJid, msg, command, args } = ctx;
 
     const text = args.join(' ');
     if (!text) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Ingresa un texto\n\nEjemplo:\n.logocorazon Sirius'
+        text: '❌ Escribe un texto\nEjemplo:\n.logocorazon Sirius'
       }, { quoted: msg });
     }
 
-    const response = text.split('|');
-
     try {
-      // 🔥 MENSAJE DE ESPERA
       await sock.sendMessage(remoteJid, {
-        text: '⏳ Elaborando diseño, espera un momento...'
+        text: '🎨 Creando diseño... espera un momento'
       }, { quoted: msg });
 
-      let result;
+      let apiUrl = '';
 
-      // ❤️ LOGO CORAZÓN
+      // 🔥 APIs alternativas (más estables)
       if (command === 'logocorazon') {
-        result = await new Maker().Ephoto360(
-          'https://en.ephoto360.com/text-heart-flashlight-188.html',
-          [response[0]]
-        );
+        apiUrl = `https://api.popcat.xyz/text2heart?text=${encodeURIComponent(text)}`;
       }
 
-      // 🎄 LOGO NAVIDAD
       if (command === 'logochristmas') {
-        result = await new Maker().Ephoto360(
-          'https://en.ephoto360.com/christmas-effect-by-name-376.html',
-          [response[0]]
-        );
+        apiUrl = `https://api.popcat.xyz/christmas?text=${encodeURIComponent(text)}`;
       }
 
-      // 🔥 ENVIAR IMAGEN
+      // ⚠️ Si la API falla, fallback
+      if (!apiUrl) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Error generando imagen'
+        }, { quoted: msg });
+      }
+
       await sock.sendMessage(remoteJid, {
-        image: { url: result.imageUrl }
+        image: { url: apiUrl },
+        caption: `✨ Logo generado:\n${text}`
       }, { quoted: msg });
 
     } catch (e) {
-      console.log('❌ Error logo:', e.message);
+      console.log('Error logo:', e);
 
       await sock.sendMessage(remoteJid, {
         text: '❌ Error al generar el logo, intenta nuevamente'
