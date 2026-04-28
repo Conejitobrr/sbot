@@ -21,12 +21,12 @@ module.exports = {
 
     if (!feature) {
       return sock.sendMessage(remoteJid, {
-        text: 'Uso:\n.disable bot\n.disable welcome'
+        text: 'Uso:\n.disable bot\n.disable welcome\n.disable audios'
       }, { quoted: msg })
     }
 
-    // BOT (grupo o privado)
-    if (feature === 'bot') {
+    // BOT / AUDIOS (grupo o privado)
+    if (feature === 'bot' || feature === 'audios') {
       if (fromGroup) {
         if (!isAdmin && !isOwner) {
           return sock.sendMessage(remoteJid, {
@@ -34,14 +34,14 @@ module.exports = {
           }, { quoted: msg })
         }
 
-        await db.setGroupSetting(remoteJid, 'bot', false)
+        await db.setGroupSetting(remoteJid, feature, false)
 
       } else {
-        await db.setUserSetting(sender, 'bot', false)
+        await db.setUserSetting(sender, feature, false)
       }
 
       return sock.sendMessage(remoteJid, {
-        text: '✅ *bot* desactivado.'
+        text: `✅ *${feature}* desactivado.`
       }, { quoted: msg })
     }
 
