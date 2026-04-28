@@ -5,7 +5,7 @@ const fs = require('fs')
 const chalk = require('chalk')
 const config = require('./config')
 const db = require('./lib/database')
-const trivia = require('./lib/trivia') // 👈 IMPORTANTE
+const trivia = require('./lib/trivia')
 
 const {
   getBody,
@@ -105,10 +105,7 @@ async function messageHandler(sock, msg, store) {
     const displayMsg = getReadableMessage(msg)
     const number = sender.replace(/@.+/, '')
 
-    // ═══════════════════════════════════
-    // 🧾 LOGGER (SIEMPRE SE EJECUTA)
-    // ═══════════════════════════════════
-
+    // LOGGER
     let chatLabel = chalk.blue('PRIVADO')
     let chatName = 'Chat Privado'
 
@@ -130,10 +127,7 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
-    // ═══════════════════════════════════
-    // 🎯 TRIVIA (NO BLOQUEA)
-    // ═══════════════════════════════════
-
+    // TRIVIA
     if (body) {
       const game = trivia.get()
 
@@ -189,10 +183,6 @@ async function messageHandler(sock, msg, store) {
       }
     }
 
-    // ═══════════════════════════════════
-    // ❌ SI NO ES TEXTO → NO COMANDO
-    // ═══════════════════════════════════
-
     if (!body) return
 
     const parsed = detectPrefix(body)
@@ -204,10 +194,6 @@ async function messageHandler(sock, msg, store) {
 
     const plugin = plugins.get(command)
     if (!plugin) return
-
-    // ═══════════════════════════════════
-    // PERMISOS
-    // ═══════════════════════════════════
 
     const senderNum = normalize(sender)
     const botNumber = normalize(sock.user?.id?.split(':')[0])
@@ -236,27 +222,27 @@ async function messageHandler(sock, msg, store) {
     const isPremium =
       (await db.isPremium?.(sender).catch(() => false)) || isOwner
 
-    // ═══════════════════════════════════
-    // EJECUTAR PLUGIN
-    // ═══════════════════════════════════
+    // 🔥 FIX: proteger plugins
+    try {
+      await plugin.execute({
+        sock,
+        msg,
+        remoteJid,
+        sender,
+        pushName,
+        args,
+        command,
+        store,
+        config,
+        isOwner,
+        isAdmin,
+        isPremium,
+        fromGroup
+      })
+    } catch (e) {
+      console.log(chalk.red('❌ Error en plugin:'), e?.message || e)
+    }
 
-    await plugin.execute({
-      sock,
-      msg,
-      remoteJid,
-      sender,
-      pushName,
-      args,
-      command,
-      store,
-      config,
-      isOwner,
-      isAdmin,
-      isPremium,
-      fromGroup
-    })
-
-    // XP
     const gainedXP = Math.floor(Math.random() * 16) + 5
     await db.addXP(sender, gainedXP)
 
