@@ -1,8 +1,8 @@
 'use strict';
 
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const axios = require('axios');
 const FormData = require('form-data');
-const fetch = require('node-fetch');
 
 module.exports = {
   commands: ['toanime', 'jadianime'],
@@ -11,6 +11,7 @@ module.exports = {
     const { sock, msg, remoteJid } = ctx;
 
     try {
+      // 📌 detectar mensaje citado o actual
       const quoted = msg.message?.extendedTextMessage?.contextInfo;
       const message = quoted?.quotedMessage || msg.message;
 
@@ -48,24 +49,25 @@ module.exports = {
         text: '🎨 Convirtiendo a anime...'
       }, { quoted: msg });
 
-      // 🔥 SUBIR A TELEGRAPH (MUCHO MÁS ESTABLE)
+      // 🔥 SUBIR A TELEGRAPH
       const form = new FormData();
       form.append('file', buffer, 'image.jpg');
 
-      const res = await fetch('https://telegra.ph/upload', {
-        method: 'POST',
-        body: form
-      });
+      const uploadRes = await axios.post(
+        'https://telegra.ph/upload',
+        form,
+        { headers: form.getHeaders() }
+      );
 
-      const json = await res.json();
+      const data = uploadRes.data;
 
-      if (!json[0]?.src) {
+      if (!data[0]?.src) {
         return sock.sendMessage(remoteJid, {
           text: '❌ Error subiendo imagen'
         }, { quoted: msg });
       }
 
-      const imageUrl = 'https://telegra.ph' + json[0].src;
+      const imageUrl = 'https://telegra.ph' + data[0].src;
 
       // 🔥 APIs (fallback)
       const apis = [
@@ -85,7 +87,9 @@ module.exports = {
 
           sent = true;
           break;
-        } catch {}
+        } catch (e) {
+          console.log('❌ API falló:', api);
+        }
       }
 
       if (!sent) {
