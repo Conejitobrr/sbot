@@ -1,9 +1,10 @@
 'use strict';
 
 module.exports = {
-  commands: ['hack'],
+  commands: ['doxx','doxear','doxeame'],
 
-  async execute({ sock, remoteJid, msg }) {
+  async execute(ctx) {
+    const { sock, msg, remoteJid } = ctx;
 
     const target =
       msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
@@ -16,117 +17,68 @@ module.exports = {
 
     // 🔥 INICIO
     await sock.sendMessage(remoteJid, {
-      text: `🕵️‍♂️ [SYSTEM] Iniciando ataque...\n🎯 Objetivo: ${name}`,
+      text: `☠️ INICIANDO DOXXEO...\n🎯 Objetivo: ${name}`,
       mentions: [target]
     }, { quoted: msg });
 
-    await delay(1000);
-
-    const terminal = [
-      'root@server:~# access whatsapp --force',
-      'root@server:~# bypass encryption...',
-      'root@server:~# decrypting keys...',
-      'root@server:~# extracting database...',
-      'root@server:~# downloading media...',
-      'root@server:~# injecting payload...',
-      'root@server:~# access granted ✔'
+    const loading = [
+      '《 █▒▒▒▒▒▒▒▒▒▒▒》10%',
+      '《 ████▒▒▒▒▒▒▒▒》30%',
+      '《 ███████▒▒▒▒▒》50%',
+      '《 ██████████▒▒》80%',
+      '《 ████████████》100%'
     ];
 
-    for (let line of terminal) {
-      await sock.sendMessage(remoteJid, { text: '```' + line + '```' });
+    for (let step of loading) {
       await delay(900);
+      await sock.sendMessage(remoteJid, { text: step });
     }
 
-    // 🔥 DATOS FAKE REALISTAS
-    const fakeIP = `${rand(100,255)}.${rand(0,255)}.${rand(0,255)}.${rand(0,255)}`;
-    const fakeID = Math.random().toString(36).substring(2, 12).toUpperCase();
-    const device = pick(['Android 13','iOS 17','Windows 11','Linux']);
-    const location = pick([
-      'Lima, Perú',
-      'CDMX, México',
-      'Bogotá, Colombia',
-      'Madrid, España'
-    ]);
-    const battery = rand(10, 100);
-    const number = target.split('@')[0];
+    // 🔥 GENERADOR FAKE
+    const fake = generateFake(target);
 
-    await delay(1200);
+    await delay(1000);
+
+    const result = `☠️ *DOXXEO COMPLETADO*
+
+👤 Nombre: ${name}
+🌐 IP: ${fake.ip}
+🧬 ID: ${fake.id}
+📡 IPV6: ${fake.ipv6}
+📱 Dispositivo: ${fake.device}
+📍 Ubicación: ${fake.location}
+
+🔐 DATOS DE RED:
+• MAC: ${fake.mac}
+• ISP: ${fake.isp}
+• DNS: ${fake.dns}
+• GATEWAY: ${fake.gateway}
+
+📂 SISTEMA:
+• Puertos TCP: ${fake.tcp}
+• Puertos UDP: ${fake.udp}
+• Router: ${fake.router}
+• Conexión: ${fake.connection}
+
+📸 ACCESO:
+• Cámara: ${fake.camera}
+
+💀 Datos extraídos correctamente`;
 
     await sock.sendMessage(remoteJid, {
-      text:
-`⚠️ DATA BREACH DETECTED
+      text: result,
+      mentions: [target]
+    }, { quoted: msg });
 
-👤 Usuario: ${name}
-📞 Número: +${number}
-🌐 IP: ${fakeIP}
-🧬 ID: ${fakeID}
-📱 Dispositivo: ${device}
-🔋 Batería: ${battery}%
-📍 Ubicación: ${location}`,
+    await delay(1500);
+
+    // 😂 REMATE
+    await sock.sendMessage(remoteJid, {
+      text: `😂 Tranquilo ${name}, es solo una broma`,
       mentions: [target]
     });
 
-    await delay(1500);
-
-    // 🔥 IMAGEN HACKER
-    await sock.sendMessage(remoteJid, {
-      image: { url: 'https://i.imgur.com/8QZ7Z9F.jpg' },
-      caption: '🧠 Accediendo al núcleo del sistema...'
-    });
-
-    await delay(1500);
-
-    // 🔥 FILTRACIÓN
-    await sock.sendMessage(remoteJid, {
-      text:
-`📂 Extracción completada:
-
-📸 Fotos: ${rand(50,200)}
-🎥 Videos: ${rand(10,80)}
-💬 Chats: ${rand(200,900)}
-🔑 Passwords: ${rand(5,20)}`
-    });
-
-    await delay(1200);
-
-    // 🔥 PASSWORD
-    const pass = Math.random().toString(36).slice(-10);
-
-    await sock.sendMessage(remoteJid, {
-      text: `🔑 Password encontrada:\n${pass}`
-    });
-
-    await delay(1200);
-
-    // 🔥 AUDIO (OPCIONAL)
-    await sock.sendMessage(remoteJid, {
-      audio: { url: 'https://files.catbox.moe/9l4q0h.mp3' },
-      mimetype: 'audio/mpeg',
-      ptt: true
-    }).catch(() => {});
-
-    await delay(1500);
-
-    // 🔥 FINAL
-    await sock.sendMessage(remoteJid, {
-      text:
-`💀 HACK COMPLETADO
-
-📡 Datos enviados correctamente
-🛰️ Conexión cerrada
-
-☠️ Sistema comprometido`
-    });
-
-    await delay(1200);
-
-    // 😂 REMATE FINAL
-    await sock.sendMessage(remoteJid, {
-      text: `😂 Relax ${name}, es una broma`,
-      mentions: [target]
-    });
-
-    // helpers
+    // 🔥 FUNCIONES
     function rand(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     }
@@ -135,5 +87,25 @@ module.exports = {
       return arr[Math.floor(Math.random() * arr.length)];
     }
 
+    function generateFake(user) {
+      const ip = `${rand(10,255)}.${rand(0,255)}.${rand(0,255)}.${rand(0,255)}`;
+
+      return {
+        ip,
+        id: Math.random().toString(36).substring(2, 10).toUpperCase(),
+        ipv6: `fe80:${rand(1000,9999).toString(16)}:${rand(1000,9999).toString(16)}::1`,
+        device: pick(['Android','iPhone','Windows','Linux']),
+        location: pick(['Perú','México','Colombia','España']),
+        mac: `${rand(0,255).toString(16)}:${rand(0,255).toString(16)}:${rand(0,255).toString(16)}`,
+        isp: pick(['Claro','Movistar','Entel','Bitel']),
+        dns: `${rand(1,255)}.${rand(1,255)}.${rand(1,255)}.${rand(1,255)}`,
+        gateway: `192.168.${rand(0,255)}.1`,
+        tcp: rand(1000,9999),
+        udp: rand(1000,9999),
+        router: pick(['TP-Link','Cisco','Huawei']),
+        connection: pick(['Privada','Pública','NAT']),
+        camera: `http://${ip}/camera`
+      };
+    }
   }
 };
