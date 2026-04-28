@@ -6,13 +6,23 @@ const db = require('../lib/database')
 
 module.exports = {
   async onMessage(ctx) {
-    const { sock, remoteJid, body, msg } = ctx
+    const {
+      sock,
+      remoteJid,
+      body,
+      msg,
+      fromGroup,
+      sender
+    } = ctx
 
     if (!body) return
 
-    // Verificar si audios automáticos están activados
-    const enabled = await db.getGroupSetting(remoteJid, 'audios')
-    if (enabled === false) return
+    // Verificar si audios están habilitados
+    const audiosEnabled = fromGroup
+      ? await db.getGroupSetting(remoteJid, 'audios')
+      : await db.getUserSetting(sender, 'audios')
+
+    if (audiosEnabled === false) return
 
     const text = body.toLowerCase()
 
@@ -30,12 +40,16 @@ module.exports = {
 
     const audio = fs.readFileSync(filePath)
 
-    await sock.sendMessage(remoteJid, {
-      audio,
-      mimetype: 'audio/mpeg',
-      ptt: true
-    }, {
-      quoted: msg
-    })
+    await sock.sendMessage(
+      remoteJid,
+      {
+        audio,
+        mimetype: 'audio/mpeg',
+        ptt: true
+      },
+      {
+        quoted: msg
+      }
+    )
   }
 }
