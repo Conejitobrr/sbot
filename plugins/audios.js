@@ -2,12 +2,28 @@
 
 const fs = require('fs')
 const path = require('path')
+const db = require('../lib/database')
 
 module.exports = {
   async onMessage(ctx) {
-    const { sock, remoteJid, body, msg } = ctx
+    const { sock, remoteJid, body, sender, fromGroup, msg } = ctx
 
     if (!body) return
+
+    // ═══════════════════════════════════════
+    // 🔥 CHECK ENABLE / DISABLE AUDIOS
+    // ═══════════════════════════════════════
+    try {
+      if (fromGroup) {
+        const enabled = await db.getGroupSetting(remoteJid, 'audios')
+        if (enabled === false) return
+      } else {
+        const enabled = await db.getUserSetting(sender, 'audios')
+        if (enabled === false) return
+      }
+    } catch (e) {
+      console.log('❌ Error DB audios:', e?.message || e)
+    }
 
     const text = body.toLowerCase()
 
@@ -21,8 +37,7 @@ module.exports = {
 
     const filePath = path.resolve(__dirname, '../media', audios[key])
 
-    // 🔥 DEBUG SILENCIOSO (quita después si quieres)
-    console.log('🎧 AUDIO CHECK:', key, filePath)
+    console.log('🎧 AUDIO TRIGGER:', key)
 
     if (!fs.existsSync(filePath)) {
       console.log('❌ Audio no encontrado:', filePath)
@@ -31,7 +46,7 @@ module.exports = {
 
     try {
       await sock.sendMessage(remoteJid, {
-        audio: { url: filePath },
+        audio: { url: filePath }, // 🔥 formato más estable que buffer
         mimetype: 'audio/mpeg',
         ptt: true,
         quoted: msg
