@@ -1,75 +1,51 @@
 'use strict'
 
+const fs = require('fs')
+const path = require('path')
 const db = require('../lib/database')
 
 module.exports = {
-  commands: ['enable'],
-
-  async execute(ctx) {
+  async onMessage(ctx) {
     const {
       sock,
-      msg,
       remoteJid,
-      sender,
-      args,
+      body,
+      msg,
       fromGroup,
-      isAdmin,
-      isOwner
+      sender
     } = ctx
 
-    const feature = (args[0] || '').toLowerCase()
+    if (!body) return
 
-    if (!feature) {
-      return sock.sendMessage(remoteJid, {
-        text: 'Uso:\n.enable bot\n.enable welcome'
-      }, { quoted: msg })
+    // Verificar si audios están habilitados
+    const audiosEnabled = fromGroup
+      ? await db.getGroupSetting(remoteJid, 'audios')
+      : await db.getUserSetting(sender, 'audios')
+
+    if (!audiosEnabled) return
+
+    const text = body.toLowerCase()
+
+    const audios = {
+      hola: 'hola.mp3',
+      autoestima: 'autoestima.mp3'
     }
 
-    // BOT (grupo o privado)
-    if (feature === 'bot') {
-      if (fromGroup) {
-        if (!isAdmin && !isOwner) {
-          return sock.sendMessage(remoteJid, {
-            text: '❌ Solo admins/owner pueden usar este comando.'
-          }, { quoted: msg })
-        }
+    const key = Object.keys(audios).find(k => text.includes(k))
+    if (!key) return
 
-        await db.setGroupSetting(remoteJid, 'bot', true)
+    const filePath = path.join(__dirname, '../media', audios[key])
 
-      } else {
-        await db.setUserSetting(sender, 'bot', true)
-      }
+    if (!fs.existsSync(filePath)) return
 
-      return sock.sendMessage(remoteJid, {
-        text: '✅ *bot* activado.'
-      }, { quoted: msg })
-    }
-
-    // Otras funciones solo en grupos
-    if (!fromGroup) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Este comando solo funciona en grupos.'
-      }, { quoted: msg })
-    }
-
-    if (!isAdmin) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Solo admins pueden usar este comando.'
-      }, { quoted: msg })
-    }
-
-    const group = await db.getGroup(remoteJid)
-
-    if (!(feature in group)) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Función no válida.'
-      }, { quoted: msg })
-    }
-
-    await db.setGroupSetting(remoteJid, feature, true)
+    const audio = fs.readFileSync(filePath)
 
     await sock.sendMessage(remoteJid, {
-      text: `✅ *${feature}* activado.`
-    }, { quoted: msg })
+      audio,
+      mimetype: 'audio/mpeg',
+      ptt: true
+    }, {
+      quoted: msg
+    })
   }
 }
