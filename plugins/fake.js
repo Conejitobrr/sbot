@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  commands: ['fake10'],
+  commands: ['fake'],
 
   async execute(ctx) {
     const { sock, msg, remoteJid, sender } = ctx;
