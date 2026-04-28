@@ -78,7 +78,7 @@ Bienvenido a *${config.botName}*
 ━━━━━━━━━━━━━━━━━━━
 ⚙️ *SISTEMA*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}premium* → Estado premium  
+➤ *${p}prem* → Estado premium  
 ➤ *${p}notify* → Notificaciones  
 
 ━━━━━━━━━━━━━━━━━━━
