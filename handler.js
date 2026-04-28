@@ -228,52 +228,35 @@ async function messageHandler(sock, msg, store) {
     if (!isOwner) {
       if (fromGroup) {
         const botEnabled = await db.getGroupSetting(remoteJid, 'bot')
-        if (botEnabled === false && command !== 'enable' && command !== 'disable') {
-          return
-        }
-
-        // 🔥 FIX AUDIOS GROUP
-        const audiosEnabled = await db.getGroupSetting(remoteJid, 'audios')
-        if (audiosEnabled === false && plugin?.onMessage) {
-          return
-        }
-
+        if (botEnabled === false && command !== 'enable' && command !== 'disable') return
       } else {
         const botEnabled = await db.getUserSetting(sender, 'bot')
-        if (botEnabled === false && command !== 'enable' && command !== 'disable') {
-          return
-        }
-
-        // 🔥 FIX AUDIOS USER
-        const audiosEnabled = await db.getUserSetting(sender, 'audios')
-        if (audiosEnabled === false && plugin?.onMessage) {
-          return
-        }
+        if (botEnabled === false && command !== 'enable' && command !== 'disable') return
       }
     }
 
     // ═══════════════════════════════════════
-    // GLOBAL AUDIOS TRIGGER
+    // GLOBAL AUDIOS (ONMESSAGE)
     // ═══════════════════════════════════════
-    for (const plugin of new Set(plugins.values())) {
-      if (typeof plugin.onMessage === 'function') {
-        try {
-          await plugin.onMessage({
-            sock,
-            msg,
-            remoteJid,
-            sender,
-            body,
-            pushName,
-            fromGroup
-          })
-        } catch (e) {
-          console.log('❌ Error audios:', e?.message || e)
-        }
+    for (const p of plugins.values()) {
+      if (typeof p.onMessage !== 'function') continue
+
+      try {
+        await p.onMessage({
+          sock,
+          msg,
+          remoteJid,
+          sender,
+          body,
+          pushName,
+          fromGroup
+        })
+      } catch (e) {
+        console.log('❌ onMessage error:', e?.message || e)
       }
     }
 
-    // EJECUTAR PLUGIN (COMANDOS)
+    // EJECUTAR PLUGIN
     try {
       await plugin.execute({
         sock,
@@ -294,8 +277,7 @@ async function messageHandler(sock, msg, store) {
       console.log(chalk.red('❌ Error en plugin:'), e?.message || e)
     }
 
-    const gainedXP = Math.floor(Math.random() * 16) + 5
-    await db.addXP(sender, gainedXP)
+    await db.addXP(sender, Math.floor(Math.random() * 16) + 5)
 
   } catch (err) {
     console.log(chalk.red('❌ Error en handler:'), err)
