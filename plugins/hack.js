@@ -12,7 +12,6 @@ module.exports = {
     const end = performance.now();
     const executionTime = (end - start).toFixed(2);
 
-    // 🔥 FIX body
     const text = (body && typeof body === 'string') ? body.trim() : '';
 
     // 🔥 detectar mencionado
@@ -26,6 +25,9 @@ module.exports = {
     // 🔥 prioridad: mencionado > reply > yo
     const target = mentioned[0] || quotedSender || sender;
 
+    // 🔥 nombre visible correcto (@usuario)
+    const nameTag = target ? `@${target.split('@')[0]}` : 'Desconocido';
+
     function randIP() {
       return `${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
     }
@@ -37,11 +39,7 @@ module.exports = {
     const ipAddress = randIP();
 
     const fakeData = {
-      name_tag:
-        mentioned[0] || quotedSender
-          ? `@${target.split('@')[0]}`
-          : text.replace(/^\.\w+\s*/i, '') || sender.split('@')[0],
-
+      name_tag: nameTag,
       ip: randIP(),
       fakeCameraLink: `http://${ipAddress}.com/camera-feed`,
       n: Math.floor(Math.random() * 100000),
@@ -125,7 +123,7 @@ module.exports = {
     await sock.sendMessage(remoteJid, {
       text: doxeo,
       edit: sent.key,
-      mentions: (mentioned[0] || quotedSender) ? [target] : []
+      mentions: [target] // 🔥 CLAVE
     });
   }
 };
