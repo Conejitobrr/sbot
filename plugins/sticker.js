@@ -53,10 +53,18 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 📥 descarga (ahora soporta document)
+      // 📥 descarga (FIX decrypt para document)
+      let downloadType = 'image';
+
+      if (type === 'videoMessage') {
+        downloadType = 'video';
+      } else if (type === 'documentMessage') {
+        downloadType = 'document';
+      }
+
       const stream = await downloadContentFromMessage(
         media,
-        type === 'videoMessage' ? 'video' : 'image'
+        downloadType
       );
 
       let buffer = Buffer.from([]);
