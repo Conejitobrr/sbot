@@ -18,7 +18,6 @@ module.exports = {
     const { sock, msg, remoteJid, sender } = ctx;
 
     try {
-      // 📌 detectar mensaje citado correctamente (incluye fromMe)
       const quoted = msg.message?.extendedTextMessage?.contextInfo;
 
       let message;
@@ -35,28 +34,29 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 📌 detectar tipo real
       const type = Object.keys(message)[0];
+      const media = message[type];
 
-      if (!['imageMessage', 'videoMessage'].includes(type)) {
+      // ✅ aceptar imágenes como documento (PNG incluido)
+      const isImageDoc = type === 'documentMessage' && media?.mimetype?.startsWith('image/');
+
+      if (!['imageMessage', 'videoMessage'].includes(type) && !isImageDoc) {
         return sock.sendMessage(remoteJid, {
           text: '❌ Usa .s con una imagen o video'
         }, { quoted: msg });
       }
 
-      const media = message[type];
-
-      // 🔥 IMPORTANTE: asegurar url o mediaKey
+      // 🔥 IMPORTANTE
       if (!media || (!media.url && !media.mediaKey)) {
         return sock.sendMessage(remoteJid, {
           text: '❌ No se pudo obtener el archivo'
         }, { quoted: msg });
       }
 
-      // 📥 descargar correctamente (fix privado/fromMe)
+      // 📥 descarga (ahora soporta document)
       const stream = await downloadContentFromMessage(
         media,
-        type === 'imageMessage' ? 'image' : 'video'
+        type === 'videoMessage' ? 'video' : 'image'
       );
 
       let buffer = Buffer.from([]);
@@ -70,13 +70,12 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // 📁 temp
       const tempDir = path.join(__dirname, '../temp');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-      const isImage = type === 'imageMessage';
+      const isImage = type === 'imageMessage' || isImageDoc;
 
-      // 🧠 detectar extensión real (soporte PNG incluido)
+      // 🧠 detectar extensión real
       let ext = 'mp4';
 
       if (isImage) {
@@ -85,7 +84,7 @@ module.exports = {
         if (mime.includes('png')) ext = 'png';
         else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
         else if (mime.includes('webp')) ext = 'webp';
-        else ext = 'jpg'; // fallback seguro
+        else ext = 'jpg';
       }
 
       const input = path.join(tempDir, `input_${Date.now()}.${ext}`);
@@ -93,10 +92,9 @@ module.exports = {
 
       fs.writeFileSync(input, buffer);
 
-      // 🎬 ffmpeg
       const cmd = isImage
         ? `ffmpeg -y -i "${input}" -vf "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -q:v 60 -compression_level 6 -preset picture -loop 0 "${output}"`
-        : `ffmpeg -y -i "${input}" -t 5 -vf "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=10,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -vcodec libwebp -fs 700k -loop 0 -an "${output}"`;
+        : `ffmpeg -y -i "${input}" -t 5 -vf "scale=512:512:force_original_aspect_ratio=decrease:flags=lanczos,fps=10,format=rgba,pad=512:512:(ow-iw)/2:(oh-iw)/2:color=0x00000000" -vcodec libwebp -fs 700k -loop 0 -an "${output}"`;
 
       exec(cmd, async (err) => {
         if (err) {
@@ -114,10 +112,8 @@ module.exports = {
             sticker
           }, { quoted: msg });
 
-          // ⭐ XP BASE
           let xp = Math.floor(Math.random() * 10) + 5;
 
-          // 🔥 detectar evento (compatible con varios sistemas)
           let multiplier = 1;
 
           if (events?.isActive?.('double')) {
@@ -134,7 +130,6 @@ module.exports = {
           console.log('❌ SEND ERROR:', e);
         }
 
-        // 🧹 limpiar
         try {
           fs.unlinkSync(input);
           fs.unlinkSync(output);
