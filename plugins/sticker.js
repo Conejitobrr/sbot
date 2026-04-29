@@ -76,7 +76,19 @@ module.exports = {
 
       const isImage = type === 'imageMessage';
 
-      const input = path.join(tempDir, `input_${Date.now()}.${isImage ? 'jpg' : 'mp4'}`);
+      // 🧠 detectar extensión real (soporte PNG incluido)
+      let ext = 'mp4';
+
+      if (isImage) {
+        const mime = media.mimetype || '';
+
+        if (mime.includes('png')) ext = 'png';
+        else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+        else if (mime.includes('webp')) ext = 'webp';
+        else ext = 'jpg'; // fallback seguro
+      }
+
+      const input = path.join(tempDir, `input_${Date.now()}.${ext}`);
       const output = path.join(tempDir, `output_${Date.now()}.webp`);
 
       fs.writeFileSync(input, buffer);
@@ -103,20 +115,20 @@ module.exports = {
           }, { quoted: msg });
 
           // ⭐ XP BASE
-let xp = Math.floor(Math.random() * 10) + 5;
+          let xp = Math.floor(Math.random() * 10) + 5;
 
-// 🔥 detectar evento (compatible con varios sistemas)
-let multiplier = 1;
+          // 🔥 detectar evento (compatible con varios sistemas)
+          let multiplier = 1;
 
-if (events?.isActive?.('double')) {
-  multiplier = events.getMultiplier?.() || 2;
-} else if (events?.state?.active?.type === 'double') {
-  multiplier = 2;
-}
+          if (events?.isActive?.('double')) {
+            multiplier = events.getMultiplier?.() || 2;
+          } else if (events?.state?.active?.type === 'double') {
+            multiplier = 2;
+          }
 
-xp *= multiplier;
+          xp *= multiplier;
 
-await db.addXP(sender, xp);
+          await db.addXP(sender, xp);
 
         } catch (e) {
           console.log('❌ SEND ERROR:', e);
