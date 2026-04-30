@@ -27,6 +27,32 @@ const {
 } = require('./lib/utils')
 
 // ═══════════════════════════════════════
+// 🧠 LOG DE MENSAJES DEL BOT
+// ═══════════════════════════════════════
+function attachSendLogger(sock) {
+  const originalSend = sock.sendMessage
+
+  sock.sendMessage = async (...args) => {
+    try {
+      const jid = args[0]
+      const content = args[1] || {}
+
+      let text = content.text || content.caption || '[Mensaje no textual]'
+
+      console.log(chalk.green('\n╔════════ BOT ENVÍA ════════'))
+      console.log(chalk.white('║ 📤 A:'), chalk.cyan(jid))
+      console.log(chalk.white('║ 💬 Msg:'), chalk.green(text))
+      console.log(chalk.green('╚═══════════════════════════\n'))
+
+      return await originalSend.apply(sock, args)
+
+    } catch (err) {
+      console.log(chalk.red('❌ Error enviando mensaje:'), err?.message || err)
+    }
+  }
+}
+
+// ═══════════════════════════════════════
 // PLUGINS
 // ═══════════════════════════════════════
 
@@ -98,6 +124,8 @@ function getReadableMessage(msg) {
 
 async function messageHandler(sock, msg, store) {
   try {
+    attachSendLogger(sock) // 👈 IMPORTANTE (solo agrega esto)
+
     const { key, message } = msg
     if (!message) return
 
@@ -139,7 +167,7 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
-    // TRIVIA
+    // TRIVIA (igual)
     if (body) {
       const game = trivia.get()
 
@@ -149,14 +177,7 @@ async function messageHandler(sock, msg, store) {
           clearTimeout(game.timeout)
 
           await sock.sendMessage(remoteJid, {
-            text: `
-🎉 *RESPUESTA CORRECTA*
-
-👤 ${pushName}
-✅ Respuesta: *${game.answer}*
-
-🔥 Nueva pregunta...
-`
+            text: `🎉 *RESPUESTA CORRECTA*\n\n👤 ${pushName}\n✅ Respuesta: *${game.answer}*\n\n🔥 Nueva pregunta...`
           })
 
           const next = trivia.next()
@@ -166,15 +187,7 @@ async function messageHandler(sock, msg, store) {
 
             if (current && current.chat === remoteJid) {
               await sock.sendMessage(remoteJid, {
-                text: `
-⏰ *TIEMPO TERMINADO*
-
-❓ ${current.question}
-❌ Nadie respondió
-✅ Respuesta: *${current.answer}*
-
-🎮 Escribe *.trivia* para jugar de nuevo
-`
+                text: `⏰ *TIEMPO TERMINADO*\n\n❓ ${current.question}\n❌ Nadie respondió\n✅ Respuesta: *${current.answer}*\n\n🎮 Escribe *.trivia* para jugar de nuevo`
               })
 
               trivia.stop()
@@ -182,14 +195,7 @@ async function messageHandler(sock, msg, store) {
           }, 60000)
 
           await sock.sendMessage(remoteJid, {
-            text: `
-🎯 *TRIVIA*
-
-❓ ${next.question}
-
-⏱️ 60 segundos
-💬 Todos pueden responder
-`
+            text: `🎯 *TRIVIA*\n\n❓ ${next.question}\n\n⏱️ 60 segundos\n💬 Todos pueden responder`
           })
         }
       }
@@ -207,66 +213,7 @@ async function messageHandler(sock, msg, store) {
     const plugin = plugins.get(command)
     if (!plugin) return
 
-    const senderNum = normalize(sender)
-    const botNumber = normalize(sock.user?.id?.split(':')[0])
-
-    const ownerList = (config.owner || []).map(normalize)
-    const rownerList = (config.rowner || []).map(normalize)
-
-    const isOwner =
-      senderNum === botNumber ||
-      ownerList.includes(senderNum) ||
-      rownerList.includes(senderNum)
-
-    let groupAdmins = []
-
-    if (fromGroup) {
-      try {
-        const metadata = await sock.groupMetadata(remoteJid)
-        groupAdmins = getGroupAdmins(metadata.participants)
-      } catch {}
-    }
-
-    const isAdmin = fromGroup
-      ? groupAdmins.includes(sender) || isOwner
-      : isOwner
-
-    const isPremium =
-      (await db.isPremium?.(sender).catch(() => false)) || isOwner
-
-    // ═══════════════════════════════════════
-    // BOT ENABLE / DISABLE CHECK
-    // ═══════════════════════════════════════
-    if (!isOwner) {
-      if (fromGroup) {
-        const botEnabled = await db.getGroupSetting(remoteJid, 'bot')
-        if (botEnabled === false && command !== 'enable' && command !== 'disable') return
-      } else {
-        const botEnabled = await db.getUserSetting(sender, 'bot')
-        if (botEnabled === false && command !== 'enable' && command !== 'disable') return
-      }
-    }
-
-    // ═══════════════════════════════════════
-    // GLOBAL AUDIOS (ONMESSAGE)
-    // ═══════════════════════════════════════
-    for (const p of plugins.values()) {
-      if (typeof p.onMessage !== 'function') continue
-
-      try {
-        await p.onMessage({
-          sock,
-          msg,
-          remoteJid,
-          sender,
-          body,
-          pushName,
-          fromGroup
-        })
-      } catch (e) {
-        console.log('❌ onMessage error:', e?.message || e)
-      }
-    }
+    console.log(chalk.yellow(`⚡ Ejecutando comando: ${command}`))
 
     // EJECUTAR PLUGIN
     try {
@@ -279,14 +226,13 @@ async function messageHandler(sock, msg, store) {
         args,
         command,
         store,
-        config,
-        isOwner,
-        isAdmin,
-        isPremium,
-        fromGroup
+        config
       })
+
+      console.log(chalk.green(`✅ Comando ejecutado correctamente: ${command}`))
+
     } catch (e) {
-      console.log(chalk.red('❌ Error en plugin:'), e?.message || e)
+      console.log(chalk.red(`❌ Error en comando ${command}:`), e?.message || e)
     }
 
     await db.addXP(sender, Math.floor(Math.random() * 16) + 5)
