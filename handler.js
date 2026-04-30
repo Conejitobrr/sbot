@@ -30,7 +30,7 @@ const {
 // 🧠 LOG DE MENSAJES DEL BOT (MEJORADO)
 // ═══════════════════════════════════════
 function attachSendLogger(sock) {
-  if (sock._loggerAttached) return // 👈 evita duplicación
+  if (sock._loggerAttached) return
   sock._loggerAttached = true
 
   const originalSend = sock.sendMessage
@@ -175,7 +175,10 @@ async function messageHandler(sock, msg, store) {
 
     const body = getBody(msg)
     const displayMsg = getReadableMessage(msg)
-    const number = sender.replace(/@.+/, '')
+
+    // ✅ FIX AQUÍ (número real sin device ID)
+    const rawNumber = sender.split('@')[0].split(':')[0]
+    const number = rawNumber.startsWith('51') ? `+${rawNumber}` : rawNumber
 
     // LOGGER
     let chatLabel = chalk.blue('PRIVADO')
