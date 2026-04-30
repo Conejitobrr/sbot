@@ -1,29 +1,33 @@
 'use strict';
 
+require('dotenv').config();
+
 module.exports = {
 
   // ─────────────────────────────────────────
-  // 👤 OWNER (🔥 CORREGIDO)
+  // 👤 OWNER
   // ─────────────────────────────────────────
-  rowner: ['51958959882', '42696337031354'],
-  owner : ['51958959882', '42696337031354'],
+  owner: [
+    '51958959882',
+    '42696337031354'
+  ],
 
   // ─────────────────────────────────────────
   // 🤖 BOT INFO
   // ─────────────────────────────────────────
-  botName    : 'SiriusBot',
-  botVersion : '1.0.0',
-  footer     : 'SiriusBot',
+  botName    : process.env.BOT_NAME    || 'SiriusBot',
+  botVersion : process.env.BOT_VERSION || '1.0.0',
+  footer     : process.env.BOT_FOOTER  || 'SiriusBot',
 
   // ─────────────────────────────────────────
   // ⚙️ PREFIJO
   // ─────────────────────────────────────────
-  prefix: '.',
+  prefix: process.env.PREFIX || '.',
 
   // ─────────────────────────────────────────
   // 💾 BASE DE DATOS
   // ─────────────────────────────────────────
-  mongoUri: '',
+  mongoUri: process.env.MONGO_URI || '',
   dbPath  : './lib/database.json',
 
   // ─────────────────────────────────────────
@@ -32,6 +36,13 @@ module.exports = {
   sessionPath   : './session',
   readMessages  : true,
   autoReconnect : true,
-  reconnectDelay: 3000
+  reconnectDelay: 3000,
+
+  // ─────────────────────────────────────────
+  // ⚡ OPCIONES EXTRA (MEJORAS)
+  // ─────────────────────────────────────────
+  debug: true,
+  antiSpam: true,
+  maxMessagesPerMinute: 20
 
 };
