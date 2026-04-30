@@ -2,8 +2,54 @@
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+
+const execFileAsync = promisify(execFile);
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
+
+function getQuotedSticker(msg) {
+  const context =
+    msg.message?.extendedTextMessage?.contextInfo ||
+    msg.message?.imageMessage?.contextInfo ||
+    msg.message?.videoMessage?.contextInfo;
+
+  const quoted = context?.quotedMessage;
+
+  if (!quoted) return null;
+
+  if (quoted.stickerMessage) {
+    return quoted.stickerMessage;
+  }
+
+  return null;
+}
+
+async function downloadSticker(media) {
+  const stream = await downloadContentFromMessage(media, 'sticker');
+  const chunks = [];
+
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function convertToImage(input, output, isAnimated) {
+  const args = isAnimated
+    ? ['-y', '-i', input, '-vframes', '1', output]
+    : ['-y', '-i', input, output];
+
+  await execFileAsync('ffmpeg', args);
+}
 
 module.exports = {
   commands: ['toimage', 'img'],
@@ -11,71 +57,63 @@ module.exports = {
   async execute(ctx) {
     const { sock, msg, remoteJid } = ctx;
 
+    let input = null;
+    let output = null;
+
     try {
-      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+      ensureTemp();
 
-      if (!quoted) {
+      const sticker = getQuotedSticker(msg);
+
+      if (!sticker) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Responde a un sticker con .toimage'
+          text: '❌ Responde a un *sticker* con *.toimage*'
         }, { quoted: msg });
       }
 
-      const type = Object.keys(quoted)[0];
-
-      if (type !== 'stickerMessage') {
+      if (!sticker.url && !sticker.mediaKey) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Solo funciona con stickers'
+          text: '❌ No se pudo obtener el sticker.'
         }, { quoted: msg });
       }
 
-      const media = quoted.stickerMessage;
+      const buffer = await downloadSticker(sticker);
 
-      const stream = await downloadContentFromMessage(media, 'sticker');
-
-      let buffer = Buffer.from([]);
-      for await (const chunk of stream) {
-        buffer = Buffer.concat([buffer, chunk]);
+      if (!buffer.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Error descargando el sticker.'
+        }, { quoted: msg });
       }
 
-      const tempDir = path.join(__dirname, '../temp');
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
-      const input = path.join(tempDir, 'input.webp');
-      const output = path.join(tempDir, 'output.png');
+      input = path.join(TEMP_DIR, `toimg_${id}.webp`);
+      output = path.join(TEMP_DIR, `toimg_${id}.png`);
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 SI ES ANIMADO → SOLO PRIMER FRAME
-      const cmd = media.isAnimated
-        ? `ffmpeg -y -i "${input}" -vframes 1 "${output}"`
-        : `ffmpeg -y -i "${input}" "${output}"`;
+      await convertToImage(input, output, sticker.isAnimated);
 
-      exec(cmd, async (err) => {
-        if (err) {
-          console.log('FFMPEG ERROR:', err);
-
-          return sock.sendMessage(remoteJid, {
-            text: '❌ Error al convertir sticker'
-          }, { quoted: msg });
-        }
-
-        const image = fs.readFileSync(output);
-
-        await sock.sendMessage(remoteJid, {
-          image,
-          caption: '🖼 Convertido a PNG'
-        }, { quoted: msg });
-
-        fs.unlinkSync(input);
-        fs.unlinkSync(output);
-      });
-
-    } catch (err) {
-      console.log('ERROR GENERAL:', err);
+      const image = fs.readFileSync(output);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general en toimage'
+        image,
+        caption: '🖼 Convertido a imagen'
       }, { quoted: msg });
+
+    } catch (err) {
+      console.log('❌ Error en toimage:', err?.message || err);
+
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error al convertir sticker.\nVerifica que ffmpeg esté instalado.'
+      }, { quoted: msg });
+
+    } finally {
+      for (const file of [input, output]) {
+        try {
+          if (file && fs.existsSync(file)) fs.unlinkSync(file);
+        } catch {}
+      }
     }
   }
 };
