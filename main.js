@@ -41,7 +41,10 @@ async function startBot(opts = {}) {
 
   const sock = makeWASocket({
     version,
-    logger: pino({ level: 'silent' }),
+
+    // 🔥 CAMBIO: logger más limpio (evita spam técnico)
+    logger: pino({ level: 'fatal' }),
+
     browser: useCode
       ? ['Ubuntu', 'Chrome', '20.0.04']
       : ['SiriusBot', 'Safari', '2.0.0'],
@@ -49,7 +52,7 @@ async function startBot(opts = {}) {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(
         state.keys,
-        pino({ level: 'silent' })
+        pino({ level: 'fatal' })
       )
     },
     printQRInTerminal: false,
@@ -115,12 +118,37 @@ async function startBot(opts = {}) {
   sock.ev.on('creds.update', saveCreds)
 
   //═══════════════════════════════════════
-  // CONTACTOS
+  // CONTACTOS (🔥 CLAVE DEL FIX)
   //═══════════════════════════════════════
   sock.ev.on('contacts.upsert', contacts => {
     for (const c of contacts) {
-      if (c.id) {
-        store.contacts[c.id] = c
+      if (!c.id) continue
+
+      const jid = jidNormalizedUser(c.id)
+
+      store.contacts[jid] = {
+        id: jid,
+        name: c.name || c.notify || c.verifiedName || '',
+        notify: c.notify || ''
+      }
+    }
+  })
+
+  // 🔥 NUEVO: actualiza nombres dinámicos (esto arregla números raros)
+  sock.ev.on('contacts.update', updates => {
+    for (const u of updates) {
+      const jid = jidNormalizedUser(u.id)
+
+      if (!store.contacts[jid]) store.contacts[jid] = { id: jid }
+
+      store.contacts[jid] = {
+        ...store.contacts[jid],
+        name:
+          u.notify ||
+          u.name ||
+          store.contacts[jid].name ||
+          '',
+        notify: u.notify || store.contacts[jid].notify || ''
       }
     }
   })
