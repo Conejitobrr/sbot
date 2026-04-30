@@ -2,8 +2,49 @@
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+
+const execFileAsync = promisify(execFile);
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
+
+function getQuotedSticker(msg) {
+  const context =
+    msg.message?.extendedTextMessage?.contextInfo ||
+    msg.message?.imageMessage?.contextInfo ||
+    msg.message?.videoMessage?.contextInfo;
+
+  return context?.quotedMessage?.stickerMessage || null;
+}
+
+async function downloadSticker(sticker) {
+  const stream = await downloadContentFromMessage(sticker, 'sticker');
+  const chunks = [];
+
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function convertStickerToVideo(input, output) {
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i', input,
+    '-movflags', 'faststart',
+    '-pix_fmt', 'yuv420p',
+    '-vf', 'scale=512:-2:flags=lanczos,fps=15',
+    output
+  ]);
+}
 
 module.exports = {
   commands: ['tovideo', 'tomp4'],
@@ -11,79 +52,63 @@ module.exports = {
   async execute(ctx) {
     const { sock, msg, remoteJid } = ctx;
 
+    let input = null;
+    let output = null;
+
     try {
-      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+      ensureTemp();
 
-      if (!quoted) {
+      const sticker = getQuotedSticker(msg);
+
+      if (!sticker) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Responde a un sticker'
+          text: '❌ Responde a un sticker con *.tovideo*'
         }, { quoted: msg });
       }
 
-      const type = Object.keys(quoted)[0];
-
-      if (type !== 'stickerMessage') {
+      if (!sticker.isAnimated) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Solo funciona con stickers'
+          text: '❌ Este comando solo sirve con stickers animados.'
         }, { quoted: msg });
       }
 
-      const media = quoted.stickerMessage;
+      const buffer = await downloadSticker(sticker);
 
-      const stream = await downloadContentFromMessage(media, 'sticker');
-
-      let buffer = Buffer.from([]);
-      for await (const chunk of stream) {
-        buffer = Buffer.concat([buffer, chunk]);
+      if (!buffer.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Error descargando el sticker.'
+        }, { quoted: msg });
       }
 
-      const tempDir = path.join(__dirname, '../temp');
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
-      const input  = path.join(tempDir, 'input.webp');
-      const gif    = path.join(tempDir, 'temp.gif');
-      const output = path.join(tempDir, 'output.mp4');
+      input = path.join(TEMP_DIR, `tovideo_${id}.webp`);
+      output = path.join(TEMP_DIR, `tovideo_${id}.mp4`);
 
       fs.writeFileSync(input, buffer);
 
-      // 🔥 AQUÍ ESTÁ LA MAGIA (ImageMagick)
-      const cmd = `
-      magick "${input}" "${gif}" &&
-      ffmpeg -y -i "${gif}" -movflags faststart -pix_fmt yuv420p -vf "scale=512:-1:flags=lanczos,fps=15" "${output}"
-      `;
+      await convertStickerToVideo(input, output);
 
-      exec(cmd, async (err) => {
-        if (err) {
-          console.log('ERROR:', err);
-
-          return sock.sendMessage(remoteJid, {
-            text: '❌ Error al convertir (ver consola)'
-          }, { quoted: msg });
-        }
-
-        try {
-          const video = fs.readFileSync(output);
-
-          await sock.sendMessage(remoteJid, {
-            video,
-            mimetype: 'video/mp4'
-          }, { quoted: msg });
-
-        } catch (e) {
-          console.log('SEND ERROR:', e);
-        }
-
-        [input, gif, output].forEach(f => {
-          if (fs.existsSync(f)) fs.unlinkSync(f);
-        });
-      });
-
-    } catch (err) {
-      console.log('ERROR GENERAL:', err);
+      const video = fs.readFileSync(output);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general'
+        video,
+        mimetype: 'video/mp4'
       }, { quoted: msg });
+
+    } catch (err) {
+      console.log('❌ Error en tovideo:', err?.message || err);
+
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error al convertir sticker a video.\nAsegúrate de tener ffmpeg instalado.'
+      }, { quoted: msg });
+
+    } finally {
+      for (const file of [input, output]) {
+        try {
+          if (file && fs.existsSync(file)) fs.unlinkSync(file);
+        } catch {}
+      }
     }
   }
 };
