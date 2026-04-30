@@ -1,5 +1,17 @@
 'use strict'
 
+// 🚫 FILTRAR SPAM "Closing session"
+const originalConsoleLog = console.log
+console.log = (...args) => {
+  const text = args.join(' ')
+  if (
+    text.includes('Closing session: SessionEntry') ||
+    text.includes('SessionEntry') ||
+    text.includes('_chains')
+  ) return
+  originalConsoleLog(...args)
+}
+
 const path = require('path')
 const fs = require('fs')
 const chalk = require('chalk')
