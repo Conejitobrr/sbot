@@ -25,15 +25,11 @@ module.exports = {
     let query = args.join(' ')
     let url = query
 
-    const numero = sender.split('@')[0]
-
     try {
-      // 🔍 BUSCAR SI NO ES LINK
       if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
 
         await sock.sendMessage(remoteJid, {
-          text: `🔍 Buscando video @${numero}...`,
-          mentions: [sender]
+          text: '🔍 Buscando video...'
         }, { quoted: msg })
 
         const res = await yts(query)
@@ -48,14 +44,12 @@ module.exports = {
         url = video.url
 
         await sock.sendMessage(remoteJid, {
-          text: `🎬 *${video.title}*\n⏱️ ${video.timestamp}\n\n⏳ Descargando @${numero}...`,
-          mentions: [sender]
+          text: `🎬 *${video.title}*\n⏱️ ${video.timestamp}\n\n⏳ Descargando...`
         }, { quoted: msg })
 
       } else {
         await sock.sendMessage(remoteJid, {
-          text: `⏳ Descargando video @${numero}...`,
-          mentions: [sender]
+          text: '⏳ Descargando video...'
         }, { quoted: msg })
       }
 
@@ -101,18 +95,15 @@ module.exports = {
             }, { quoted: msg })
           }
 
-          // 📤 ENVIAR VIDEO (RESPONDIENDO + MENCIÓN)
+          // 📤 ENVIAR RESPONDIENDO AL COMANDO
           await sock.sendMessage(remoteJid, {
             video: fs.readFileSync(finalFile),
-            mimetype: 'video/mp4',
-            caption: `🎬 Aquí tienes tu video @${numero} ✨`,
-            mentions: [sender]
+            mimetype: 'video/mp4'
           }, { quoted: msg })
 
           fs.unlinkSync(rawFile)
           fs.unlinkSync(finalFile)
 
-          // ⭐ XP
           let xp = Math.floor(Math.random() * 20) + 10
 
           if (events?.state?.active?.type === 'double') {
