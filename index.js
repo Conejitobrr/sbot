@@ -10,9 +10,6 @@ const fs = require('fs');
 
 const config = require('./config');
 
-// ─────────────────────────────────────────
-// BANNER
-// ─────────────────────────────────────────
 function showBanner() {
   console.clear();
 
@@ -29,9 +26,6 @@ function showBanner() {
   console.log(chalk.gray('  ─────────────────────────────────────────\n'));
 }
 
-// ─────────────────────────────────────────
-// READLINE
-// ─────────────────────────────────────────
 function createRL() {
   return readline.createInterface({
     input: process.stdin,
@@ -45,9 +39,6 @@ function ask(rl, question) {
   });
 }
 
-// ─────────────────────────────────────────
-// SESIÓN EXISTENTE
-// ─────────────────────────────────────────
 function hasSavedSession() {
   const sessionDir = path.resolve(process.cwd(), config.sessionPath || './session');
   const credsFile = path.join(sessionDir, 'creds.json');
@@ -55,9 +46,6 @@ function hasSavedSession() {
   return fs.existsSync(credsFile);
 }
 
-// ─────────────────────────────────────────
-// MÉTODO DE CONEXIÓN
-// ─────────────────────────────────────────
 async function askConnectionMethod() {
   if (hasSavedSession()) {
     console.log(chalk.green('  ✅ Sesión encontrada. Conectando automáticamente...\n'));
@@ -106,9 +94,6 @@ async function askConnectionMethod() {
   return { method: 'code', phone };
 }
 
-// ─────────────────────────────────────────
-// MAIN
-// ─────────────────────────────────────────
 async function main() {
   showBanner();
 
