@@ -22,24 +22,17 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    // 🔥 PERMISOS
+    // 🔥 PERMISOS (FIX)
     if (!(isAdmin || isPremium || isOwner)) {
 
-      const allowed = await db.canUseNotify(sender);
+      // 👇 ahora usa tu función real del database
+      const allowed = await db.canUseNotify(remoteJid, true);
 
       if (!allowed) {
-        const left = await db.getRemainingUses(sender);
-
         return sock.sendMessage(remoteJid, {
-          text: `❌ Límite alcanzado (5 diarios)\n🔒 Hazte premium para uso ilimitado`
+          text: `❌ El bot está desactivado en este grupo`
         }, { quoted: msg });
       }
-
-      const left = await db.getRemainingUses(sender);
-
-      await sock.sendMessage(remoteJid, {
-        text: `⚠️ Uso gratis restante: ${left}/5`
-      }, { quoted: msg });
     }
 
     try {
@@ -74,7 +67,7 @@ module.exports = {
       );
 
     } catch (e) {
-      console.log(e);
+      console.log('❌ Error notify:', e?.stack || e);
 
       await sock.sendMessage(remoteJid, {
         text: '❌ Error al enviar'
