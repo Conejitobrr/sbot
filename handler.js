@@ -14,9 +14,6 @@ const {
   getGroupAdmins
 } = require('./lib/utils');
 
-// ─────────────────────────────────────────
-// OCULTAR SPAM DE BAILEYS
-// ─────────────────────────────────────────
 const originalConsoleLog = console.log;
 
 console.log = (...args) => {
@@ -38,9 +35,6 @@ console.log = (...args) => {
   originalConsoleLog(...args);
 };
 
-// ─────────────────────────────────────────
-// LOGGER DE MENSAJES ENVIADOS
-// ─────────────────────────────────────────
 function attachSendLogger(sock) {
   if (sock._loggerAttached) return;
   sock._loggerAttached = true;
@@ -87,9 +81,6 @@ function attachSendLogger(sock) {
   };
 }
 
-// ─────────────────────────────────────────
-// PLUGINS
-// ─────────────────────────────────────────
 function getPluginsDir() {
   const plugin = path.join(process.cwd(), 'plugin');
   const plugins = path.join(process.cwd(), 'plugins');
@@ -152,9 +143,6 @@ function loadPlugins() {
 global.loadPlugins = loadPlugins;
 loadPlugins();
 
-// ─────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────
 function cleanNumber(jid = '') {
   return String(jid)
     .split('@')[0]
@@ -189,9 +177,6 @@ async function safeGroupMetadata(sock, jid) {
   }
 }
 
-// ─────────────────────────────────────────
-// HANDLER PRINCIPAL
-// ─────────────────────────────────────────
 async function messageHandler(sock, msg, store = {}) {
   try {
     attachSendLogger(sock);
@@ -211,7 +196,6 @@ async function messageHandler(sock, msg, store = {}) {
     sender = normalizeJid(sender || remoteJid);
 
     const botJid = normalizeJid(sock.user?.id || '');
-
     const body = getBody(msg);
     const displayMsg = getReadableMessage(msg);
 
@@ -255,8 +239,6 @@ async function messageHandler(sock, msg, store = {}) {
 
     if (!body) return;
 
-    // ✅ SOLO RESPETA EL PREFIJO DE config.js
-    // Si config.prefix = '.', solo funciona .s, .menu, .play, etc.
     const parsed = detectPrefix(body, config.prefix);
     if (!parsed) return;
 
@@ -268,9 +250,6 @@ async function messageHandler(sock, msg, store = {}) {
     const plugin = plugins.get(command);
     if (!plugin) return;
 
-    // ─────────────────────────────────────────
-    // VALIDAR BOT ACTIVADO / DESACTIVADO
-    // ─────────────────────────────────────────
     const isOwner = Array.isArray(config.owner)
       ? config.owner.includes(number)
       : false;
@@ -324,3 +303,39 @@ async function messageHandler(sock, msg, store = {}) {
           { text: String(text) },
           { quoted: msg }
         )
+      });
+
+      if (config.debug) {
+        console.log(chalk.green(`✅ Comando ejecutado correctamente: ${command}`));
+      }
+
+      try {
+        await db.addXP(sender, Math.floor(Math.random() * 16) + 5);
+      } catch (e) {
+        console.log(chalk.yellow('⚠️ No se pudo guardar XP:'), e?.message || e);
+      }
+
+    } catch (e) {
+      console.log(chalk.red(`❌ Error en comando ${command}:`));
+      console.log(e?.stack || e);
+
+      try {
+        await sock.sendMessage(
+          remoteJid,
+          { text: '❌ Ocurrió un error ejecutando este comando.' },
+          { quoted: msg }
+        );
+      } catch {}
+    }
+
+  } catch (err) {
+    console.log(chalk.red('❌ Error en handler:'));
+    console.log(err?.stack || err);
+  }
+}
+
+module.exports = {
+  messageHandler,
+  loadPlugins,
+  plugins
+};
