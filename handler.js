@@ -15,7 +15,7 @@ const {
 } = require('./lib/utils');
 
 // ─────────────────────────────────────────
-// FILTRAR SPAM DE CONSOLA
+// OCULTAR SPAM DE BAILEYS
 // ─────────────────────────────────────────
 const originalConsoleLog = console.log;
 
@@ -39,7 +39,7 @@ console.log = (...args) => {
 };
 
 // ─────────────────────────────────────────
-// LOGGER DE ENVÍOS
+// LOGGER DE MENSAJES ENVIADOS
 // ─────────────────────────────────────────
 function attachSendLogger(sock) {
   if (sock._loggerAttached) return;
@@ -49,30 +49,30 @@ function attachSendLogger(sock) {
 
   sock.sendMessage = async (jid, content = {}, options = {}) => {
     try {
-      let type = 'Desconocido';
-      let preview = '';
-
-      if (content.text) {
-        type = 'Texto';
-        preview = content.text;
-      } else if (content.image) {
-        type = 'Imagen 🖼️';
-        preview = content.caption || '[Imagen]';
-      } else if (content.video) {
-        type = 'Video 🎥';
-        preview = content.caption || '[Video]';
-      } else if (content.audio) {
-        type = content.ptt ? 'Nota de voz 🎤' : 'Audio 🎵';
-        preview = '[Audio]';
-      } else if (content.sticker) {
-        type = 'Sticker 🧩';
-        preview = '[Sticker]';
-      } else if (content.document) {
-        type = 'Documento 📄';
-        preview = content.fileName || '[Documento]';
-      }
-
       if (config.debug) {
+        let type = 'Desconocido';
+        let preview = '';
+
+        if (content.text) {
+          type = 'Texto';
+          preview = content.text;
+        } else if (content.image) {
+          type = 'Imagen';
+          preview = content.caption || '[Imagen]';
+        } else if (content.video) {
+          type = 'Video';
+          preview = content.caption || '[Video]';
+        } else if (content.audio) {
+          type = content.ptt ? 'Nota de voz' : 'Audio';
+          preview = '[Audio]';
+        } else if (content.sticker) {
+          type = 'Sticker';
+          preview = '[Sticker]';
+        } else if (content.document) {
+          type = 'Documento';
+          preview = content.fileName || '[Documento]';
+        }
+
         console.log(chalk.green('\n╔════════ BOT ENVÍA ════════'));
         console.log(chalk.white('║ 📤 A    :'), chalk.cyan(jid));
         console.log(chalk.white('║ 📦 Tipo :'), chalk.yellow(type));
@@ -88,26 +88,22 @@ function attachSendLogger(sock) {
 }
 
 // ─────────────────────────────────────────
-// CARPETA DE PLUGINS
-// Soporta /plugin y /plugins
+// PLUGINS
 // ─────────────────────────────────────────
 function getPluginsDir() {
-  const singular = path.join(process.cwd(), 'plugin');
-  const plural = path.join(process.cwd(), 'plugins');
+  const plugin = path.join(process.cwd(), 'plugin');
+  const plugins = path.join(process.cwd(), 'plugins');
 
-  if (fs.existsSync(singular)) return singular;
-  if (fs.existsSync(plural)) return plural;
+  if (fs.existsSync(plugin)) return plugin;
+  if (fs.existsSync(plugins)) return plugins;
 
-  fs.mkdirSync(singular, { recursive: true });
-  return singular;
+  fs.mkdirSync(plugin, { recursive: true });
+  return plugin;
 }
 
 const PLUGINS_DIR = getPluginsDir();
 const plugins = new Map();
 
-// ─────────────────────────────────────────
-// CARGAR PLUGINS
-// ─────────────────────────────────────────
 function loadPlugins() {
   plugins.clear();
 
@@ -215,6 +211,7 @@ async function messageHandler(sock, msg, store = {}) {
     sender = normalizeJid(sender || remoteJid);
 
     const botJid = normalizeJid(sock.user?.id || '');
+
     const body = getBody(msg);
     const displayMsg = getReadableMessage(msg);
 
@@ -258,6 +255,8 @@ async function messageHandler(sock, msg, store = {}) {
 
     if (!body) return;
 
+    // ✅ SOLO RESPETA EL PREFIJO DE config.js
+    // Si config.prefix = '.', solo funciona .s, .menu, .play, etc.
     const parsed = detectPrefix(body, config.prefix);
     if (!parsed) return;
 
@@ -267,18 +266,34 @@ async function messageHandler(sock, msg, store = {}) {
     if (!command) return;
 
     const plugin = plugins.get(command);
+    if (!plugin) return;
 
-    if (!plugin) {
-      return;
+    // ─────────────────────────────────────────
+    // VALIDAR BOT ACTIVADO / DESACTIVADO
+    // ─────────────────────────────────────────
+    const isOwner = Array.isArray(config.owner)
+      ? config.owner.includes(number)
+      : false;
+
+    if (!isOwner) {
+      if (fromGroup) {
+        const groupData = await db.getGroup(remoteJid);
+
+        if (groupData.bot === false && !['enable', 'menu', 'help'].includes(command)) {
+          return;
+        }
+      } else {
+        const userData = await db.getUser(sender);
+
+        if (userData.bot === false && !['enable', 'menu', 'help'].includes(command)) {
+          return;
+        }
+      }
     }
 
     if (config.debug) {
       console.log(chalk.yellow(`⚡ Ejecutando comando: ${command}`));
     }
-
-    const isOwner = Array.isArray(config.owner)
-      ? config.owner.includes(number)
-      : false;
 
     try {
       await plugin.execute({
@@ -309,39 +324,3 @@ async function messageHandler(sock, msg, store = {}) {
           { text: String(text) },
           { quoted: msg }
         )
-      });
-
-      if (config.debug) {
-        console.log(chalk.green(`✅ Comando ejecutado correctamente: ${command}`));
-      }
-
-      try {
-        await db.addXP(sender, Math.floor(Math.random() * 16) + 5);
-      } catch (e) {
-        console.log(chalk.yellow('⚠️ No se pudo guardar XP:'), e?.message || e);
-      }
-
-    } catch (e) {
-      console.log(chalk.red(`❌ Error en comando ${command}:`));
-      console.log(e?.stack || e);
-
-      try {
-        await sock.sendMessage(
-          remoteJid,
-          { text: '❌ Ocurrió un error ejecutando este comando.' },
-          { quoted: msg }
-        );
-      } catch {}
-    }
-
-  } catch (err) {
-    console.log(chalk.red('❌ Error en handler:'));
-    console.log(err?.stack || err);
-  }
-}
-
-module.exports = {
-  messageHandler,
-  loadPlugins,
-  plugins
-};
