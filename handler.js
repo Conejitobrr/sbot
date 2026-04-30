@@ -1,14 +1,21 @@
 'use strict'
 
-// 🚫 FILTRAR SPAM "Closing session"
+// 🚫 FILTRAR SPAM CONSOLA (MEJORADO)
 const originalConsoleLog = console.log
 console.log = (...args) => {
   const text = args.join(' ')
+
   if (
-    text.includes('Closing session: SessionEntry') ||
+    text.includes('Closing session') ||
     text.includes('SessionEntry') ||
-    text.includes('_chains')
+    text.includes('_chains') ||
+    text.includes('Removing old closed session') ||
+    text.includes('chainKey') ||
+    text.includes('ephemeralKeyPair') ||
+    text.includes('rootKey') ||
+    text.includes('indexInfo')
   ) return
+
   originalConsoleLog(...args)
 }
 
@@ -26,9 +33,7 @@ const {
   getGroupAdmins
 } = require('./lib/utils')
 
-// ═══════════════════════════════════════
-// 🧠 LOG DE MENSAJES DEL BOT (MEJORADO)
-// ═══════════════════════════════════════
+// 🧠 LOG DE MENSAJES DEL BOT
 function attachSendLogger(sock) {
   if (sock._loggerAttached) return
   sock._loggerAttached = true
@@ -48,10 +53,10 @@ function attachSendLogger(sock) {
         preview = content.text
       } else if (content.image) {
         type = 'Imagen 🖼️'
-        preview = content.caption || '[Imagen sin caption]'
+        preview = content.caption || '[Imagen]'
       } else if (content.video) {
         type = 'Video 🎥'
-        preview = content.caption || '[Video sin caption]'
+        preview = content.caption || '[Video]'
       } else if (content.audio) {
         type = content.ptt ? 'Nota de voz 🎤' : 'Audio 🎵'
         preview = '[Audio]'
@@ -61,12 +66,6 @@ function attachSendLogger(sock) {
       } else if (content.document) {
         type = 'Documento 📄'
         preview = content.fileName || '[Documento]'
-      } else if (content.location) {
-        type = 'Ubicación 📍'
-        preview = '[Ubicación]'
-      } else if (content.contact) {
-        type = 'Contacto 👤'
-        preview = '[Contacto]'
       }
 
       console.log(chalk.green('\n╔════════ BOT ENVÍA ════════'))
@@ -84,10 +83,7 @@ function attachSendLogger(sock) {
   }
 }
 
-// ═══════════════════════════════════════
 // PLUGINS
-// ═══════════════════════════════════════
-
 const PLUGINS_DIR = path.join(process.cwd(), 'plugins')
 
 if (!fs.existsSync(PLUGINS_DIR)) {
@@ -125,11 +121,14 @@ function loadPlugins() {
 global.loadPlugins = loadPlugins
 loadPlugins()
 
-// ═══════════════════════════════════════
 // HELPERS
-// ═══════════════════════════════════════
-
 const normalize = txt => (txt || '').replace(/[^0-9]/g, '')
+
+// 🔥 FIX NÚMERO REAL
+function getRealNumber(jid) {
+  if (!jid) return 'Desconocido'
+  return jid.split('@')[0].split(':')[0] // 👈 CLAVE
+}
 
 function getReadableMessage(msg) {
   const body = getBody(msg)
@@ -140,7 +139,7 @@ function getReadableMessage(msg) {
   if (m.imageMessage) return '[Imagen]'
   if (m.videoMessage) return '[Video]'
   if (m.stickerMessage) return '[Sticker]'
-  if (m.audioMessage) return '[Audio]'
+  if (m.audioMessage) return m.audioMessage.ptt ? '[Nota de voz]' : '[Audio]'
   if (m.documentMessage) return '[Documento]'
   if (m.locationMessage) return '[Ubicación]'
   if (m.contactMessage) return '[Contacto]'
@@ -150,10 +149,7 @@ function getReadableMessage(msg) {
   return '[Sin texto]'
 }
 
-// ═══════════════════════════════════════
 // HANDLER
-// ═══════════════════════════════════════
-
 async function messageHandler(sock, msg, store) {
   try {
     attachSendLogger(sock)
@@ -176,9 +172,8 @@ async function messageHandler(sock, msg, store) {
     const body = getBody(msg)
     const displayMsg = getReadableMessage(msg)
 
-    // ✅ FIX AQUÍ (número real sin device ID)
-    const rawNumber = sender.split('@')[0].split(':')[0]
-    const number = rawNumber.startsWith('51') ? `+${rawNumber}` : rawNumber
+    // 🔥 AQUÍ EL FIX REAL
+    const number = getRealNumber(sender)
 
     // LOGGER
     let chatLabel = chalk.blue('PRIVADO')
@@ -201,40 +196,6 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number))
     console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
-
-    // TRIVIA
-    if (body) {
-      const game = trivia.get()
-
-      if (game && game.chat === remoteJid) {
-        if (trivia.check(body)) {
-
-          clearTimeout(game.timeout)
-
-          await sock.sendMessage(remoteJid, {
-            text: `🎉 *RESPUESTA CORRECTA*\n\n👤 ${pushName}\n✅ Respuesta: *${game.answer}*\n\n🔥 Nueva pregunta...`
-          })
-
-          const next = trivia.next()
-
-          next.timeout = setTimeout(async () => {
-            const current = trivia.get()
-
-            if (current && current.chat === remoteJid) {
-              await sock.sendMessage(remoteJid, {
-                text: `⏰ *TIEMPO TERMINADO*\n\n❓ ${current.question}\n❌ Nadie respondió\n✅ Respuesta: *${current.answer}*\n\n🎮 Escribe *.trivia* para jugar de nuevo`
-              })
-
-              trivia.stop()
-            }
-          }, 60000)
-
-          await sock.sendMessage(remoteJid, {
-            text: `🎯 *TRIVIA*\n\n❓ ${next.question}\n\n⏱️ 60 segundos\n💬 Todos pueden responder`
-          })
-        }
-      }
-    }
 
     if (!body) return
 
@@ -281,4 +242,4 @@ async function messageHandler(sock, msg, store) {
 module.exports = {
   messageHandler,
   loadPlugins
-}
+  }
