@@ -27,9 +27,12 @@ const {
 } = require('./lib/utils')
 
 // ═══════════════════════════════════════
-// 🧠 LOG DE MENSAJES DEL BOT
+// 🧠 LOG DE MENSAJES DEL BOT (MEJORADO)
 // ═══════════════════════════════════════
 function attachSendLogger(sock) {
+  if (sock._loggerAttached) return // 👈 evita duplicación
+  sock._loggerAttached = true
+
   const originalSend = sock.sendMessage
 
   sock.sendMessage = async (...args) => {
@@ -37,17 +40,46 @@ function attachSendLogger(sock) {
       const jid = args[0]
       const content = args[1] || {}
 
-      let text = content.text || content.caption || '[Mensaje no textual]'
+      let type = 'Desconocido'
+      let preview = ''
+
+      if (content.text) {
+        type = 'Texto'
+        preview = content.text
+      } else if (content.image) {
+        type = 'Imagen 🖼️'
+        preview = content.caption || '[Imagen sin caption]'
+      } else if (content.video) {
+        type = 'Video 🎥'
+        preview = content.caption || '[Video sin caption]'
+      } else if (content.audio) {
+        type = content.ptt ? 'Nota de voz 🎤' : 'Audio 🎵'
+        preview = '[Audio]'
+      } else if (content.sticker) {
+        type = 'Sticker 🧩'
+        preview = '[Sticker]'
+      } else if (content.document) {
+        type = 'Documento 📄'
+        preview = content.fileName || '[Documento]'
+      } else if (content.location) {
+        type = 'Ubicación 📍'
+        preview = '[Ubicación]'
+      } else if (content.contact) {
+        type = 'Contacto 👤'
+        preview = '[Contacto]'
+      }
 
       console.log(chalk.green('\n╔════════ BOT ENVÍA ════════'))
       console.log(chalk.white('║ 📤 A:'), chalk.cyan(jid))
-      console.log(chalk.white('║ 💬 Msg:'), chalk.green(text))
+      console.log(chalk.white('║ 📦 Tipo:'), chalk.yellow(type))
+      console.log(chalk.white('║ 💬 Msg:'), chalk.green(preview))
       console.log(chalk.green('╚═══════════════════════════\n'))
 
       return await originalSend.apply(sock, args)
 
     } catch (err) {
-      console.log(chalk.red('❌ Error enviando mensaje:'), err?.message || err)
+      console.log(chalk.red('❌ Error enviando mensaje:'))
+      console.log(err?.stack || err)
     }
   }
 }
@@ -124,7 +156,7 @@ function getReadableMessage(msg) {
 
 async function messageHandler(sock, msg, store) {
   try {
-    attachSendLogger(sock) // 👈 IMPORTANTE (solo agrega esto)
+    attachSendLogger(sock)
 
     const { key, message } = msg
     if (!message) return
@@ -167,7 +199,7 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
-    // TRIVIA (igual)
+    // TRIVIA
     if (body) {
       const game = trivia.get()
 
@@ -215,7 +247,6 @@ async function messageHandler(sock, msg, store) {
 
     console.log(chalk.yellow(`⚡ Ejecutando comando: ${command}`))
 
-    // EJECUTAR PLUGIN
     try {
       await plugin.execute({
         sock,
@@ -232,13 +263,15 @@ async function messageHandler(sock, msg, store) {
       console.log(chalk.green(`✅ Comando ejecutado correctamente: ${command}`))
 
     } catch (e) {
-      console.log(chalk.red(`❌ Error en comando ${command}:`), e?.message || e)
+      console.log(chalk.red(`❌ Error en comando ${command}:`))
+      console.log(e?.stack || e)
     }
 
     await db.addXP(sender, Math.floor(Math.random() * 16) + 5)
 
   } catch (err) {
-    console.log(chalk.red('❌ Error en handler:'), err)
+    console.log(chalk.red('❌ Error en handler:'))
+    console.log(err?.stack || err)
   }
 }
 
