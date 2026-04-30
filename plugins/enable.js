@@ -1,6 +1,14 @@
-'use strict'
+'use strict';
 
-const db = require('../lib/database')
+const db = require('../lib/database');
+
+const FEATURES = [
+  'bot',
+  'audios',
+  'welcome',
+  'antilink',
+  'antispam'
+];
 
 module.exports = {
   commands: ['enable'],
@@ -15,61 +23,83 @@ module.exports = {
       fromGroup,
       isAdmin,
       isOwner
-    } = ctx
+    } = ctx;
 
-    const feature = (args[0] || '').toLowerCase()
+    const feature = (args[0] || '').toLowerCase();
 
+    // ─────────────────────────────────────────
+    // AYUDA
+    // ─────────────────────────────────────────
     if (!feature) {
       return sock.sendMessage(remoteJid, {
-        text: 'Uso:\n.enable bot\n.enable welcome\n.enable audios'
-      }, { quoted: msg })
+        text:
+`📌 Uso del comando:
+
+.enable bot
+.enable welcome
+.enable audios
+
+📋 Funciones disponibles:
+${FEATURES.map(f => `➤ ${f}`).join('\n')}`
+      }, { quoted: msg });
     }
 
-    // BOT / AUDIOS (grupo o privado)
+    // ─────────────────────────────────────────
+    // VALIDAR FEATURE
+    // ─────────────────────────────────────────
+    if (!FEATURES.includes(feature)) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Función no válida.\nUsa *.enable* para ver opciones.'
+      }, { quoted: msg });
+    }
+
+    // ─────────────────────────────────────────
+    // BOT / AUDIOS (GRUPO O PRIVADO)
+    // ─────────────────────────────────────────
     if (feature === 'bot' || feature === 'audios') {
       if (fromGroup) {
         if (!isAdmin && !isOwner) {
           return sock.sendMessage(remoteJid, {
             text: '❌ Solo admins/owner pueden usar este comando.'
-          }, { quoted: msg })
+          }, { quoted: msg });
         }
 
-        await db.setGroupSetting(remoteJid, feature, true)
+        await db.setGroupSetting(remoteJid, feature, true);
 
       } else {
-        await db.setUserSetting(sender, feature, true)
+        await db.setUserSetting(sender, feature, true);
       }
 
       return sock.sendMessage(remoteJid, {
-        text: `✅ *${feature}* activado.`
-      }, { quoted: msg })
+        text: `✅ *${feature}* activado correctamente.`
+      }, { quoted: msg });
     }
 
-    // Otras funciones solo en grupos
+    // ─────────────────────────────────────────
+    // SOLO GRUPOS
+    // ─────────────────────────────────────────
     if (!fromGroup) {
       return sock.sendMessage(remoteJid, {
         text: '❌ Este comando solo funciona en grupos.'
-      }, { quoted: msg })
+      }, { quoted: msg });
     }
 
-    if (!isAdmin) {
+    // ─────────────────────────────────────────
+    // SOLO ADMINS
+    // ─────────────────────────────────────────
+    if (!isAdmin && !isOwner) {
       return sock.sendMessage(remoteJid, {
         text: '❌ Solo admins pueden usar este comando.'
-      }, { quoted: msg })
+      }, { quoted: msg });
     }
 
-    const group = await db.getGroup(remoteJid)
+    // ─────────────────────────────────────────
+    // ACTIVAR
+    // ─────────────────────────────────────────
+    await db.setGroupSetting(remoteJid, feature, true);
 
-    if (!(feature in group)) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Función no válida.'
-      }, { quoted: msg })
-    }
-
-    await db.setGroupSetting(remoteJid, feature, true)
-
-    await sock.sendMessage(remoteJid, {
-      text: `✅ *${feature}* activado.`
-    }, { quoted: msg })
+    return sock.sendMessage(remoteJid, {
+      text: `✅ *${feature}* activado correctamente.`
+    }, { quoted: msg });
   }
-}
+};
