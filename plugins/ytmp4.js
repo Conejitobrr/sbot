@@ -6,7 +6,6 @@ const path = require('path')
 const yts = require('yt-search')
 const db = require('../lib/database')
 
-// 👉 intenta cargar eventos (opcional)
 let events = null
 try {
   events = require('../lib/events')
@@ -15,24 +14,27 @@ try {
 module.exports = {
   commands: ['ytmp4', 'video', 'ytvideo'],
 
-  async execute({ sock, remoteJid, args, sender }) {
+  async execute({ sock, remoteJid, args, sender, msg }) {
 
     if (!args.length) {
       return sock.sendMessage(remoteJid, {
         text: '❌ Envía un link o nombre del video'
-      })
+      }, { quoted: msg })
     }
 
     let query = args.join(' ')
     let url = query
 
+    const numero = sender.split('@')[0]
+
     try {
-      // 🔍 SI NO ES LINK → BUSCAR
+      // 🔍 BUSCAR SI NO ES LINK
       if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
 
         await sock.sendMessage(remoteJid, {
-          text: '🔍 Buscando video...'
-        })
+          text: `🔍 Buscando video @${numero}...`,
+          mentions: [sender]
+        }, { quoted: msg })
 
         const res = await yts(query)
         const video = res.videos[0]
@@ -40,31 +42,32 @@ module.exports = {
         if (!video) {
           return sock.sendMessage(remoteJid, {
             text: '❌ No se encontraron resultados'
-          })
+          }, { quoted: msg })
         }
 
         url = video.url
 
         await sock.sendMessage(remoteJid, {
-          text: `🎬 *${video.title}*\n⏱️ ${video.timestamp}\n\n⏳ Descargando...`
-        })
+          text: `🎬 *${video.title}*\n⏱️ ${video.timestamp}\n\n⏳ Descargando @${numero}...`,
+          mentions: [sender]
+        }, { quoted: msg })
 
       } else {
         await sock.sendMessage(remoteJid, {
-          text: '⏳ Descargando video...'
-        })
+          text: `⏳ Descargando video @${numero}...`,
+          mentions: [sender]
+        }, { quoted: msg })
       }
 
       if (url.includes('list=')) {
         return sock.sendMessage(remoteJid, {
           text: '❌ No se permiten playlists'
-        })
+        }, { quoted: msg })
       }
 
       const rawFile = path.join(__dirname, '../tmp/raw.mp4')
       const finalFile = path.join(__dirname, '../tmp/final.mp4')
 
-      // 1️⃣ DESCARGAR
       const download = `yt-dlp -f "bv*[height<=480]+ba/best[height<=480]" --merge-output-format mp4 --no-playlist -o "${rawFile}" "${url}"`
 
       exec(download, (err) => {
@@ -73,10 +76,9 @@ module.exports = {
           console.log(err)
           return sock.sendMessage(remoteJid, {
             text: '❌ Error al descargar'
-          })
+          }, { quoted: msg })
         }
 
-        // 2️⃣ CONVERTIR
         const convert = `ffmpeg -i "${rawFile}" -c:v libx264 -c:a aac -preset veryfast -crf 28 "${finalFile}" -y`
 
         exec(convert, async (err2) => {
@@ -85,7 +87,7 @@ module.exports = {
             console.log(err2)
             return sock.sendMessage(remoteJid, {
               text: '❌ Error al convertir'
-            })
+            }, { quoted: msg })
           }
 
           const stats = fs.statSync(finalFile)
@@ -96,20 +98,21 @@ module.exports = {
             fs.unlinkSync(finalFile)
             return sock.sendMessage(remoteJid, {
               text: `⚠️ Video muy pesado (${sizeMB.toFixed(1)}MB)`
-            })
+            }, { quoted: msg })
           }
 
-          // 📤 ENVIAR
+          // 📤 ENVIAR VIDEO (RESPONDIENDO + MENCIÓN)
           await sock.sendMessage(remoteJid, {
             video: fs.readFileSync(finalFile),
-            mimetype: 'video/mp4'
-          })
+            mimetype: 'video/mp4',
+            caption: `🎬 Aquí tienes tu video @${numero} ✨`,
+            mentions: [sender]
+          }, { quoted: msg })
 
-          // 🧹 limpiar
           fs.unlinkSync(rawFile)
           fs.unlinkSync(finalFile)
 
-          // ⭐ XP SILENCIOSO
+          // ⭐ XP
           let xp = Math.floor(Math.random() * 20) + 10
 
           if (events?.state?.active?.type === 'double') {
@@ -127,7 +130,7 @@ module.exports = {
 
       sock.sendMessage(remoteJid, {
         text: '❌ Error general'
-      })
+      }, { quoted: msg })
     }
   }
 }
