@@ -21,6 +21,7 @@ const path = require('path');
 const config = require('./config');
 const { messageHandler } = require('./handler');
 const events = require('./lib/events');
+const db = require('./lib/database'); // 🔥 IMPORTANTE
 
 const SESSION_DIR = path.resolve(config.sessionPath || './session');
 
@@ -38,30 +39,26 @@ const store = {
 let restarting = false;
 
 // ─────────────────────────────────────────
-// LIMPIAR Y FORMATEAR NÚMERO
+// FORMATEAR NÚMERO
 // ─────────────────────────────────────────
 function extractNumber(jid = '') {
-  if (!jid || typeof jid !== 'string') return '';
+  if (!jid) return '';
 
   try {
     jid = jidNormalizedUser(jid);
   } catch {}
 
   let number = jid.split('@')[0].split(':')[0];
-
   number = number.replace(/\D/g, '');
 
   if (!number) return '';
-
-  if (number.length > 15) {
-    number = number.slice(0, 15);
-  }
+  if (number.length > 15) number = number.slice(0, 15);
 
   return `+${number}`;
 }
 
 // ─────────────────────────────────────────
-// EXTRAER TEXTO DE MENSAJE
+// TEXTO MENSAJE
 // ─────────────────────────────────────────
 function getMessageText(msg) {
   const m = msg.message;
@@ -73,25 +70,18 @@ function getMessageText(msg) {
     m.imageMessage?.caption ||
     m.videoMessage?.caption ||
     m.documentMessage?.caption ||
-    m.buttonsResponseMessage?.selectedButtonId ||
-    m.listResponseMessage?.singleSelectReply?.selectedRowId ||
-    m.templateButtonReplyMessage?.selectedId ||
-    m.interactiveResponseMessage?.body?.text ||
     ''
   );
-}
-
-// ─────────────────────────────────────────
-// SABER SI ES GRUPO
-// ─────────────────────────────────────────
-function isGroupJid(jid = '') {
-  return jid.endsWith('@g.us');
 }
 
 // ─────────────────────────────────────────
 // INICIAR BOT
 // ─────────────────────────────────────────
 async function startBot(opts = {}) {
+
+  // 🔥 INICIAR BASE DE DATOS (ANTES DE TODO)
+  await db.init();
+
   const useCode = opts.method === 'code';
   const phoneNum = opts.phone || null;
 
@@ -101,9 +91,10 @@ async function startBot(opts = {}) {
   const sock = makeWASocket({
     version,
     logger,
+
     browser: useCode
       ? ['Ubuntu', 'Chrome', '20.0.04']
-      : [config.botName || 'SiriusBot', 'Safari', config.botVersion || '1.0.0'],
+      : [config.botName, 'Safari', config.botVersion],
 
     auth: {
       creds: state.creds,
@@ -112,24 +103,22 @@ async function startBot(opts = {}) {
 
     printQRInTerminal: false,
     emitOwnEvents: true,
-    markOnlineOnConnect: false,
-    syncFullHistory: false,
-    generateHighQualityLinkPreview: true
+    markOnlineOnConnect: false
   });
 
   // ─────────────────────────────────────────
-  // PAIRING CODE
+  // CÓDIGO DE EMPAREJAMIENTO
   // ─────────────────────────────────────────
   if (useCode && phoneNum && !state.creds?.registered) {
     setTimeout(async () => {
       try {
-        const cleanPhone = String(phoneNum).replace(/\D/g, '');
-        const rawCode = await sock.requestPairingCode(cleanPhone);
+        const cleanPhone = phoneNum.replace(/\D/g, '');
+        const code = await sock.requestPairingCode(cleanPhone);
 
-        console.log(chalk.cyan('\nCódigo de emparejamiento:\n'));
-        console.log(chalk.bgCyan.black(`   ${rawCode}   \n`));
+        console.log(chalk.cyan('\nCódigo de vinculación:\n'));
+        console.log(chalk.bgCyan.black(`   ${code}   \n`));
       } catch (e) {
-        console.log(chalk.red('❌ Error al generar código:'), e?.message || e);
+        console.log(chalk.red('❌ Error generando código'));
       }
     }, 3000);
   }
@@ -141,24 +130,22 @@ async function startBot(opts = {}) {
     const { connection, qr, lastDisconnect } = update;
 
     if (qr && !useCode) {
-      console.log(chalk.yellow('\nEscanea este QR:\n'));
+      console.log(chalk.yellow('\nEscanea el QR:\n'));
       qrcode.generate(qr, { small: true });
     }
 
     if (connection === 'open') {
       restarting = false;
 
-      const botNumber = extractNumber(sock.user?.id || '');
-
-      console.log(chalk.green('\n✅ Bot conectado correctamente'));
+      console.log(chalk.green('\n✅ BOT CONECTADO'));
       console.log(chalk.green('🤖 Nombre:'), config.botName);
-      console.log(chalk.green('📱 Número:'), botNumber || 'No detectado');
-      console.log('');
+      console.log(chalk.green('📱 Número:'), extractNumber(sock.user?.id || ''));
 
+      // 🔥 INICIAR EVENTOS
       try {
         events.init(sock);
       } catch (e) {
-        console.log(chalk.red('❌ Error iniciando events:'), e?.message || e);
+        console.log(chalk.red('Error events:'), e);
       }
     }
 
@@ -170,22 +157,18 @@ async function startBot(opts = {}) {
 
       const shouldReconnect = reason !== DisconnectReason.loggedOut;
 
-      if (shouldReconnect && config.autoReconnect !== false) {
+      if (shouldReconnect && config.autoReconnect) {
         if (restarting) return;
 
         restarting = true;
 
-        console.log(chalk.yellow(`⚠️ Conexión cerrada. Reconectando en ${config.reconnectDelay || 3000}ms...\n`));
+        console.log(chalk.yellow('⚠️ Reconectando...'));
 
         setTimeout(() => {
-          startBot({ method: 'saved' }).catch(e => {
-            restarting = false;
-            console.log(chalk.red('❌ Error al reconectar:'), e?.message || e);
-          });
+          startBot({ method: 'saved' });
         }, config.reconnectDelay || 3000);
       } else {
         console.log(chalk.red('❌ Sesión cerrada.'));
-        console.log(chalk.yellow('Borra la carpeta /session y vuelve a vincular el bot.\n'));
       }
     }
   });
@@ -206,32 +189,7 @@ async function startBot(opts = {}) {
 
       store.contacts[jid] = {
         id: jid,
-        name: c.name || c.notify || c.verifiedName || '',
-        notify: c.notify || '',
-        number: extractNumber(jid)
-      };
-    }
-  });
-
-  sock.ev.on('contacts.update', updates => {
-    for (const u of updates || []) {
-      if (!u.id) continue;
-
-      const jid = jidNormalizedUser(u.id);
-
-      if (!store.contacts[jid]) {
-        store.contacts[jid] = {
-          id: jid,
-          name: '',
-          notify: '',
-          number: extractNumber(jid)
-        };
-      }
-
-      store.contacts[jid] = {
-        ...store.contacts[jid],
-        name: u.notify || u.name || store.contacts[jid].name || '',
-        notify: u.notify || store.contacts[jid].notify || '',
+        name: c.name || c.notify || '',
         number: extractNumber(jid)
       };
     }
@@ -242,26 +200,26 @@ async function startBot(opts = {}) {
   // ─────────────────────────────────────────
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
-    if (!Array.isArray(messages)) return;
 
     for (const msg of messages) {
       try {
-        if (!msg?.message) continue;
+        if (!msg.message) continue;
         if (!msg.key?.remoteJid) continue;
         if (msg.key.remoteJid === 'status@broadcast') continue;
 
         const remoteJid = msg.key.remoteJid;
-        const fromGroup = isGroupJid(remoteJid);
+        const fromGroup = remoteJid.endsWith('@g.us');
+
         const senderJid = fromGroup
-          ? msg.key.participant || remoteJid
+          ? msg.key.participant
           : remoteJid;
 
         const body = getMessageText(msg);
-        const cleanNumber = extractNumber(senderJid);
 
-        msg.realNumber = cleanNumber;
         msg.bodyText = body;
+        msg.realNumber = extractNumber(senderJid);
 
+        // 🔥 EVENTOS
         try {
           await events.onMessage({
             sock,
@@ -273,17 +231,14 @@ async function startBot(opts = {}) {
             msg
           });
         } catch (e) {
-          console.log(chalk.red('❌ Error en events:'), e?.message || e);
+          console.log('Error events:', e);
         }
 
-        try {
-          await messageHandler(sock, msg, store);
-        } catch (e) {
-          console.log(chalk.red('❌ Error en handler:'), e?.message || e);
-        }
+        // 🔥 HANDLER (COMANDOS)
+        await messageHandler(sock, msg, store);
 
       } catch (e) {
-        console.log(chalk.red('❌ Error procesando mensaje:'), e?.message || e);
+        console.log('❌ Error mensaje:', e);
       }
     }
   });
@@ -292,8 +247,5 @@ async function startBot(opts = {}) {
 }
 
 module.exports = {
-  startBot,
-  extractNumber,
-  getMessageText,
-  store
+  startBot
 };
