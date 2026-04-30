@@ -1,127 +1,159 @@
-'use strict'
+'use strict';
 
-const { exec } = require('child_process')
-const fs = require('fs')
-const path = require('path')
-const yts = require('yt-search')
-const db = require('../lib/database')
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const yts = require('yt-search');
+const db = require('../lib/database');
 
-let events = null
+let events = null;
 try {
-  events = require('../lib/events')
+  events = require('../lib/events');
 } catch {}
+
+const execFileAsync = promisify(execFile);
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
+
+function isYouTubeUrl(text = '') {
+  return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(text);
+}
+
+async function searchVideo(query) {
+  const res = await yts(query);
+  return res.videos?.[0] || null;
+}
+
+async function downloadVideo(url, output) {
+  await execFileAsync('yt-dlp', [
+    '-f', 'bv*[height<=480]+ba/best[height<=480]',
+    '--merge-output-format', 'mp4',
+    '--no-playlist',
+    '-o', output,
+    url
+  ]);
+}
+
+async function convertVideo(input, output) {
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i', input,
+    '-c:v', 'libx264',
+    '-c:a', 'aac',
+    '-preset', 'veryfast',
+    '-crf', '28',
+    output
+  ]);
+}
 
 module.exports = {
   commands: ['ytmp4', 'video', 'ytvideo'],
 
   async execute({ sock, remoteJid, args, sender, msg }) {
-
-    if (!args.length) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Envía un link o nombre del video'
-      }, { quoted: msg })
-    }
-
-    let query = args.join(' ')
-    let url = query
+    let rawFile = null;
+    let finalFile = null;
 
     try {
-      if (!query.includes('youtube.com') && !query.includes('youtu.be')) {
+      if (!args.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Envía un link o nombre del video.\n\nEjemplo:\n.ytmp4 bad bunny'
+        }, { quoted: msg });
+      }
 
+      ensureTemp();
+
+      const query = args.join(' ');
+      let url = query;
+      let title = 'Video de YouTube';
+      let duration = '';
+
+      if (!isYouTubeUrl(query)) {
         await sock.sendMessage(remoteJid, {
           text: '🔍 Buscando video...'
-        }, { quoted: msg })
+        }, { quoted: msg });
 
-        const res = await yts(query)
-        const video = res.videos[0]
+        const video = await searchVideo(query);
 
         if (!video) {
           return sock.sendMessage(remoteJid, {
-            text: '❌ No se encontraron resultados'
-          }, { quoted: msg })
+            text: '❌ No se encontraron resultados.'
+          }, { quoted: msg });
         }
 
-        url = video.url
+        url = video.url;
+        title = video.title || title;
+        duration = video.timestamp || '';
 
         await sock.sendMessage(remoteJid, {
-          text: `🎬 *${video.title}*\n⏱️ ${video.timestamp}\n\n⏳ Descargando...`
-        }, { quoted: msg })
-
+          text: `🎬 *${title}*\n⏱️ ${duration}\n\n⏳ Descargando...`
+        }, { quoted: msg });
       } else {
         await sock.sendMessage(remoteJid, {
           text: '⏳ Descargando video...'
-        }, { quoted: msg })
+        }, { quoted: msg });
       }
 
       if (url.includes('list=')) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ No se permiten playlists'
-        }, { quoted: msg })
+          text: '❌ No se permiten playlists.'
+        }, { quoted: msg });
       }
 
-      const rawFile = path.join(__dirname, '../tmp/raw.mp4')
-      const finalFile = path.join(__dirname, '../tmp/final.mp4')
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
-      const download = `yt-dlp -f "bv*[height<=480]+ba/best[height<=480]" --merge-output-format mp4 --no-playlist -o "${rawFile}" "${url}"`
+      rawFile = path.join(TEMP_DIR, `yt_raw_${id}.mp4`);
+      finalFile = path.join(TEMP_DIR, `yt_final_${id}.mp4`);
 
-      exec(download, (err) => {
+      await downloadVideo(url, rawFile);
+      await convertVideo(rawFile, finalFile);
 
-        if (err) {
-          console.log(err)
-          return sock.sendMessage(remoteJid, {
-            text: '❌ Error al descargar'
-          }, { quoted: msg })
-        }
+      if (!fs.existsSync(finalFile)) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se pudo generar el video.'
+        }, { quoted: msg });
+      }
 
-        const convert = `ffmpeg -i "${rawFile}" -c:v libx264 -c:a aac -preset veryfast -crf 28 "${finalFile}" -y`
+      const sizeMB = fs.statSync(finalFile).size / 1024 / 1024;
 
-        exec(convert, async (err2) => {
+      if (sizeMB > 30) {
+        return sock.sendMessage(remoteJid, {
+          text: `⚠️ Video muy pesado (${sizeMB.toFixed(1)} MB)`
+        }, { quoted: msg });
+      }
 
-          if (err2) {
-            console.log(err2)
-            return sock.sendMessage(remoteJid, {
-              text: '❌ Error al convertir'
-            }, { quoted: msg })
-          }
+      await sock.sendMessage(remoteJid, {
+        video: fs.readFileSync(finalFile),
+        mimetype: 'video/mp4',
+        fileName: `${title}.mp4`
+      }, { quoted: msg });
 
-          const stats = fs.statSync(finalFile)
-          const sizeMB = stats.size / (1024 * 1024)
+      let xp = Math.floor(Math.random() * 20) + 10;
 
-          if (sizeMB > 30) {
-            fs.unlinkSync(rawFile)
-            fs.unlinkSync(finalFile)
-            return sock.sendMessage(remoteJid, {
-              text: `⚠️ Video muy pesado (${sizeMB.toFixed(1)}MB)`
-            }, { quoted: msg })
-          }
+      if (events?.getState?.()?.type === 'double') {
+        xp *= 2;
+      }
 
-          // 📤 ENVIAR RESPONDIENDO AL COMANDO
-          await sock.sendMessage(remoteJid, {
-            video: fs.readFileSync(finalFile),
-            mimetype: 'video/mp4'
-          }, { quoted: msg })
-
-          fs.unlinkSync(rawFile)
-          fs.unlinkSync(finalFile)
-
-          let xp = Math.floor(Math.random() * 20) + 10
-
-          if (events?.state?.active?.type === 'double') {
-            xp *= 2
-          }
-
-          await db.addXP(sender, xp)
-
-        })
-
-      })
+      await db.addXP(sender, xp);
 
     } catch (err) {
-      console.log(err)
+      console.log('❌ Error en ytmp4:', err?.message || err);
 
-      sock.sendMessage(remoteJid, {
-        text: '❌ Error general'
-      }, { quoted: msg })
+      await sock.sendMessage(remoteJid, {
+        text: '❌ Error al descargar video.\nVerifica yt-dlp y ffmpeg.'
+      }, { quoted: msg });
+
+    } finally {
+      for (const file of [rawFile, finalFile]) {
+        try {
+          if (file && fs.existsSync(file)) fs.unlinkSync(file);
+        } catch {}
+      }
     }
   }
-}
+};
