@@ -30,7 +30,7 @@ module.exports = {
     // 🔥 AUDIOS (AHORA EN .OGG)
     const audios = {
       hola: 'hola.ogg',
-      autoestima: 'autoestima.ogg'
+      autoestima: 'Autoestima.ogg'
     };
 
     const key = Object.keys(audios).find(k => text.includes(k));
