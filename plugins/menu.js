@@ -54,6 +54,7 @@ Bienvenido a *${config.botName}*
 ➤ *${p}trivia* → juega preguntados con todos
 ➤ *${p}formarpareja* → forma pareja al azar
 ➤ *${p}formarparejas* → forma parejas en grupo
+➤ *${p}love* → mencionando a alguien
 ➤ *${p}gay* → mencionando a alguien
 ➤ *${p}topgays* → top gays del grupo
 ➤ *${p}hornycard* → carta horny
