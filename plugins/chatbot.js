@@ -1,76 +1,123 @@
 'use strict';
 
+function getTextFromMsg(msg) {
+  return (
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    msg.message?.imageMessage?.caption ||
+    msg.message?.videoMessage?.caption ||
+    ''
+  );
+}
+
+function cleanCommand(text = '') {
+  return text.replace(/^[.!/#]?(ai|bot|ia)\s*/i, '').trim();
+}
+
+function localReply(text = '') {
+  const t = text.toLowerCase();
+
+  if (/(hola|buenas|hey|ola)/i.test(t)) {
+    return 'Holaa 😄 ¿qué haces?';
+  }
+
+  if (/(como estas|cómo estás)/i.test(t)) {
+    return 'Estoy bien 😄 aquí hablando contigo.';
+  }
+
+  if (/(quien eres|quién eres)/i.test(t)) {
+    return 'Soy SiriusBot 🤖, tu bot de WhatsApp.';
+  }
+
+  if (/(gracias|thanks)/i.test(t)) {
+    return 'De nada 😄';
+  }
+
+  return 'Mmm interesante 🤔 cuéntame más.';
+}
+
+async function askGroq(text) {
+  if (!process.env.GROQ_API_KEY) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Eres SiriusBot, un asistente de WhatsApp. Responde en español, natural, corto, divertido y útil. No hagas respuestas largas salvo que te lo pidan.'
+          },
+          {
+            role: 'user',
+            content: text
+          }
+        ],
+        temperature: 0.8,
+        max_tokens: 250
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.log('❌ GROQ ERROR:', data);
+      return null;
+    }
+
+    return data?.choices?.[0]?.message?.content?.trim() || null;
+
+  } catch (err) {
+    console.log('❌ IA ERROR:', err?.message || err);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 module.exports = {
   commands: ['ai', 'bot', 'ia'],
 
   async execute(ctx) {
-    const { sock, msg, remoteJid } = ctx;
+    const { sock, msg, remoteJid, args } = ctx;
 
-    // 📩 extraer texto correctamente
-    const fullText =
-      msg.message?.conversation ||
-      msg.message?.extendedTextMessage?.text ||
-      msg.message?.imageMessage?.caption ||
-      msg.message?.videoMessage?.caption ||
-      '';
+    let text = args?.join(' ')?.trim();
 
-    // separar comando del texto
-    const args = fullText.split(' ');
-    args.shift(); // elimina ".ai", ".bot", etc.
-    const text = args.join(' ').trim();
+    if (!text) {
+      text = cleanCommand(getTextFromMsg(msg));
+    }
 
     if (!text) {
       return sock.sendMessage(remoteJid, {
-        text: '🤖 Escribe algo para hablar conmigo.\nEjemplo: .ai hola cómo estás'
+        text: '🤖 Escribe algo para hablar conmigo.\n\nEjemplo:\n.ai hola cómo estás'
       }, { quoted: msg });
     }
 
     try {
-      // 🚀 petición a Groq (USA FETCH GLOBAL, NO node-fetch)
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [
-            {
-              role: 'system',
-              content: 'Eres un asistente tipo WhatsApp. Respondes natural, corto, humano y conversacional como Simsimi pero inteligente.'
-            },
-            {
-              role: 'user',
-              content: text
-            }
-          ],
-          temperature: 0.9,
-          max_tokens: 200
-        })
-      });
+      await sock.sendPresenceUpdate('composing', remoteJid);
 
-      const data = await response.json();
-
-      console.log('📦 GROQ RESPONSE:', JSON.stringify(data, null, 2));
-
-      const reply = data?.choices?.[0]?.message?.content;
-
-      if (!reply) {
-        return sock.sendMessage(remoteJid, {
-          text: '⚠️ No recibí respuesta de la IA'
-        }, { quoted: msg });
-      }
+      const aiReply = await askGroq(text);
+      const reply = aiReply || localReply(text);
 
       return sock.sendMessage(remoteJid, {
         text: reply
       }, { quoted: msg });
 
-    } catch (err) {
-      console.error('❌ IA ERROR:', err);
-
+    } catch {
       return sock.sendMessage(remoteJid, {
-        text: '⚠️ Error conectando con la IA'
+        text: localReply(text)
       }, { quoted: msg });
     }
   }
