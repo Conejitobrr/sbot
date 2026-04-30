@@ -124,21 +124,23 @@ loadPlugins()
 // HELPERS
 const normalize = txt => (txt || '').replace(/[^0-9]/g, '')
 
-// 🔥 FIX NÚMERO REAL (ACTUALIZADO)
-function getRealNumber(msg, jid) {
-  // prioridad al número limpio que viene desde main.js
-  if (msg?.realNumber) return msg.realNumber
-
+// 🔥 FIX REAL DEFINITIVO (LID → número real)
+function getRealNumber(jid) {
   if (!jid) return 'Desconocido'
 
-  let num = jid.split('@')[0].split(':')[0]
+  jid = jid.split('@')[0]
 
-  // limpiar números raros largos
-  if (num.length > 15) {
-    num = num.slice(0, 12)
+  // Caso raro tipo: 123456789:12
+  if (jid.includes(':')) {
+    jid = jid.split(':')[0]
   }
 
-  return num.startsWith('+') ? num : '+' + num
+  // Si parece LID (muy largo + empieza con 4), intentar fallback
+  if (jid.length > 13) {
+    return jid.slice(-9) // 👈 corta a algo más realista (Perú = 9 dígitos)
+  }
+
+  return jid
 }
 
 function getReadableMessage(msg) {
@@ -183,8 +185,7 @@ async function messageHandler(sock, msg, store) {
     const body = getBody(msg)
     const displayMsg = getReadableMessage(msg)
 
-    // 🔥 USAR FIX NUEVO
-    const number = getRealNumber(msg, sender)
+    const number = getRealNumber(sender)
 
     // LOGGER
     let chatLabel = chalk.blue('PRIVADO')
@@ -204,7 +205,7 @@ async function messageHandler(sock, msg, store) {
     console.log(chalk.white('║ 📍 Tipo   :'), chatLabel)
     console.log(chalk.white('║ 🏷️ Chat   :'), chalk.cyan(chatName))
     console.log(chalk.white('║ 👤 Nombre :'), chalk.green(pushName))
-    console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number))
+    console.log(chalk.white('║ 📞 Número :'), chalk.yellow('+' + number))
     console.log(chalk.white('║ 💬 Msg    :'), chalk.white(displayMsg))
     console.log(chalk.gray('╚══════════════════════════════\n'))
 
