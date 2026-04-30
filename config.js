@@ -20,9 +20,9 @@ module.exports = {
   footer     : process.env.BOT_FOOTER  || 'SiriusBot',
 
   // ─────────────────────────────────────────
-  // ⚙️ PREFIJO
+  // ⚙️ PREFIJO (🔥 AQUÍ CONTROLAS TODO)
   // ─────────────────────────────────────────
-  prefix: process.env.PREFIX || '.',
+  prefix: '.',
 
   // ─────────────────────────────────────────
   // 💾 BASE DE DATOS
@@ -39,10 +39,9 @@ module.exports = {
   reconnectDelay: 3000,
 
   // ─────────────────────────────────────────
-  // ⚡ OPCIONES EXTRA (MEJORAS)
+  // ⚡ OPCIONES EXTRA
   // ─────────────────────────────────────────
   debug: true,
   antiSpam: true,
   maxMessagesPerMinute: 20
-
 };
