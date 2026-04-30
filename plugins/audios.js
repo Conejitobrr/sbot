@@ -10,6 +10,9 @@ module.exports = {
 
     if (!body) return;
 
+    // ═══════════════════════════════════════
+    // 🔥 CHECK ENABLE / DISABLE AUDIOS
+    // ═══════════════════════════════════════
     try {
       if (fromGroup) {
         const enabled = await db.getGroupSetting(remoteJid, 'audios');
@@ -24,9 +27,10 @@ module.exports = {
 
     const text = body.toLowerCase();
 
+    // 🔥 AUDIOS (AHORA EN .OGG)
     const audios = {
-      hola: 'hola.mp3',
-      autoestima: 'Autoestima.mp3'
+      hola: 'hola.ogg',
+      autoestima: 'autoestima.ogg'
     };
 
     const key = Object.keys(audios).find(k => text.includes(k));
@@ -46,7 +50,7 @@ module.exports = {
         remoteJid,
         {
           audio: fs.readFileSync(filePath),
-          mimetype: 'audio/mpeg',
+          mimetype: 'audio/ogg; codecs=opus',
           ptt: true
         },
         { quoted: msg }
