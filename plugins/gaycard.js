@@ -41,8 +41,11 @@ module.exports = {
       const input = path.join(process.cwd(), 'media', 'gay2.mp3');
       const output = path.join(process.cwd(), 'media', 'gay2.ogg');
 
-      // 🔥 CONVERTIR MP3 → OGG OPUS
-      execSync(`ffmpeg -i "${input}" -vn -c:a libopus -b:a 128k "${output}" -y`);
+      // 🔥 FIX: FFmpeg silencioso
+      execSync(
+        `ffmpeg -loglevel error -hide_banner -i "${input}" -vn -c:a libopus -b:a 128k "${output}" -y`,
+        { stdio: 'ignore' } // 👈 mata el spam completamente
+      );
 
       const buffer = fs.readFileSync(output);
 
