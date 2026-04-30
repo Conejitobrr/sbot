@@ -94,15 +94,18 @@ function getPluginsDir() {
 
 const PLUGINS_DIR = getPluginsDir();
 const plugins = new Map();
+const messagePlugins = [];
 
 function loadPlugins() {
   plugins.clear();
+  messagePlugins.length = 0;
 
   const files = fs
     .readdirSync(PLUGINS_DIR)
     .filter(file => file.endsWith('.js'));
 
-  let loadedFiles = 0;
+  let commandFiles = 0;
+  let eventFiles = 0;
 
   for (const file of files) {
     try {
@@ -112,32 +115,47 @@ function loadPlugins() {
 
       const plugin = require(filepath);
 
-      if (!plugin || typeof plugin.execute !== 'function') {
-        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: falta execute()`));
+      if (!plugin) {
+        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: vacío`));
         continue;
       }
 
-      const commands = Array.isArray(plugin.commands) ? plugin.commands : [];
-
-      if (!commands.length) {
-        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: no tiene commands`));
-        continue;
-      }
-
-      for (const cmd of commands) {
-        plugins.set(String(cmd).toLowerCase(), {
+      if (typeof plugin.onMessage === 'function') {
+        messagePlugins.push({
           ...plugin,
           file
         });
+        eventFiles++;
       }
 
-      loadedFiles++;
+      if (typeof plugin.execute === 'function') {
+        const commands = Array.isArray(plugin.commands) ? plugin.commands : [];
+
+        if (!commands.length) {
+          console.log(chalk.yellow(`⚠️ Plugin comando ignorado ${file}: no tiene commands`));
+        } else {
+          for (const cmd of commands) {
+            plugins.set(String(cmd).toLowerCase(), {
+              ...plugin,
+              file
+            });
+          }
+
+          commandFiles++;
+        }
+      }
+
+      if (typeof plugin.execute !== 'function' && typeof plugin.onMessage !== 'function') {
+        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: falta execute() u onMessage()`));
+      }
+
     } catch (err) {
       console.log(chalk.red(`❌ Error cargando plugin ${file}:`), err?.message || err);
     }
   }
 
-  console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size} comandos en ${loadedFiles} archivos`));
+  console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size} comandos en ${commandFiles} archivos`));
+  console.log(chalk.green(`🎧 Plugins onMessage cargados: ${messagePlugins.length} en ${eventFiles} archivos`));
 }
 
 global.loadPlugins = loadPlugins;
@@ -237,6 +255,50 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
+    const isOwner = Array.isArray(config.owner)
+      ? config.owner.includes(number)
+      : false;
+
+    // ─────────────────────────────────────────
+    // PLUGINS AUTOMÁTICOS onMessage
+    // Ejemplo: audios.js
+    // ─────────────────────────────────────────
+    if (body && messagePlugins.length) {
+      for (const plugin of messagePlugins) {
+        try {
+          await plugin.onMessage({
+            sock,
+            msg,
+            key,
+            remoteJid,
+            sender,
+            botJid,
+            pushName,
+            body,
+            store,
+            config,
+            db,
+
+            fromMe,
+            fromGroup,
+            isOwner,
+            isAdmin,
+            isBotAdmin,
+            groupMetadata,
+            groupAdmins,
+
+            reply: text => sock.sendMessage(
+              remoteJid,
+              { text: String(text) },
+              { quoted: msg }
+            )
+          });
+        } catch (e) {
+          console.log(chalk.red(`❌ Error en onMessage ${plugin.file}:`), e?.message || e);
+        }
+      }
+    }
+
     if (!body) return;
 
     const parsed = detectPrefix(body, config.prefix);
@@ -249,10 +311,6 @@ async function messageHandler(sock, msg, store = {}) {
 
     const plugin = plugins.get(command);
     if (!plugin) return;
-
-    const isOwner = Array.isArray(config.owner)
-      ? config.owner.includes(number)
-      : false;
 
     if (!isOwner) {
       if (fromGroup) {
@@ -337,5 +395,6 @@ async function messageHandler(sock, msg, store = {}) {
 module.exports = {
   messageHandler,
   loadPlugins,
-  plugins
+  plugins,
+  messagePlugins
 };
