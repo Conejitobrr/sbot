@@ -32,6 +32,29 @@ const store = {
   messages: {}
 }
 
+// 🔥 FUNCIÓN PARA LIMPIAR NÚMERO (FIX REAL)
+function extractNumber(jid = '') {
+  jid = jidNormalizedUser(jid)
+
+  // quitar dominio
+  let number = jid.split('@')[0]
+
+  // eliminar cosas raras tipo : o ;
+  number = number.split(':')[0]
+
+  // si es muy largo y raro → cortar (fix para IDs fantasmas)
+  if (number.length > 15) {
+    number = number.slice(0, 12)
+  }
+
+  // formato bonito tipo +51
+  if (!number.startsWith('+')) {
+    number = '+' + number
+  }
+
+  return number
+}
+
 async function startBot(opts = {}) {
   const useCode = opts.method === 'code'
   const phoneNum = opts.phone || null
@@ -42,7 +65,7 @@ async function startBot(opts = {}) {
   const sock = makeWASocket({
     version,
 
-    // 🔥 CAMBIO: logger más limpio (evita spam técnico)
+    // 🔥 logger limpio
     logger: pino({ level: 'fatal' }),
 
     browser: useCode
@@ -87,7 +110,7 @@ async function startBot(opts = {}) {
     }
 
     if (connection === 'open') {
-      const num = jidNormalizedUser(sock.user.id).split('@')[0]
+      const num = extractNumber(sock.user.id)
 
       console.log(chalk.green('\n✅ Conectado como:'), num, '\n')
 
@@ -118,7 +141,7 @@ async function startBot(opts = {}) {
   sock.ev.on('creds.update', saveCreds)
 
   //═══════════════════════════════════════
-  // CONTACTOS (🔥 CLAVE DEL FIX)
+  // CONTACTOS (FIX)
   //═══════════════════════════════════════
   sock.ev.on('contacts.upsert', contacts => {
     for (const c of contacts) {
@@ -129,12 +152,12 @@ async function startBot(opts = {}) {
       store.contacts[jid] = {
         id: jid,
         name: c.name || c.notify || c.verifiedName || '',
-        notify: c.notify || ''
+        notify: c.notify || '',
+        number: extractNumber(jid)
       }
     }
   })
 
-  // 🔥 NUEVO: actualiza nombres dinámicos (esto arregla números raros)
   sock.ev.on('contacts.update', updates => {
     for (const u of updates) {
       const jid = jidNormalizedUser(u.id)
@@ -148,22 +171,9 @@ async function startBot(opts = {}) {
           u.name ||
           store.contacts[jid].name ||
           '',
-        notify: u.notify || store.contacts[jid].notify || ''
+        notify: u.notify || store.contacts[jid].notify || '',
+        number: extractNumber(jid)
       }
-    }
-  })
-
-  //═══════════════════════════════════════
-  // BIENVENIDAS / SALIDAS
-  //═══════════════════════════════════════
-  sock.ev.on('group-participants.update', async update => {
-    try {
-      await events.onParticipantsUpdate(sock, update)
-    } catch (e) {
-      console.log(
-        chalk.red('❌ Error en participants.update:'),
-        e?.message || e
-      )
     }
   })
 
@@ -179,6 +189,12 @@ async function startBot(opts = {}) {
         if (!msg.key?.remoteJid) continue
         if (msg.key.remoteJid === 'status@broadcast') continue
 
+        // 🔥 FIX: obtener número real SIEMPRE
+        const senderJid = msg.key.participant || msg.key.remoteJid
+        const cleanNumber = extractNumber(senderJid)
+
+        msg.realNumber = cleanNumber // 👈 lo mandamos al handler
+
         // EVENTS
         try {
           await events.onMessage({
@@ -190,7 +206,7 @@ async function startBot(opts = {}) {
               msg.message?.imageMessage?.caption ||
               msg.message?.videoMessage?.caption ||
               '',
-            sender: msg.key.participant || msg.key.remoteJid,
+            sender: senderJid,
             pushName: msg.pushName || 'Usuario',
             fromGroup: msg.key.remoteJid.endsWith('@g.us'),
             msg
@@ -202,7 +218,6 @@ async function startBot(opts = {}) {
           )
         }
 
-        // HANDLER
         await messageHandler(sock, msg, store)
 
       } catch (e) {
