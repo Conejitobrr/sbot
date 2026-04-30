@@ -1,133 +1,135 @@
-'use strict'
+'use strict';
 
-const { exec } = require('child_process')
-const fs = require('fs')
-const path = require('path')
-const db = require('../lib/database')
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const db = require('../lib/database');
 
-let events = null
+let events = null;
 try {
-  events = require('../lib/events')
+  events = require('../lib/events');
 } catch {}
+
+const execFileAsync = promisify(execFile);
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
+
+function isInstagramUrl(url = '') {
+  return /instagram\.com/i.test(url);
+}
+
+async function downloadInstagram(url, outputTemplate) {
+  await execFileAsync('yt-dlp', [
+    '--no-playlist',
+    '--add-header', 'user-agent:Mozilla/5.0',
+    '-o', outputTemplate,
+    url
+  ]);
+}
 
 module.exports = {
   commands: ['instagram', 'ig', 'igdl'],
 
-  async execute({ sock, remoteJid, args, sender }) {
-
-    if (!args.length) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Envía un link de Instagram'
-      })
-    }
-
-    const url = args[0]
-
-    if (!url.includes('instagram.com')) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Link inválido de Instagram'
-      })
-    }
-
-    const tmpDir = path.join(__dirname, '../tmp')
-
-    if (!fs.existsSync(tmpDir)) {
-      fs.mkdirSync(tmpDir, { recursive: true })
-    }
+  async execute({ sock, remoteJid, args, sender, msg }) {
+    const downloaded = [];
 
     try {
+      if (!args.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Envía un link de Instagram.\n\nEjemplo:\n.ig https://...'
+        }, { quoted: msg });
+      }
+
+      const url = args[0];
+
+      if (!isInstagramUrl(url)) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Link inválido de Instagram.'
+        }, { quoted: msg });
+      }
+
+      ensureTemp();
+
       await sock.sendMessage(remoteJid, {
-        text: '⏳ Descargando contenido...'
-      })
+        text: '⏳ Descargando contenido de Instagram...'
+      }, { quoted: msg });
 
-      // 🔥 descarga TODO (videos, imágenes, carrusel)
-      const cmd = `
-yt-dlp \
---no-playlist \
---add-header "user-agent:Mozilla/5.0" \
--o "${tmpDir}/ig_%(id)s_%(title)s.%(ext)s" \
-"${url}"
-      `
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+      const outputTemplate = path.join(TEMP_DIR, `ig_${id}_%(id)s.%(ext)s`);
 
-      exec(cmd, async (err) => {
+      await downloadInstagram(url, outputTemplate);
 
-        if (err) {
-          console.log(err)
-          return sock.sendMessage(remoteJid, {
-            text: '❌ No se pudo descargar (puede ser privado o inválido)'
-          })
+      const files = fs.readdirSync(TEMP_DIR)
+        .filter(file => file.startsWith(`ig_${id}_`));
+
+      if (!files.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se encontró contenido. Puede ser privado o inválido.'
+        }, { quoted: msg });
+      }
+
+      for (const file of files) {
+        const filePath = path.join(TEMP_DIR, file);
+        downloaded.push(filePath);
+
+        const sizeMB = fs.statSync(filePath).size / 1024 / 1024;
+
+        if (sizeMB > 30) {
+          await sock.sendMessage(remoteJid, {
+            text: `⚠️ Archivo muy pesado (${sizeMB.toFixed(1)} MB)`
+          }, { quoted: msg });
+          continue;
         }
 
-        // 🔍 leer archivos descargados
-        const files = fs.readdirSync(tmpDir)
-          .filter(f => f.startsWith('ig_'))
+        const buffer = fs.readFileSync(filePath);
+        const lower = file.toLowerCase();
 
-        if (!files.length) {
-          return sock.sendMessage(remoteJid, {
-            text: '❌ No se encontró contenido'
-          })
+        if (lower.endsWith('.mp4') || lower.endsWith('.mkv') || lower.endsWith('.webm')) {
+          await sock.sendMessage(remoteJid, {
+            video: buffer,
+            mimetype: 'video/mp4',
+            caption: '📸 Instagram'
+          }, { quoted: msg });
+        } else if (
+          lower.endsWith('.jpg') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.webp')
+        ) {
+          await sock.sendMessage(remoteJid, {
+            image: buffer,
+            caption: '📸 Instagram'
+          }, { quoted: msg });
         }
+      }
 
-        for (const file of files) {
-          const filePath = path.join(tmpDir, file)
-          const buffer = fs.readFileSync(filePath)
+      let xp = Math.floor(Math.random() * 15) + 5;
 
-          // 🎥 VIDEO
-          if (file.endsWith('.mp4') || file.endsWith('.mkv')) {
+      if (events?.getState?.()?.type === 'double') {
+        xp *= 2;
+      }
 
-            const stats = fs.statSync(filePath)
-            const sizeMB = stats.size / (1024 * 1024)
-
-            if (sizeMB > 30) {
-              await sock.sendMessage(remoteJid, {
-                text: `⚠️ Video muy pesado (${sizeMB.toFixed(1)}MB)`
-              })
-              fs.unlinkSync(filePath)
-              continue
-            }
-
-            await sock.sendMessage(remoteJid, {
-              video: buffer,
-              mimetype: 'video/mp4',
-              caption: '📸 Instagram'
-            })
-
-          }
-          // 🖼️ IMAGEN
-          else if (
-            file.endsWith('.jpg') ||
-            file.endsWith('.jpeg') ||
-            file.endsWith('.png') ||
-            file.endsWith('.webp')
-          ) {
-
-            await sock.sendMessage(remoteJid, {
-              image: buffer,
-              caption: '📸 Instagram'
-            })
-          }
-
-          // 🧹 eliminar archivo después de enviar
-          fs.unlinkSync(filePath)
-        }
-
-        // ⭐ XP
-        let xp = Math.floor(Math.random() * 15) + 5
-
-        if (events?.state?.active?.type === 'double') {
-          xp *= 2
-        }
-
-        await db.addXP(sender, xp)
-
-      })
+      await db.addXP(sender, xp);
 
     } catch (err) {
-      console.log(err)
+      console.log('❌ Error en instagram:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error general'
-      })
+        text: '❌ No se pudo descargar. Puede ser privado, inválido o requerir cookies.'
+      }, { quoted: msg });
+
+    } finally {
+      for (const file of downloaded) {
+        try {
+          if (fs.existsSync(file)) fs.unlinkSync(file);
+        } catch {}
+      }
     }
   }
-}
+};
