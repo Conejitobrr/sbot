@@ -29,6 +29,15 @@ module.exports = {
     const audios = {
       hola: 'hola.mp3',
       autoestima: 'Autoestima.mp3',
+      tetas: 'ATetas.mp3',
+      añañin: 'Añañin.mp3',
+      chaoo: 'Chaoo.mp3',
+      coger: 'Coger.mp3',
+      viernes: 'viernes.mp3',
+      sexo: 'S3x0g.mp3',
+      linda: 'Linda.mp3',
+      doxean: 'Me doxean.mp3',
+      fiesta: 'No es jueves.mp3',
       jejeje: 'Jejeje.mp3'
     };
 
