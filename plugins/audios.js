@@ -38,6 +38,8 @@ module.exports = {
       noche: 'Noche.mp3',
       sexo: 'S3x0g.mp3',
       linda: 'Linda.mp3',
+      mete: 'Tu no mete.mp3',
+      telepatía: 'Telepatía.mp3',
       doxean: 'Me doxean.mp3',
       fiesta: 'No es jueves.mp3',
       jejeje: 'Jejeje.mp3'
