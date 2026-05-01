@@ -42,18 +42,20 @@ module.exports = {
     try {
       const isPremiumUser = await db.isPremium(sender);
 
-      // 👑 Owner = ilimitado
-      // ⭐ Premium = ilimitado
-      // 👤 Normal = 5 usos gratis al día
+      let remaining = null;
+
+      // 👤 Usuarios normales → límite
       if (!isOwner && !isPremiumUser) {
         const allowed = await db.canUseNotify(sender, false, false, false);
+
+        remaining = await db.getRemainingUses(sender);
 
         if (!allowed) {
           return sock.sendMessage(remoteJid, {
             text:
 `❌ Ya usaste tus *5 notificaciones gratis* de hoy.
 
-⭐ Hazte premium para usar *.notify / .hidetag / .notificar* sin límite.`
+⭐ Hazte premium para uso ilimitado.`
           }, { quoted: msg });
         }
       }
@@ -64,7 +66,7 @@ module.exports = {
       const text = args.join(' ').trim();
       const quoted = getQuotedInfo(msg);
 
-      // Responder a texto/foto/video/audio/sticker/documento con .hidetag
+      // 📌 RESPONDER SIN TEXTO
       if (quoted && !text) {
         return await sock.sendMessage(
           remoteJid,
@@ -78,18 +80,24 @@ module.exports = {
               },
               message: quoted.quotedMessage
             },
-            mentions: users
+            mentions: users,
+            ...(remaining !== null && {
+              caption: `📢 Notificación enviada\n📊 Usos restantes: ${remaining}/5`
+            })
           },
           { quoted: msg }
         );
       }
 
-      // Responder a algo con .hidetag mensaje
+      // 📌 RESPONDER CON TEXTO
       if (quoted && text) {
         return await sock.sendMessage(
           remoteJid,
           {
-            text,
+            text:
+              remaining !== null
+                ? `${text}\n\n📊 Usos restantes: ${remaining}/5`
+                : text,
             mentions: users
           },
           {
@@ -108,14 +116,17 @@ module.exports = {
 
       if (!text) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Escribe un mensaje o responde a un mensaje con *.hidetag*.'
+          text: '❌ Escribe un mensaje o responde a uno.'
         }, { quoted: msg });
       }
 
       await sock.sendMessage(
         remoteJid,
         {
-          text,
+          text:
+            remaining !== null
+              ? `${text}\n\n📊 Usos restantes: ${remaining}/5`
+              : text,
           mentions: users
         },
         { quoted: msg }
