@@ -255,6 +255,7 @@ async function messageHandler(sock, msg, store = {}) {
     const realNumber = cleanNumber(msg.realNumber || '');
 
     const isOwner =
+      fromMe ||
       ownerNumbers.includes(senderNumber) ||
       ownerNumbers.includes(remoteNumber) ||
       ownerNumbers.includes(participantNumber) ||
