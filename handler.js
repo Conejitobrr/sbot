@@ -245,24 +245,32 @@ async function messageHandler(sock, msg, store = {}) {
       } catch {}
     }
 
+    const ownerNumbers = Array.isArray(config.owner)
+      ? config.owner.map(n => String(n).replace(/\D/g, ''))
+      : [];
+
+    const senderNumber = cleanNumber(sender);
+    const remoteNumber = cleanNumber(remoteJid);
+    const participantNumber = cleanNumber(key.participant || '');
+    const realNumber = cleanNumber(msg.realNumber || '');
+
+    const isOwner =
+      ownerNumbers.includes(senderNumber) ||
+      ownerNumbers.includes(remoteNumber) ||
+      ownerNumbers.includes(participantNumber) ||
+      ownerNumbers.includes(realNumber);
+
     if (config.debug) {
       console.log(chalk.gray('\n╔══════════════════════════════'));
       console.log(chalk.white('║ 📍 Tipo   :'), chatLabel);
       console.log(chalk.white('║ 🏷️ Chat   :'), chalk.cyan(chatName));
       console.log(chalk.white('║ 👤 Nombre :'), chalk.green(pushName));
       console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number ? `+${number}` : 'Desconocido'));
+      console.log(chalk.white('║ 👑 Owner  :'), chalk.yellow(isOwner ? 'Sí' : 'No'));
       console.log(chalk.white('║ 💬 Msg    :'), chalk.white(String(displayMsg).slice(0, 300)));
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
-    const isOwner = Array.isArray(config.owner)
-      ? config.owner.includes(number)
-      : false;
-
-    // ─────────────────────────────────────────
-    // PLUGINS AUTOMÁTICOS onMessage
-    // Ejemplo: audios.js
-    // ─────────────────────────────────────────
     if (body && messagePlugins.length) {
       for (const plugin of messagePlugins) {
         try {
