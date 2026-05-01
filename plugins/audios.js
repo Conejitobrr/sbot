@@ -28,7 +28,8 @@ module.exports = {
 
     const audios = {
       hola: 'hola.mp3',
-      autoestima: 'Autoestima.mp3'
+      autoestima: 'Autoestima.mp3',
+      jejeje: 'Jejeje.mp3'
     };
 
     const key = Object.keys(audios).find(k => text.includes(k));
