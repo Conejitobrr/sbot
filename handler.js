@@ -15,24 +15,52 @@ const {
 } = require('./lib/utils');
 
 const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
 
-console.log = (...args) => {
-  const text = args.map(v => String(v)).join(' ');
+function shouldHideConsole(args = []) {
+  const text = args.map(v => {
+    try {
+      if (typeof v === 'object') return JSON.stringify(v);
+      return String(v);
+    } catch {
+      return String(v);
+    }
+  }).join(' ');
 
   const blocked = [
     'Closing session',
+    'Closing stale open session',
     'SessionEntry',
     '_chains',
     'Removing old closed session',
     'chainKey',
     'ephemeralKeyPair',
     'rootKey',
-    'indexInfo'
+    'indexInfo',
+    'registrationId',
+    'currentRatchet',
+    'pendingPreKey',
+    'messageKeys',
+    'remoteIdentityKey'
   ];
 
-  if (blocked.some(word => text.includes(word))) return;
+  return blocked.some(word => text.includes(word));
+}
 
+console.log = (...args) => {
+  if (shouldHideConsole(args)) return;
   originalConsoleLog(...args);
+};
+
+console.error = (...args) => {
+  if (shouldHideConsole(args)) return;
+  originalConsoleError(...args);
+};
+
+console.warn = (...args) => {
+  if (shouldHideConsole(args)) return;
+  originalConsoleWarn(...args);
 };
 
 function attachSendLogger(sock) {
