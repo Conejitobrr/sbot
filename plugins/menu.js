@@ -55,6 +55,10 @@ module.exports = {
 ➤ *${p}gay*
 ➤ *${p}topgays*
 ➤ *${p}hornycard*
+➤ *${p}tutti* añade los seg que desean
+➤ *${p}consejo*
+➤ *${p}frase*
+➤ *${p}historiaromantica*
 
 ━━━━━━━━━━━━━━━━━━━
 🎵 *DESCARGAS*
