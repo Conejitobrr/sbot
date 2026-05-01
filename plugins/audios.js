@@ -54,7 +54,7 @@ module.exports = {
       { triggers: ['telepatia','telepatía'], file: 'Telepatía.mp3' },
       { triggers: ['me voy'], file: 'Me voy.mp3' },
       { triggers: ['doxean', 'me doxean'], file: 'Me doxean.mp3' },
-      { triggers: ['ya no es jueves'], file: 'No es jueves.mp3' },
+      { triggers: ['no es jueves'], file: 'No es jueves.mp3' },
       { triggers: ['jejeje'], file: 'Jejeje.mp3' }
     ];
 
