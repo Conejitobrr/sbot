@@ -43,7 +43,7 @@ module.exports = {
       { triggers: ['chaoo'], file: 'Chaoo.mp3' },
       { triggers: ['coger'], file: 'Coger.mp3' }, // 🔥 ya no detecta "recoger"
       { triggers: ['viernes'], file: 'viernes.mp3' },
-      { triggers: ['siu'], file: 'siu.mp3' },
+      { triggers: ['siu','siuu','siuuu','siuuuu','siuuuuu','siuuuuuu'], file: 'siu.mp3' },
       { triggers: ['noche'], file: 'Noche.mp3' },
       { triggers: ['sexo'], file: 'S3x0g.mp3' },
       { triggers: ['linda'], file: 'Linda.mp3' },
