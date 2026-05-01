@@ -1,6 +1,14 @@
 'use strict';
 
 const db = require('../lib/database');
+const config = require('../config');
+
+function cleanNumber(jid = '') {
+  return String(jid)
+    .split('@')[0]
+    .split(':')[0]
+    .replace(/\D/g, '');
+}
 
 function getQuotedInfo(msg) {
   const context =
@@ -29,7 +37,6 @@ module.exports = {
       msg,
       remoteJid,
       args,
-      isOwner,
       sender
     } = ctx;
 
@@ -40,14 +47,29 @@ module.exports = {
     }
 
     try {
+      const ownerNumbers = Array.isArray(config.owner)
+        ? config.owner.map(n => String(n).replace(/\D/g, ''))
+        : [];
+
+      const senderNumber = cleanNumber(sender);
+      const realNumber = cleanNumber(msg.realNumber || '');
+      const participantNumber = cleanNumber(msg.key?.participant || '');
+      const remoteNumber = cleanNumber(msg.key?.remoteJid || '');
+
+      const isOwnerUser =
+        msg.key?.fromMe ||
+        ctx.isOwner ||
+        ownerNumbers.includes(senderNumber) ||
+        ownerNumbers.includes(realNumber) ||
+        ownerNumbers.includes(participantNumber) ||
+        ownerNumbers.includes(remoteNumber);
+
       const isPremiumUser = await db.isPremium(sender);
 
       let remaining = null;
 
-      // 👤 Usuarios normales → límite
-      if (!isOwner && !isPremiumUser) {
+      if (!isOwnerUser && !isPremiumUser) {
         const allowed = await db.canUseNotify(sender, false, false, false);
-
         remaining = await db.getRemainingUses(sender);
 
         if (!allowed) {
@@ -66,7 +88,11 @@ module.exports = {
       const text = args.join(' ').trim();
       const quoted = getQuotedInfo(msg);
 
-      // 📌 RESPONDER SIN TEXTO
+      const extra =
+        remaining !== null
+          ? `\n\n📊 Usos restantes: ${remaining}/5`
+          : '';
+
       if (quoted && !text) {
         return await sock.sendMessage(
           remoteJid,
@@ -80,24 +106,17 @@ module.exports = {
               },
               message: quoted.quotedMessage
             },
-            mentions: users,
-            ...(remaining !== null && {
-              caption: `📢 Notificación enviada\n📊 Usos restantes: ${remaining}/5`
-            })
+            mentions: users
           },
           { quoted: msg }
         );
       }
 
-      // 📌 RESPONDER CON TEXTO
       if (quoted && text) {
         return await sock.sendMessage(
           remoteJid,
           {
-            text:
-              remaining !== null
-                ? `${text}\n\n📊 Usos restantes: ${remaining}/5`
-                : text,
+            text: text + extra,
             mentions: users
           },
           {
@@ -123,10 +142,7 @@ module.exports = {
       await sock.sendMessage(
         remoteJid,
         {
-          text:
-            remaining !== null
-              ? `${text}\n\n📊 Usos restantes: ${remaining}/5`
-              : text,
+          text: text + extra,
           mentions: users
         },
         { quoted: msg }
