@@ -35,6 +35,7 @@ module.exports = {
       coger: 'Coger.mp3',
       viernes: 'viernes.mp3',
       siu: 'siu.mp3',
+      noche: 'Noche.mp3',
       sexo: 'S3x0g.mp3',
       linda: 'Linda.mp3',
       doxean: 'Me doxean.mp3',
