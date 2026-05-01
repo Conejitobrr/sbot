@@ -15,7 +15,8 @@ module.exports = {
       const map = {
         bonus: '💰 Bonus XP activo',
         rob: '😈 Robo XP activo',
-        trivia: '🎯 Trivia en curso'
+        trivia: '🎯 Trivia en curso',
+        double: '⚡ Doble XP activo'
       };
 
       eventText = map[active.type] || '🎮 Evento activo';
@@ -69,9 +70,9 @@ module.exports = {
 🎨 *MULTIMEDIA*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}sticker* → Crear sticker
+➤ *${p}s* → Crear sticker
 ➤ *${p}toimage* → Sticker a imagen
 ➤ *${p}tovideo* → Sticker a video
-➤ *${p}toanime* → Estilo anime
 ➤ *${p}tts* → Texto a voz
 ➤ *${p}attp* → Texto a sticker
 
