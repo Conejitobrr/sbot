@@ -94,15 +94,18 @@ function getPluginsDir() {
 
 const PLUGINS_DIR = getPluginsDir();
 const plugins = new Map();
+const messagePlugins = [];
 
 function loadPlugins() {
   plugins.clear();
+  messagePlugins.length = 0;
 
   const files = fs
     .readdirSync(PLUGINS_DIR)
     .filter(file => file.endsWith('.js'));
 
-  let loadedFiles = 0;
+  let commandFiles = 0;
+  let eventFiles = 0;
 
   for (const file of files) {
     try {
@@ -112,32 +115,47 @@ function loadPlugins() {
 
       const plugin = require(filepath);
 
-      if (!plugin || typeof plugin.execute !== 'function') {
-        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: falta execute()`));
+      if (!plugin) {
+        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: vacío`));
         continue;
       }
 
-      const commands = Array.isArray(plugin.commands) ? plugin.commands : [];
-
-      if (!commands.length) {
-        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: no tiene commands`));
-        continue;
-      }
-
-      for (const cmd of commands) {
-        plugins.set(String(cmd).toLowerCase(), {
+      if (typeof plugin.onMessage === 'function') {
+        messagePlugins.push({
           ...plugin,
           file
         });
+        eventFiles++;
       }
 
-      loadedFiles++;
+      if (typeof plugin.execute === 'function') {
+        const commands = Array.isArray(plugin.commands) ? plugin.commands : [];
+
+        if (!commands.length) {
+          console.log(chalk.yellow(`⚠️ Plugin comando ignorado ${file}: no tiene commands`));
+        } else {
+          for (const cmd of commands) {
+            plugins.set(String(cmd).toLowerCase(), {
+              ...plugin,
+              file
+            });
+          }
+
+          commandFiles++;
+        }
+      }
+
+      if (typeof plugin.execute !== 'function' && typeof plugin.onMessage !== 'function') {
+        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: falta execute() u onMessage()`));
+      }
+
     } catch (err) {
       console.log(chalk.red(`❌ Error cargando plugin ${file}:`), err?.message || err);
     }
   }
 
-  console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size} comandos en ${loadedFiles} archivos`));
+  console.log(chalk.green(`♻️ Plugins cargados: ${plugins.size} comandos en ${commandFiles} archivos`));
+  console.log(chalk.green(`🎧 Plugins onMessage cargados: ${messagePlugins.length} en ${eventFiles} archivos`));
 }
 
 global.loadPlugins = loadPlugins;
@@ -227,14 +245,67 @@ async function messageHandler(sock, msg, store = {}) {
       } catch {}
     }
 
+    const ownerNumbers = Array.isArray(config.owner)
+      ? config.owner.map(n => String(n).replace(/\D/g, ''))
+      : [];
+
+    const senderNumber = cleanNumber(sender);
+    const remoteNumber = cleanNumber(remoteJid);
+    const participantNumber = cleanNumber(key.participant || '');
+    const realNumber = cleanNumber(msg.realNumber || '');
+
+    const isOwner =
+      fromMe ||
+      ownerNumbers.includes(senderNumber) ||
+      ownerNumbers.includes(remoteNumber) ||
+      ownerNumbers.includes(participantNumber) ||
+      ownerNumbers.includes(realNumber);
+
     if (config.debug) {
       console.log(chalk.gray('\n╔══════════════════════════════'));
       console.log(chalk.white('║ 📍 Tipo   :'), chatLabel);
       console.log(chalk.white('║ 🏷️ Chat   :'), chalk.cyan(chatName));
       console.log(chalk.white('║ 👤 Nombre :'), chalk.green(pushName));
       console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number ? `+${number}` : 'Desconocido'));
+      console.log(chalk.white('║ 👑 Owner  :'), chalk.yellow(isOwner ? 'Sí' : 'No'));
       console.log(chalk.white('║ 💬 Msg    :'), chalk.white(String(displayMsg).slice(0, 300)));
       console.log(chalk.gray('╚══════════════════════════════\n'));
+    }
+
+    if (body && messagePlugins.length) {
+      for (const plugin of messagePlugins) {
+        try {
+          await plugin.onMessage({
+            sock,
+            msg,
+            key,
+            remoteJid,
+            sender,
+            botJid,
+            pushName,
+            body,
+            store,
+            config,
+            db,
+
+            fromMe,
+            fromGroup,
+            isOwner,
+            isAdmin,
+            isBotAdmin,
+            groupMetadata,
+            groupAdmins,
+
+            reply: text => sock.sendMessage(
+              remoteJid,
+              { text: String(text) },
+              { quoted: msg }
+            )
+          });
+        } catch (e) {
+          console.log(chalk.red(`❌ Error en onMessage ${plugin.file}:`), e?.message || e);
+        }
+      }
     }
 
     if (!body) return;
@@ -249,10 +320,6 @@ async function messageHandler(sock, msg, store = {}) {
 
     const plugin = plugins.get(command);
     if (!plugin) return;
-
-    const isOwner = Array.isArray(config.owner)
-      ? config.owner.includes(number)
-      : false;
 
     if (!isOwner) {
       if (fromGroup) {
@@ -337,5 +404,6 @@ async function messageHandler(sock, msg, store = {}) {
 module.exports = {
   messageHandler,
   loadPlugins,
-  plugins
+  plugins,
+  messagePlugins
 };
