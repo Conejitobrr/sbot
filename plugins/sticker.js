@@ -168,7 +168,7 @@ module.exports = {
         sticker
       }, { quoted: msg });
 
-      await db.addXP(sender, Math.floor(Math.random() * 10) + 5);
+      await db.addXP(sender, Math.floor(Math.random() * 31) + 40);
 
     } catch (err) {
       console.log('❌ Error en sticker:', err?.message || err);
