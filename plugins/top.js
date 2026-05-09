@@ -1,10 +1,12 @@
 'use strict';
 
+const db = require('../lib/database');
+
 module.exports = {
   commands: ['top'],
 
   async execute(ctx) {
-    const { sock, remoteJid, msg, args } = ctx;
+    const { sock, remoteJid, msg, args, sender } = ctx;
 
     const text = args.join(' ');
     if (!text) {
@@ -59,5 +61,10 @@ module.exports = {
       mentions: top10
     }, { quoted: msg });
 
+    // ⭐ XP silencioso por usar el comando: 20 - 50 XP
+    try {
+      const xp = Math.floor(Math.random() * 31) + 20;
+      await db.addXP(sender, xp);
+    } catch {}
   }
 };
