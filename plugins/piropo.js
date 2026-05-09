@@ -100,7 +100,7 @@ module.exports = {
     }, { quoted: msg });
 
     // ⭐ XP BASE
-    let xp = Math.floor(Math.random() * 10) + 5;
+    let xp = Math.floor(Math.random() * 21) + 10;
 
     // ⚡ DOUBLE XP EVENT
     if (events?.isActive?.('double')) {
