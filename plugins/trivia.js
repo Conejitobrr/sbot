@@ -21,7 +21,7 @@ module.exports = {
   },
 
   async onMessage(ctx) {
-    const { sock, msg, remoteJid, body, sender, pushName } = ctx;
+    const { sock, msg, remoteJid, body, sender } = ctx;
 
     if (!body) return;
 
@@ -37,7 +37,8 @@ module.exports = {
 
     if (current.timeout) clearTimeout(current.timeout);
 
-    const xp = Math.floor(Math.random() * 41) + 40;
+    // 🔥 MÁS EXPERIENCIA: 150 - 300 XP
+    const xp = Math.floor(Math.random() * 151) + 150;
     await db.addXP(sender, xp);
 
     await sock.sendMessage(remoteJid, {
@@ -91,6 +92,7 @@ function sendQuestion(sock, jid, game, quotedMsg = null) {
 
 ⏱️ 60 segundos
 💬 Todos pueden responder sin usar punto
+🏆 Premio: *150 - 300 XP*
 
 Ejemplo:
 *lima*
