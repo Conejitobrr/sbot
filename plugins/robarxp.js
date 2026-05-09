@@ -53,7 +53,7 @@ module.exports = {
     const victim = await db.getUser(target);
 
     const now = Date.now();
-    const cooldown = 60 * 60 * 1000;
+    const cooldown = 10 * 60 * 1000;
 
     const remaining = cooldown - (now - (robber.lastRobXp || 0));
 
