@@ -35,10 +35,19 @@ async function downloadSticker(sticker) {
   return Buffer.concat(chunks);
 }
 
-async function convertStickerToVideo(input, output) {
+// 🔥 WEBP → GIF → MP4
+async function convertStickerToVideo(input, gif, output) {
+
+  // 🔥 convertir sticker animado a gif
+  await execFileAsync('magick', [
+    input,
+    gif
+  ]);
+
+  // 🔥 convertir gif a mp4
   await execFileAsync('ffmpeg', [
     '-y',
-    '-i', input,
+    '-i', gif,
     '-movflags', 'faststart',
     '-pix_fmt', 'yuv420p',
     '-vf', 'scale=512:-2:flags=lanczos,fps=15',
@@ -53,6 +62,7 @@ module.exports = {
     const { sock, msg, remoteJid } = ctx;
 
     let input = null;
+    let gif = null;
     let output = null;
 
     try {
@@ -83,11 +93,18 @@ module.exports = {
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
       input = path.join(TEMP_DIR, `tovideo_${id}.webp`);
+      gif = path.join(TEMP_DIR, `tovideo_${id}.gif`);
       output = path.join(TEMP_DIR, `tovideo_${id}.mp4`);
 
       fs.writeFileSync(input, buffer);
 
-      await convertStickerToVideo(input, output);
+      await convertStickerToVideo(input, gif, output);
+
+      if (!fs.existsSync(output)) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se pudo convertir el sticker.'
+        }, { quoted: msg });
+      }
 
       const video = fs.readFileSync(output);
 
@@ -100,13 +117,20 @@ module.exports = {
       console.log('❌ Error en tovideo:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al convertir sticker a video.\nAsegúrate de tener ffmpeg instalado.'
+        text:
+`❌ Error al convertir sticker a video.
+
+Instala esto en Termux:
+
+pkg install imagemagick ffmpeg -y`
       }, { quoted: msg });
 
     } finally {
-      for (const file of [input, output]) {
+      for (const file of [input, gif, output]) {
         try {
-          if (file && fs.existsSync(file)) fs.unlinkSync(file);
+          if (file && fs.existsSync(file)) {
+            fs.unlinkSync(file);
+          }
         } catch {}
       }
     }
