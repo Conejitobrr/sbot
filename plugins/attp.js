@@ -15,7 +15,7 @@ module.exports = {
 
       if (!text) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Ejemplo: .tts hola mundo'
+          text: '❌ Ejemplo: .attp hola mundo'
         }, { quoted: msg });
       }
 
@@ -25,40 +25,43 @@ module.exports = {
       const img = path.join(tempDir, 'text.png');
       const webp = path.join(tempDir, 'sticker.webp');
 
-      // 🔥 CALCULAR TAMAÑO MÁS INTELIGENTE
       const length = text.length;
 
       let fontSize;
 
-      // 🔥 AJUSTE AUTOMÁTICO PARA QUE SIEMPRE ENTRE
-      if (length <= 5) fontSize = 230;
-      else if (length <= 10) fontSize = 190;
-      else if (length <= 18) fontSize = 150;
-      else if (length <= 30) fontSize = 120;
-      else if (length <= 45) fontSize = 95;
-      else if (length <= 70) fontSize = 75;
-      else if (length <= 100) fontSize = 58;
-      else if (length <= 140) fontSize = 46;
-      else fontSize = 38;
+      // 🔥 Ajustado para que NO se corte en palabras largas
+      if (length <= 3) fontSize = 210;
+      else if (length <= 5) fontSize = 170;
+      else if (length <= 8) fontSize = 125;
+      else if (length <= 12) fontSize = 100;
+      else if (length <= 18) fontSize = 82;
+      else if (length <= 30) fontSize = 65;
+      else if (length <= 50) fontSize = 50;
+      else if (length <= 80) fontSize = 38;
+      else fontSize = 30;
 
-      // 🔥 TEXTO AUTO-AJUSTABLE DENTRO DEL CUADRO
+      const safeText = text
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/`/g, '\\`');
+
+      // 🔥 Más margen para que no corte bordes
       const createImg = `
       magick -background none \
       -fill white \
       -stroke black \
-      -strokewidth 5 \
+      -strokewidth 4 \
       -font DejaVu-Sans-Bold \
-      -size 440x440 \
+      -size 400x400 \
       -gravity center \
       -pointsize ${fontSize} \
-      -interline-spacing 6 \
-      caption:"${text.replace(/"/g, '\\"')}" \
+      -interline-spacing 4 \
+      caption:"${safeText}" \
       -gravity center \
       -extent 512x512 \
       "${img}"
       `;
 
-      // 🔥 CONVERTIR A STICKER
       const toSticker = `
       ffmpeg -y -i "${img}" \
       -vcodec libwebp \
@@ -98,7 +101,9 @@ module.exports = {
           }
 
           [img, webp].forEach(f => {
-            if (fs.existsSync(f)) fs.unlinkSync(f);
+            try {
+              if (fs.existsSync(f)) fs.unlinkSync(f);
+            } catch {}
           });
         });
       });
