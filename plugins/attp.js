@@ -22,42 +22,43 @@ module.exports = {
       const tempDir = path.join(__dirname, '../temp');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-      const img = path.join(tempDir, 'text.png');
-      const webp = path.join(tempDir, 'sticker.webp');
+      const img = path.join(tempDir, `text_${Date.now()}.png`);
+      const webp = path.join(tempDir, `sticker_${Date.now()}.webp`);
 
       const length = text.length;
 
       let fontSize;
 
-      // 🔥 Ajustado para que NO se corte en palabras largas
-      if (length <= 3) fontSize = 210;
-      else if (length <= 5) fontSize = 170;
-      else if (length <= 8) fontSize = 125;
-      else if (length <= 12) fontSize = 100;
-      else if (length <= 18) fontSize = 82;
-      else if (length <= 30) fontSize = 65;
-      else if (length <= 50) fontSize = 50;
-      else if (length <= 80) fontSize = 38;
-      else fontSize = 30;
+      if (length <= 3) fontSize = 260;
+      else if (length <= 5) fontSize = 230;
+      else if (length <= 8) fontSize = 200;
+      else if (length <= 12) fontSize = 170;
+      else if (length <= 18) fontSize = 140;
+      else if (length <= 30) fontSize = 110;
+      else if (length <= 50) fontSize = 85;
+      else if (length <= 80) fontSize = 65;
+      else fontSize = 50;
 
       const safeText = text
         .replace(/\\/g, '\\\\')
         .replace(/"/g, '\\"')
         .replace(/`/g, '\\`');
 
-      // 🔥 Más margen para que no corte bordes
       const createImg = `
       magick -background none \
       -fill white \
       -stroke black \
-      -strokewidth 4 \
+      -strokewidth 6 \
       -font DejaVu-Sans-Bold \
-      -size 400x400 \
+      -size 1200x1200 \
       -gravity center \
       -pointsize ${fontSize} \
-      -interline-spacing 4 \
+      -interline-spacing 8 \
       caption:"${safeText}" \
+      -trim +repage \
+      -resize 440x440\\> \
       -gravity center \
+      -background none \
       -extent 512x512 \
       "${img}"
       `;
@@ -90,12 +91,9 @@ module.exports = {
           }
 
           try {
-            const sticker = fs.readFileSync(webp);
-
             await sock.sendMessage(remoteJid, {
-              sticker
+              sticker: fs.readFileSync(webp)
             }, { quoted: msg });
-
           } catch (e) {
             console.log('SEND ERROR:', e);
           }
