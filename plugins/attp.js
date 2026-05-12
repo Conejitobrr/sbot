@@ -25,19 +25,21 @@ module.exports = {
       const img = path.join(tempDir, 'text.png');
       const webp = path.join(tempDir, 'sticker.webp');
 
-      // 🔥 CALCULAR TAMAÑO AUTOMÁTICO
+      // 🔥 CALCULAR TAMAÑO MÁS INTELIGENTE
       const length = text.length;
 
       let fontSize;
 
-      // 🔥 LETRAS MÁS GRANDES Y ADAPTABLES
-      if (length <= 6) fontSize = 220;
-      else if (length <= 12) fontSize = 180;
-      else if (length <= 20) fontSize = 140;
-      else if (length <= 35) fontSize = 110;
-      else if (length <= 60) fontSize = 85;
-      else if (length <= 100) fontSize = 65;
-      else fontSize = 50;
+      // 🔥 AJUSTE AUTOMÁTICO PARA QUE SIEMPRE ENTRE
+      if (length <= 5) fontSize = 230;
+      else if (length <= 10) fontSize = 190;
+      else if (length <= 18) fontSize = 150;
+      else if (length <= 30) fontSize = 120;
+      else if (length <= 45) fontSize = 95;
+      else if (length <= 70) fontSize = 75;
+      else if (length <= 100) fontSize = 58;
+      else if (length <= 140) fontSize = 46;
+      else fontSize = 38;
 
       // 🔥 TEXTO AUTO-AJUSTABLE DENTRO DEL CUADRO
       const createImg = `
@@ -46,7 +48,7 @@ module.exports = {
       -stroke black \
       -strokewidth 5 \
       -font DejaVu-Sans-Bold \
-      -size 470x470 \
+      -size 440x440 \
       -gravity center \
       -pointsize ${fontSize} \
       -interline-spacing 6 \
