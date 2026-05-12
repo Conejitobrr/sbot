@@ -30,11 +30,14 @@ module.exports = {
 
       let fontSize;
 
-      if (length <= 10) fontSize = 110;
-      else if (length <= 20) fontSize = 90;
-      else if (length <= 40) fontSize = 70;
-      else if (length <= 80) fontSize = 50;
-      else fontSize = 35;
+      // 🔥 LETRAS MUCHO MÁS GRANDES
+      if (length <= 6) fontSize = 220;
+      else if (length <= 12) fontSize = 180;
+      else if (length <= 20) fontSize = 140;
+      else if (length <= 35) fontSize = 110;
+      else if (length <= 60) fontSize = 85;
+      else if (length <= 100) fontSize = 65;
+      else fontSize = 50;
 
       // 🔥 CREAR IMAGEN CON AUTO-AJUSTE
       const createImg = `
@@ -42,11 +45,11 @@ module.exports = {
       -gravity center \
       -fill white \
       -stroke black \
-      -strokewidth 3 \
+      -strokewidth 5 \
       -font DejaVu-Sans-Bold \
       -pointsize ${fontSize} \
-      -interline-spacing 4 \
-      -annotate +0+0 "${text.replace(/"/g, '\\"')}" \
+      -interline-spacing 10 \
+      -annotate +0-20 "${text.replace(/"/g, '\\"')}" \
       "${img}"
       `;
 
