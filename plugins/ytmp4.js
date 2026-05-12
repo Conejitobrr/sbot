@@ -25,16 +25,34 @@ function isYouTubeUrl(text = '') {
   return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(text);
 }
 
+// 🔥 BÚSQUEDA MEJORADA
 async function searchVideo(query) {
   const res = await yts(query);
-  return res.videos?.[0] || null;
+
+  if (!res.videos?.length) return null;
+
+  return (
+    res.videos.find(v =>
+      v.url &&
+      !v.title?.toLowerCase().includes('mix') &&
+      !v.title?.toLowerCase().includes('playlist')
+    ) || res.videos[0]
+  );
 }
 
+// 🔥 DESCARGA MEJORADA PARA YOUTUBE
 async function downloadVideo(url, output) {
   await execFileAsync('yt-dlp', [
-    '-f', 'bv*[height<=480]+ba/best[height<=480]',
-    '--merge-output-format', 'mp4',
+    '--extractor-args', 'youtube:player_client=android',
+    '--geo-bypass',
+    '--force-ipv4',
     '--no-playlist',
+    '--ignore-errors',
+    '--no-warnings',
+
+    '-f', 'bv*[height<=480]+ba/best[height<=480]/best[height<=480]/best',
+    '--merge-output-format', 'mp4',
+
     '-o', output,
     url
   ]);
@@ -91,7 +109,7 @@ module.exports = {
         duration = video.timestamp || '';
 
         await sock.sendMessage(remoteJid, {
-          text: `🎬 *${title}*\n⏱️ ${duration}\n\n⏳ Descargando...`
+          text: `🎬 *${title}*\n⏱️ ${duration || 'Desconocido'}\n\n⏳ Descargando...`
         }, { quoted: msg });
       } else {
         await sock.sendMessage(remoteJid, {
@@ -107,11 +125,32 @@ module.exports = {
 
       const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
-      rawFile = path.join(TEMP_DIR, `yt_raw_${id}.mp4`);
+      // 🔥 yt-dlp decidirá la extensión real
+      rawFile = path.join(TEMP_DIR, `yt_raw_${id}.%(ext)s`);
       finalFile = path.join(TEMP_DIR, `yt_final_${id}.mp4`);
 
       await downloadVideo(url, rawFile);
-      await convertVideo(rawFile, finalFile);
+
+      // 🔥 BUSCAR ARCHIVO REAL DESCARGADO
+      const downloaded = fs.readdirSync(TEMP_DIR).find(f =>
+        f.startsWith(`yt_raw_${id}`) &&
+        (
+          f.endsWith('.mp4') ||
+          f.endsWith('.webm') ||
+          f.endsWith('.mkv') ||
+          f.endsWith('.m4a')
+        )
+      );
+
+      if (!downloaded) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se pudo descargar el video.'
+        }, { quoted: msg });
+      }
+
+      const downloadedPath = path.join(TEMP_DIR, downloaded);
+
+      await convertVideo(downloadedPath, finalFile);
 
       if (!fs.existsSync(finalFile)) {
         return sock.sendMessage(remoteJid, {
@@ -141,11 +180,22 @@ module.exports = {
 
       await db.addXP(sender, xp);
 
+      // 🧹 LIMPIAR DESCARGA REAL
+      try {
+        if (downloadedPath && fs.existsSync(downloadedPath)) {
+          fs.unlinkSync(downloadedPath);
+        }
+      } catch {}
+
     } catch (err) {
       console.log('❌ Error en ytmp4:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al descargar video.\nVerifica yt-dlp y ffmpeg.'
+        text:
+`❌ Error al descargar video.
+
+📌 Prueba otro video o link.
+📌 Verifica yt-dlp y ffmpeg.`
       }, { quoted: msg });
 
     } finally {
