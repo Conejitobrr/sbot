@@ -30,7 +30,7 @@ module.exports = {
 
       let fontSize;
 
-      // 🔥 LETRAS MUCHO MÁS GRANDES
+      // 🔥 LETRAS MÁS GRANDES Y ADAPTABLES
       if (length <= 6) fontSize = 220;
       else if (length <= 12) fontSize = 180;
       else if (length <= 20) fontSize = 140;
@@ -39,17 +39,20 @@ module.exports = {
       else if (length <= 100) fontSize = 65;
       else fontSize = 50;
 
-      // 🔥 CREAR IMAGEN CON AUTO-AJUSTE
+      // 🔥 TEXTO AUTO-AJUSTABLE DENTRO DEL CUADRO
       const createImg = `
-      magick -size 512x512 xc:none \
-      -gravity center \
+      magick -background none \
       -fill white \
       -stroke black \
       -strokewidth 5 \
       -font DejaVu-Sans-Bold \
+      -size 470x470 \
+      -gravity center \
       -pointsize ${fontSize} \
-      -interline-spacing 10 \
-      -annotate +0-20 "${text.replace(/"/g, '\\"')}" \
+      -interline-spacing 6 \
+      caption:"${text.replace(/"/g, '\\"')}" \
+      -gravity center \
+      -extent 512x512 \
       "${img}"
       `;
 
