@@ -1,6 +1,10 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const db = require('../lib/database');
+
+const DB_PATH = path.join(process.cwd(), 'lib', 'database.json');
 
 const FEATURES = [
   'bot',
@@ -11,16 +15,24 @@ const FEATURES = [
   'chatbot'
 ];
 
-async function setGlobalSetting(feature, value) {
-  if (typeof db.setGlobalSetting === 'function') {
-    return db.setGlobalSetting(feature, value);
+function setGlobalSetting(feature, value) {
+  let data = {};
+
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8') || '{}');
+    }
+  } catch {
+    data = {};
   }
 
-  if (typeof db.setSetting === 'function') {
-    return db.setSetting(feature, value);
+  if (!data.global) {
+    data.global = {};
   }
 
-  throw new Error('Falta agregar setGlobalSetting en lib/database.js');
+  data.global[feature] = value;
+
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
 module.exports = {
@@ -70,7 +82,7 @@ ${FEATURES.map(f => `➤ ${f}`).join('\n')}
 
     // 🌐 CHATBOT GLOBAL
     if (feature === 'chatbot') {
-      await setGlobalSetting('chatbot', true);
+      setGlobalSetting('chatbot', true);
 
       return sock.sendMessage(remoteJid, {
         text: '✅ *chatbot* activado globalmente.\n\n🤖 Ahora funcionará en todos los chats.'
