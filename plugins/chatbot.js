@@ -5,7 +5,7 @@ const path = require('path');
 const db = require('../lib/database');
 
 const MEMORY_PATH = path.join(process.cwd(), 'lib', 'chat_memory.json');
-const DB_PATH = path.join(process.cwd(), 'lib', 'global_settings.json');
+const DB_PATH = path.join(process.cwd(), 'lib', 'database.json');
 
 const MAX_HISTORY = 12;
 const MAX_USER_MEMORY = 25;
