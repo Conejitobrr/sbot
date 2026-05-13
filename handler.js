@@ -252,6 +252,7 @@ async function messageHandler(sock, msg, store = {}) {
       'Sin nombre';
 
     const number = cleanNumber(sender);
+    const userKey = number;
 
     let groupMetadata = null;
     let groupAdmins = [];
@@ -308,7 +309,7 @@ async function messageHandler(sock, msg, store = {}) {
         const groupData = await db.getGroup(remoteJid);
         botEnabled = groupData.bot !== false;
       } else {
-        const userData = await db.getUser(sender);
+        const userData = await db.getUser(userKey);
         botEnabled = userData.bot !== false;
       }
     }
@@ -383,7 +384,7 @@ async function messageHandler(sock, msg, store = {}) {
           return;
         }
       } else {
-        const userData = await db.getUser(sender);
+        const userData = await db.getUser(userKey);
 
         if (userData.bot === false && !['enable', 'menu', 'help'].includes(command)) {
           return;
