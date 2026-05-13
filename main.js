@@ -38,6 +38,9 @@ const store = {
 
 let restarting = false;
 
+// 🔥 EVITAR COMANDOS/MENSAJES DUPLICADOS AL RECONECTAR
+const processedMessages = new Set();
+
 // ─────────────────────────────────────────
 // FORMATEAR NÚMERO
 // ─────────────────────────────────────────
@@ -202,6 +205,22 @@ async function startBot(opts = {}) {
     if (type !== 'notify') return;
 
     for (const msg of messages) {
+
+      const msgId = msg.key?.id;
+
+      if (!msgId) continue;
+
+      // 🔥 Evitar que mensajes viejos o duplicados ejecuten comandos otra vez
+      if (processedMessages.has(msgId)) {
+        continue;
+      }
+
+      processedMessages.add(msgId);
+
+      setTimeout(() => {
+        processedMessages.delete(msgId);
+      }, 60 * 1000);
+
       try {
         if (!msg.message) continue;
         if (!msg.key?.remoteJid) continue;
