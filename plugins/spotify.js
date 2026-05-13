@@ -222,17 +222,6 @@ async function processQueue() {
     const job = queue.shift();
 
     try {
-      await job.sock.sendMessage(job.remoteJid, {
-        text:
-`🎧 *Turno de Spotify Style*
-
-👤 Pedido por: @${job.sender.split('@')[0]}
-🔍 Búsqueda: *${job.query}*
-
-⏳ Preparando canción con metadata...`,
-        mentions: [job.sender]
-      }, { quoted: job.msg });
-
       await handleDownload(job);
 
     } catch (err) {
@@ -295,20 +284,6 @@ async function handleDownload(job) {
     const year = String(meta.releaseDate || '').slice(0, 4) || 'Desconocido';
     const genre = sanitizeFileName(meta.primaryGenreName || 'Music');
     const duration = formatSeconds(realSeconds);
-
-    await sock.sendMessage(remoteJid, {
-      text:
-`🎧 *Spotify Style encontrado*
-
-🎶 *${title}*
-👤 ${artist}
-💿 ${album}
-📅 ${year}
-🎼 ${genre}
-⏱️ ${duration}
-
-⏳ Descargando y agregando datos al MP3...`
-    }, { quoted: msg });
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
