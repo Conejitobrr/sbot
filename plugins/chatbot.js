@@ -320,9 +320,10 @@ module.exports = {
     const text = body || getTextFromMsg(msg);
     if (!text) return;
 
-    // ❌ Ignorar comandos excepto .bot .ai .ia
-    if (isCommand(text) && !isChatbotCommand(text)) {
-      return;
+    // ❌ onMessage NO debe responder comandos
+    // Los comandos .bot .ai .ia los responde execute()
+     if (isCommand(text)) {
+     return;
     }
 
     const enabled = await isChatbotEnabled();
