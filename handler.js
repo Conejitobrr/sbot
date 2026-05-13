@@ -196,11 +196,59 @@ function cleanNumber(jid = '') {
     .replace(/\D/g, '');
 }
 
-function getRealSenderNumber(msg, key, sender) {
+function getParticipantValue(p, keys = []) {
+  for (const key of keys) {
+    const value = p?.[key];
+
+    if (!value) continue;
+
+    if (typeof value === 'string') return value;
+
+    if (typeof value === 'object') {
+      if (value.user) return value.user;
+      if (value.id) return value.id;
+      if (value.jid) return value.jid;
+    }
+  }
+
+  return '';
+}
+
+function getNumberFromGroupMetadata(groupMetadata, sender) {
+  const participants = groupMetadata?.participants || [];
+  if (!participants.length || !sender) return '';
+
+  const found = participants.find(p => {
+    const ids = [
+      p.id,
+      p.jid,
+      p.lid,
+      p.phoneNumber,
+      p.pn,
+      p.participant,
+      getParticipantValue(p, ['phoneNumber', 'pn', 'jid', 'id', 'lid'])
+    ].filter(Boolean);
+
+    return ids.includes(sender);
+  });
+
+  if (!found) return '';
+
+  return (
+    cleanNumber(found.jid) ||
+    cleanNumber(found.phoneNumber) ||
+    cleanNumber(found.pn) ||
+    cleanNumber(found.participant) ||
+    cleanNumber(found.id)
+  );
+}
+
+function getRealSenderNumber(msg, key, sender, groupMetadata = null) {
   return (
     cleanNumber(msg.realNumber) ||
     cleanNumber(key.participantAlt) ||
     cleanNumber(key.participantPn) ||
+    getNumberFromGroupMetadata(groupMetadata, sender) ||
     cleanNumber(key.participant) ||
     cleanNumber(sender)
   );
@@ -261,9 +309,6 @@ async function messageHandler(sock, msg, store = {}) {
       store.contacts?.[sender]?.notify ||
       'Sin nombre';
 
-    const number = getRealSenderNumber(msg, key, sender);
-    const userKey = number;
-
     let groupMetadata = null;
     let groupAdmins = [];
     let isAdmin = false;
@@ -283,6 +328,9 @@ async function messageHandler(sock, msg, store = {}) {
         isBotAdmin = groupAdmins.includes(botJid);
       } catch {}
     }
+
+    const number = getRealSenderNumber(msg, key, sender, groupMetadata);
+    const userKey = number || cleanNumber(sender);
 
     const ownerNumbers = Array.isArray(config.owner)
       ? config.owner.map(n => String(n).replace(/\D/g, ''))
