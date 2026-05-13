@@ -7,8 +7,21 @@ const FEATURES = [
   'audios',
   'welcome',
   'antilink',
-  'antispam'
+  'antispam',
+  'chatbot'
 ];
+
+async function setGlobalSetting(feature, value) {
+  if (typeof db.setGlobalSetting === 'function') {
+    return db.setGlobalSetting(feature, value);
+  }
+
+  if (typeof db.setSetting === 'function') {
+    return db.setSetting(feature, value);
+  }
+
+  throw new Error('Falta agregar setGlobalSetting en lib/database.js');
+}
 
 module.exports = {
   commands: ['enable'],
@@ -34,6 +47,7 @@ module.exports = {
 .enable bot
 .enable welcome
 .enable audios
+.enable chatbot
 
 📋 Funciones disponibles:
 ${FEATURES.map(f => `➤ ${f}`).join('\n')}
@@ -48,19 +62,26 @@ ${FEATURES.map(f => `➤ ${f}`).join('\n')}
       }, { quoted: msg });
     }
 
-    // 🔥 SOLO OWNER
     if (!isOwner) {
       return sock.sendMessage(remoteJid, {
         text: '❌ Solo el owner puede usar este comando.'
       }, { quoted: msg });
     }
 
+    // 🌐 CHATBOT GLOBAL
+    if (feature === 'chatbot') {
+      await setGlobalSetting('chatbot', true);
+
+      return sock.sendMessage(remoteJid, {
+        text: '✅ *chatbot* activado globalmente.\n\n🤖 Ahora funcionará en todos los chats.'
+      }, { quoted: msg });
+    }
+
     // 🔥 PRIVADO
     if (!fromGroup) {
-
       if (!['bot', 'audios'].includes(feature)) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ En privado solo puedes usar:\n.enable bot\n.enable audios'
+          text: '❌ En privado solo puedes usar:\n.enable bot\n.enable audios\n.enable chatbot'
         }, { quoted: msg });
       }
 
