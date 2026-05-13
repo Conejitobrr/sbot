@@ -81,6 +81,10 @@ function isCommand(text = '') {
   return /^[.!/#]/.test(String(text).trim());
 }
 
+function isChatbotCommand(text = '') {
+  return /^[.!/#](bot|ai|ia)\b/i.test(String(text).trim());
+}
+
 function mentionName(pushName = '', sender = '') {
   if (pushName) return pushName;
 
@@ -313,16 +317,24 @@ module.exports = {
 
     if (fromMe) return;
 
-    const enabled = await isChatbotEnabled();
-    if (!enabled) return;
-
     const text = body || getTextFromMsg(msg);
     if (!text) return;
 
-    // Evita responder comandos como .menu, .play, .spotify, etc.
-    if (isCommand(text)) return;
+    // ❌ Ignorar comandos excepto .bot .ai .ia
+    if (isCommand(text) && !isChatbotCommand(text)) {
+      return;
+    }
 
-    return runChatbot(ctx, text);
+    const enabled = await isChatbotEnabled();
+
+    // Si chatbot global está apagado y tampoco usaron .bot/.ai/.ia, no responde
+    if (!enabled && !isChatbotCommand(text)) {
+      return;
+    }
+
+    const cleanText = cleanCommand(text);
+
+    return runChatbot(ctx, cleanText || text);
   },
 
   async execute(ctx) {
