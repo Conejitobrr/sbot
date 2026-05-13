@@ -6,9 +6,12 @@ const axios = require('axios');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const yts = require('yt-search');
+
 const db = require('../lib/database');
+const config = require('../config');
 
 const execFileAsync = promisify(execFile);
+
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
 const queue = [];
@@ -40,7 +43,10 @@ function randomDelay() {
 }
 
 function cleanNumber(jid = '') {
-  return String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+  return String(jid)
+    .split('@')[0]
+    .split(':')[0]
+    .replace(/\D/g, '');
 }
 
 function isYouTubeUrl(text = '') {
@@ -73,13 +79,30 @@ function parseDurationSeconds(timestamp = '') {
 
 function getTodayKey(sender) {
   const d = new Date();
+
   return `${cleanNumber(sender)}-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
+// 👑 OWNER Y PREMIUM = ILIMITADO
 async function isPremiumUser(sender) {
   try {
+
+    const ownerNumbers = Array.isArray(config.owner)
+      ? config.owner.map(n =>
+          String(n)
+            .replace('@s.whatsapp.net', '')
+            .replace(/\D/g, '')
+        )
+      : [];
+
+    const senderNumber = cleanNumber(sender);
+
+    if (ownerNumbers.includes(senderNumber)) {
+      return true;
+    }
+
     const user = await db.getUser(sender);
-    const clean = await db.getUser(cleanNumber(sender));
+    const clean = await db.getUser(senderNumber);
 
     return (
       user?.premium === true ||
@@ -89,6 +112,7 @@ async function isPremiumUser(sender) {
       Number(user?.premiumUntil || 0) > Date.now() ||
       Number(clean?.premiumUntil || 0) > Date.now()
     );
+
   } catch {
     return false;
   }
@@ -106,6 +130,7 @@ function useFreeRequest(sender) {
   }
 
   const next = used + 1;
+
   userUses.set(key, next);
 
   return {
@@ -157,6 +182,7 @@ async function processQueue() {
     const job = queue.shift();
 
     try {
+
       await job.sock.sendMessage(job.remoteJid, {
         text:
 `🎧 *Turno de música*
@@ -171,6 +197,7 @@ async function processQueue() {
       await handleDownload(job);
 
     } catch (err) {
+
       console.log('❌ Error en music queue:', err?.message || err);
 
       await job.sock.sendMessage(job.remoteJid, {
@@ -187,6 +214,7 @@ async function processQueue() {
 }
 
 async function handleDownload(job) {
+
   const { sock, remoteJid, msg, query } = job;
 
   let downloadedPath = null;
@@ -194,12 +222,14 @@ async function handleDownload(job) {
   let thumbPath = null;
 
   try {
+
     ensureTemp();
 
     let url = query;
     let video = null;
 
     if (!isYouTubeUrl(query)) {
+
       await sock.sendMessage(remoteJid, {
         text: '🔍 Buscando canción...'
       }, { quoted: msg });
@@ -213,7 +243,9 @@ async function handleDownload(job) {
       }
 
       url = video.url;
+
     } else {
+
       video = await searchYouTube(query);
     }
 
@@ -225,6 +257,7 @@ async function handleDownload(job) {
 
     const seconds = parseDurationSeconds(video.timestamp);
 
+    // ⏱️ BLOQUEAR MÁS DE 10 MIN
     if (seconds > MAX_DURATION_SECONDS) {
       return sock.sendMessage(remoteJid, {
         text:
@@ -252,12 +285,17 @@ async function handleDownload(job) {
     }, { quoted: msg });
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-    const rawOutput = path.join(TEMP_DIR, `music_${id}.%(ext)s`);
+
+    const rawOutput = path.join(
+      TEMP_DIR,
+      `music_${id}.%(ext)s`
+    );
 
     await downloadAudio(url, rawOutput);
 
     const downloaded = fs.readdirSync(TEMP_DIR).find(f =>
-      f.startsWith(`music_${id}`) && f.endsWith('.mp3')
+      f.startsWith(`music_${id}`) &&
+      f.endsWith('.mp3')
     );
 
     if (!downloaded) {
@@ -268,6 +306,7 @@ async function handleDownload(job) {
 
     downloadedPath = path.join(TEMP_DIR, downloaded);
 
+    // 🔥 THUMBNAIL
     thumbPath = path.join(TEMP_DIR, `thumb_${id}.jpg`);
 
     const thumbUrl =
@@ -281,7 +320,11 @@ async function handleDownload(job) {
 
     fs.writeFileSync(thumbPath, response.data);
 
-    finalAudio = path.join(TEMP_DIR, `${title}_${id}.mp3`);
+    // 🔥 AUDIO FINAL
+    finalAudio = path.join(
+      TEMP_DIR,
+      `${title}_${id}.mp3`
+    );
 
     await execFileAsync('ffmpeg', [
       '-i', downloadedPath,
@@ -298,6 +341,7 @@ async function handleDownload(job) {
       '-metadata', 'album=SiriusBot Music',
 
       '-disposition:v', 'attached_pic',
+
       '-y',
 
       finalAudio
@@ -307,12 +351,13 @@ async function handleDownload(job) {
 
     if (sizeMB > 95) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ El audio pesa demasiado para enviarlo.'
+        text: '❌ El audio pesa demasiado.'
       }, { quoted: msg });
     }
 
     const thumbBuffer = fs.readFileSync(thumbPath);
 
+    // 🎧 MENSAJE ESTILO SPOTIFY
     await sock.sendMessage(remoteJid, {
       image: thumbBuffer,
       caption:
@@ -324,6 +369,7 @@ async function handleDownload(job) {
 💿 MP3 320K`
     }, { quoted: msg });
 
+    // 🔥 AUDIO FINAL CON CARÁTULA
     await sock.sendMessage(remoteJid, {
       audio: fs.readFileSync(finalAudio),
       mimetype: 'audio/mpeg',
@@ -332,9 +378,12 @@ async function handleDownload(job) {
     }, { quoted: msg });
 
   } finally {
+
     for (const file of [downloadedPath, finalAudio, thumbPath]) {
       try {
-        if (file && fs.existsSync(file)) fs.unlinkSync(file);
+        if (file && fs.existsSync(file)) {
+          fs.unlinkSync(file);
+        }
       } catch {}
     }
   }
@@ -344,7 +393,9 @@ module.exports = {
   commands: ['music', 'song', 'mp3'],
 
   async execute({ sock, remoteJid, args, msg, sender }) {
+
     try {
+
       if (!args.length) {
         return sock.sendMessage(remoteJid, {
           text:
@@ -356,11 +407,14 @@ Ejemplo:
       }
 
       const query = args.join(' ').trim();
+
+      // 👑 PREMIUM / OWNER
       const premium = await isPremiumUser(sender);
 
       let remaining = '∞';
 
       if (!premium) {
+
         const limit = useFreeRequest(sender);
 
         if (!limit.allowed) {
@@ -369,7 +423,7 @@ Ejemplo:
 `❌ Alcanzaste tu límite de música por hoy.
 
 🎧 Límite normal: ${FREE_LIMIT} canciones por día
-👑 Premium: ilimitado`
+👑 Premium y owner: ilimitado`
           }, { quoted: msg });
         }
 
@@ -412,6 +466,7 @@ position === 0
       processQueue();
 
     } catch (err) {
+
       console.log('❌ Error en music/song:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
