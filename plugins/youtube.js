@@ -9,10 +9,10 @@ const yts = require('yt-search');
 const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-// ⏳ COLA GLOBAL: 1 canción cada 2 minutos
+// ⏳ COLA POR CHAT: 1 canción cada 2 minutos
 const QUEUE_DELAY = 2 * 60 * 1000;
-const queue = [];
-let processingQueue = false;
+const queues = new Map();
+const processingChats = new Set();
 
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
@@ -69,26 +69,17 @@ function sanitizeFileName(name = 'audio') {
     .trim() || 'audio';
 }
 
-async function processQueue() {
-  if (processingQueue) return;
+async function processQueue(chatId) {
+  if (processingChats.has(chatId)) return;
 
-  processingQueue = true;
+  processingChats.add(chatId);
+
+  const queue = queues.get(chatId) || [];
 
   while (queue.length > 0) {
     const job = queue.shift();
 
     try {
-      await job.sock.sendMessage(job.remoteJid, {
-        text:
-`🎶 *Turno de canción*
-
-👤 Pedido por: @${job.sender.split('@')[0]}
-🔍 Búsqueda: *${job.query}*
-
-⏳ Descargando ahora...`,
-        mentions: [job.sender]
-      }, { quoted: job.msg });
-
       await handleDownload(job);
 
     } catch (err) {
@@ -104,7 +95,8 @@ async function processQueue() {
     }
   }
 
-  processingQueue = false;
+  queues.delete(chatId);
+  processingChats.delete(chatId);
 }
 
 async function handleDownload(job) {
@@ -118,13 +110,8 @@ async function handleDownload(job) {
 
     let url = query;
     let title = 'Audio de YouTube';
-    let duration = '';
 
     if (!isYouTubeUrl(query)) {
-      await sock.sendMessage(remoteJid, {
-        text: '🔍 Buscando en YouTube...'
-      }, { quoted: msg });
-
       const video = await searchYouTube(query);
 
       if (!video) {
@@ -135,20 +122,6 @@ async function handleDownload(job) {
 
       url = video.url;
       title = video.title || title;
-      duration = video.timestamp || '';
-
-      await sock.sendMessage(remoteJid, {
-        text:
-`🎬 *${title}*
-⏱️ ${duration || 'Desconocido'}
-
-⏳ Descargando audio...`
-      }, { quoted: msg });
-
-    } else {
-      await sock.sendMessage(remoteJid, {
-        text: '⏳ Descargando audio...'
-      }, { quoted: msg });
     }
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
@@ -209,7 +182,16 @@ module.exports = {
 
       const query = args.join(' ').trim();
 
-      const position = queue.length + (processingQueue ? 1 : 0);
+      if (!queues.has(remoteJid)) {
+        queues.set(remoteJid, []);
+      }
+
+      const queue = queues.get(remoteJid);
+
+      const position =
+        queue.length +
+        (processingChats.has(remoteJid) ? 1 : 0);
+
       const waitMin = position === 0 ? 0 : position * 2;
 
       queue.push({
@@ -230,20 +212,19 @@ position === 0
 👤 Pedido por: @${sender.split('@')[0]}
 🎶 Búsqueda: *${query}*
 
-⏳ Tu canción se está procesando automáticamente...`
+⏳ Tu canción se procesará automáticamente.`
 : `📥 *Canción añadida a la cola*
 
 👤 Pedido por: @${sender.split('@')[0]}
 🎶 Búsqueda: *${query}*
 📌 Posición en cola: *#${position + 1}*
 
-⏳ La canción anterior se está enviando.
-🎶 Tu pedido se cargará automáticamente en *${waitMin} minuto(s)*.
+⏳ Tu pedido se cargará automáticamente en *${waitMin} minuto(s)*.
 🚫 No necesitas volver a usar el comando.`,
         mentions: [sender]
       }, { quoted: msg });
 
-      processQueue();
+      processQueue(remoteJid);
 
     } catch (err) {
       console.log('❌ Error en youtube/play:', err?.message || err);
