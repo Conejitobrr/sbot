@@ -7,7 +7,8 @@ const FEATURES = [
   'audios',
   'welcome',
   'antilink',
-  'antispam'
+  'antispam',
+  'chatbot'
 ];
 
 module.exports = {
@@ -34,6 +35,7 @@ module.exports = {
 .disable bot
 .disable welcome
 .disable audios
+.disable chatbot
 
 📋 Funciones disponibles:
 ${FEATURES.map(f => `➤ ${f}`).join('\n')}
@@ -55,12 +57,26 @@ ${FEATURES.map(f => `➤ ${f}`).join('\n')}
       }, { quoted: msg });
     }
 
+    // 🌐 CHATBOT GLOBAL
+    if (feature === 'chatbot') {
+
+      if (typeof db.setGlobalSetting === 'function') {
+        await db.setGlobalSetting('chatbot', false);
+      } else if (typeof db.setSetting === 'function') {
+        await db.setSetting('chatbot', false);
+      }
+
+      return sock.sendMessage(remoteJid, {
+        text: '✅ *chatbot* desactivado globalmente.\n\n🤖 Ahora dejará de responder en todos los chats.'
+      }, { quoted: msg });
+    }
+
     // 🔥 PRIVADO
     if (!fromGroup) {
 
-      if (!['bot', 'audios'].includes(feature)) {
+      if (!['bot', 'audios', 'chatbot'].includes(feature)) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ En privado solo puedes usar:\n.disable bot\n.disable audios'
+          text: '❌ En privado solo puedes usar:\n.disable bot\n.disable audios\n.disable chatbot'
         }, { quoted: msg });
       }
 
