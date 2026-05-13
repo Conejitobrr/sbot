@@ -21,7 +21,6 @@ module.exports = {
       sender,
       args,
       fromGroup,
-      isAdmin,
       isOwner
     } = ctx;
 
@@ -39,8 +38,7 @@ module.exports = {
 📋 Funciones disponibles:
 ${FEATURES.map(f => `➤ ${f}`).join('\n')}
 
-🔐 Solo owner puede usar enable/disable.
-👥 En grupos, admins también pueden usar: .disable welcome`
+🔐 Solo el owner puede usar este comando.`
       }, { quoted: msg });
     }
 
@@ -50,33 +48,34 @@ ${FEATURES.map(f => `➤ ${f}`).join('\n')}
       }, { quoted: msg });
     }
 
-    // ✅ REGLA ESPECIAL:
-    // En grupos, admins pueden desactivar SOLO welcome.
-    const adminCanUseWelcome = fromGroup && feature === 'welcome' && isAdmin;
-
-    // 🔥 Todo lo demás SOLO OWNER
-    if (!isOwner && !adminCanUseWelcome) {
+    // 🔥 SOLO OWNER
+    if (!isOwner) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Solo el owner puede usar este comando.\n\n👥 Los admins solo pueden usar *.disable welcome* en grupos.'
+        text: '❌ Solo el owner puede usar este comando.'
       }, { quoted: msg });
     }
 
-    // PRIVADO: solo bot/audios tienen sentido
+    // 🔥 PRIVADO
     if (!fromGroup) {
+
       if (!['bot', 'audios'].includes(feature)) {
         return sock.sendMessage(remoteJid, {
           text: '❌ En privado solo puedes usar:\n.disable bot\n.disable audios'
         }, { quoted: msg });
       }
 
-      await db.setUserSetting(sender, feature, false);
+      await db.setUserSetting(
+        sender.split('@')[0],
+        feature,
+        false
+      );
 
       return sock.sendMessage(remoteJid, {
         text: `✅ *${feature}* desactivado correctamente en privado.`
       }, { quoted: msg });
     }
 
-    // GRUPO
+    // 🔥 GRUPO
     await db.setGroupSetting(remoteJid, feature, false);
 
     return sock.sendMessage(remoteJid, {
