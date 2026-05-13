@@ -1,5 +1,3 @@
-Este es mi handler.js
-
 'use strict';
 
 const path = require('path');
