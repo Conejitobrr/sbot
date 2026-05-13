@@ -54,7 +54,7 @@ async function downloadAudio(url, output) {
     '--ignore-errors',
     '--no-warnings',
 
-    '-f', 'bestaudio',
+    '-f', 'ba/b',
 
     '-x',
     '--audio-format', 'mp3',
