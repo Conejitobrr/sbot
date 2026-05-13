@@ -300,6 +300,32 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
+    // 🔥 VERIFICAR SI EL BOT ESTÁ ACTIVADO
+    let botEnabled = true;
+
+    if (!isOwner) {
+      if (fromGroup) {
+        const groupData = await db.getGroup(remoteJid);
+        botEnabled = groupData.bot !== false;
+      } else {
+        const userData = await db.getUser(sender);
+        botEnabled = userData.bot !== false;
+      }
+    }
+
+    // 🔥 SI EL BOT ESTÁ DESACTIVADO SOLO PERMITIR .enable
+    if (!botEnabled) {
+      const parsedDisable = detectPrefix(body || '', config.prefix);
+
+      if (
+        !parsedDisable ||
+        !parsedDisable.body ||
+        !parsedDisable.body.toLowerCase().startsWith('enable')
+      ) {
+        return;
+      }
+    }
+
     if (body && messagePlugins.length) {
       for (const plugin of messagePlugins) {
         try {
