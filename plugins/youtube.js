@@ -9,6 +9,12 @@ const yts = require('yt-search');
 const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
+// ⏳ COLA GLOBAL: 1 canción cada 2 minutos
+const QUEUE_DELAY = 2 * 60 * 1000;
+const queue = [];
+let processingQueue = false;
+const userPending = new Set();
+
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -17,6 +23,10 @@ function ensureTemp() {
 
 function isYouTubeUrl(text = '') {
   return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(text);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // 🔥 MEJOR BÚSQUEDA
@@ -44,7 +54,7 @@ async function downloadAudio(url, output) {
     '--ignore-errors',
     '--no-warnings',
 
-    '-f', 'bestaudio[abr<=320]/bestaudio',
+    '-f', 'bestaudio',
 
     '-x',
     '--audio-format', 'mp3',
@@ -55,12 +65,139 @@ async function downloadAudio(url, output) {
   ]);
 }
 
+function sanitizeFileName(name = 'audio') {
+  return String(name)
+    .replace(/[\\/:*?"<>|]/g, '')
+    .slice(0, 80)
+    .trim() || 'audio';
+}
+
+async function processQueue() {
+  if (processingQueue) return;
+
+  processingQueue = true;
+
+  while (queue.length > 0) {
+    const job = queue.shift();
+
+    try {
+      await handleDownload(job);
+    } catch (err) {
+      console.log('❌ Error en cola youtube/play:', err?.message || err);
+
+      await job.sock.sendMessage(job.remoteJid, {
+        text: '❌ Error al procesar esta canción.'
+      }, { quoted: job.msg });
+    } finally {
+      userPending.delete(job.sender);
+    }
+
+    if (queue.length > 0) {
+      await sleep(QUEUE_DELAY);
+    }
+  }
+
+  processingQueue = false;
+}
+
+async function handleDownload(job) {
+  const { sock, remoteJid, msg, query } = job;
+
+  let file = null;
+  let finalPath = null;
+
+  try {
+    ensureTemp();
+
+    let url = query;
+    let title = 'Audio de YouTube';
+    let duration = '';
+
+    // 🔍 BUSCAR SI NO ES LINK
+    if (!isYouTubeUrl(query)) {
+
+      await sock.sendMessage(remoteJid, {
+        text: '🔍 Buscando en YouTube...'
+      }, { quoted: msg });
+
+      const video = await searchYouTube(query);
+
+      if (!video) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se encontraron resultados.'
+        }, { quoted: msg });
+      }
+
+      url = video.url;
+      title = video.title || title;
+      duration = video.timestamp || '';
+
+      await sock.sendMessage(remoteJid, {
+        text:
+`🎬 *${title}*
+⏱️ ${duration || 'Desconocido'}
+
+⏳ Descargando audio...`
+      }, { quoted: msg });
+
+    } else {
+
+      await sock.sendMessage(remoteJid, {
+        text: '⏳ Descargando audio...'
+      }, { quoted: msg });
+    }
+
+    const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+
+    file = path.join(
+      TEMP_DIR,
+      `yt_audio_${id}.%(ext)s`
+    );
+
+    // 🔥 DESCARGAR
+    await downloadAudio(url, file);
+
+    // 🔥 BUSCAR MP3 REAL
+    const files = fs.readdirSync(TEMP_DIR);
+
+    const downloaded = files.find(f =>
+      f.startsWith(`yt_audio_${id}`) &&
+      f.endsWith('.mp3')
+    );
+
+    if (!downloaded) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ No se pudo descargar el audio.'
+      }, { quoted: msg });
+    }
+
+    finalPath = path.join(TEMP_DIR, downloaded);
+
+    const sizeMB = fs.statSync(finalPath).size / 1024 / 1024;
+
+    if (sizeMB > 95) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ El audio pesa demasiado para enviarlo por WhatsApp.'
+      }, { quoted: msg });
+    }
+
+    await sock.sendMessage(remoteJid, {
+      audio: fs.readFileSync(finalPath),
+      mimetype: 'audio/mpeg',
+      fileName: `${sanitizeFileName(title)}.mp3`
+    }, { quoted: msg });
+
+  } finally {
+    try {
+      if (finalPath && fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+    } catch {}
+  }
+}
+
 module.exports = {
   commands: ['yt', 'play', 'youtube'],
 
-  async execute({ sock, remoteJid, args, msg }) {
-    let file = null;
-
+  async execute({ sock, remoteJid, args, msg, sender, pushName }) {
     try {
       if (!args.length) {
         return sock.sendMessage(remoteJid, {
@@ -68,92 +205,43 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      ensureTemp();
+      const query = args.join(' ').trim();
 
-      const query = args.join(' ');
-      let url = query;
-      let title = 'Audio de YouTube';
-      let duration = '';
-
-      // 🔍 BUSCAR SI NO ES LINK
-      if (!isYouTubeUrl(query)) {
-
-        await sock.sendMessage(remoteJid, {
-          text: '🔍 Buscando en YouTube...'
+      if (userPending.has(sender)) {
+        return sock.sendMessage(remoteJid, {
+          text: '⏳ Ya tienes una canción en cola. Espera a que se envíe primero.'
         }, { quoted: msg });
+      }
 
-        const video = await searchYouTube(query);
+      const position = queue.length + (processingQueue ? 1 : 0);
+      const waitMin = position * 2;
 
-        if (!video) {
-          return sock.sendMessage(remoteJid, {
-            text: '❌ No se encontraron resultados.'
-          }, { quoted: msg });
-        }
+      queue.push({
+        sock,
+        remoteJid,
+        args,
+        msg,
+        sender,
+        pushName: pushName || 'Usuario',
+        query
+      });
 
-        url = video.url;
-        title = video.title || title;
-        duration = video.timestamp || '';
+      userPending.add(sender);
 
+      if (position > 0) {
         await sock.sendMessage(remoteJid, {
           text:
-`🎬 *${title}*
-⏱️ ${duration || 'Desconocido'}
+`📥 *Canción añadida a la cola*
 
-⏳ Descargando audio...`
-        }, { quoted: msg });
-
-      } else {
-
-        await sock.sendMessage(remoteJid, {
-          text: '⏳ Descargando audio...'
+👤 Pedido por: @${sender.split('@')[0]}
+🎶 Búsqueda: *${query}*
+📌 Posición: *#${position + 1}*
+⏳ Espera aproximada: *${waitMin} minuto(s)*`,
+          mentions: [sender]
         }, { quoted: msg });
       }
 
-      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-
-      file = path.join(
-        TEMP_DIR,
-        `yt_audio_${id}.%(ext)s`
-      );
-
-      // 🔥 DESCARGAR
-      await downloadAudio(url, file);
-
-      // 🔥 BUSCAR MP3 REAL
-      const files = fs.readdirSync(TEMP_DIR);
-
-      const downloaded = files.find(f =>
-        f.startsWith(`yt_audio_${id}`) &&
-        f.endsWith('.mp3')
-      );
-
-      if (!downloaded) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ No se pudo descargar el audio.'
-        }, { quoted: msg });
-      }
-
-      const finalPath = path.join(TEMP_DIR, downloaded);
-
-      const sizeMB = fs.statSync(finalPath).size / 1024 / 1024;
-
-      if (sizeMB > 95) {
-
-        fs.unlinkSync(finalPath);
-
-        return sock.sendMessage(remoteJid, {
-          text: '❌ El audio pesa demasiado para enviarlo por WhatsApp.'
-        }, { quoted: msg });
-      }
-
-      await sock.sendMessage(remoteJid, {
-        audio: fs.readFileSync(finalPath),
-        mimetype: 'audio/mpeg',
-        fileName: `${title}.mp3`
-      }, { quoted: msg });
-
-      // 🧹 BORRAR
-      fs.unlinkSync(finalPath);
+      processQueue();
 
     } catch (err) {
 
