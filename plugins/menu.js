@@ -59,11 +59,14 @@ module.exports = {
 ➤ *${p}consejo*
 ➤ *${p}frase*
 ➤ *${p}historiaromantica*
+➤ *${p}clon*
 
 ━━━━━━━━━━━━━━━━━━━
 🎵 *DESCARGAS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}play* → Audio de YouTube
+➤ *${p}spotify* → Audio de Spotify (premium)
+➤ *${p}song* → Audio de YouTube (premium)
 ➤ *${p}ytmp4* → Video de YouTube
 ➤ *${p}tiktok* → Video de TikTok
 ➤ *${p}fb* → Video de Facebook
