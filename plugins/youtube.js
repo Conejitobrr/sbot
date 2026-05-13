@@ -81,13 +81,26 @@ async function processQueue() {
     const job = queue.shift();
 
     try {
+      await job.sock.sendMessage(job.remoteJid, {
+        text:
+`🎶 *Turno de canción*
+
+👤 Pedido por: @${job.sender.split('@')[0]}
+🔍 Búsqueda: *${job.query}*
+
+⏳ Descargando ahora...`,
+        mentions: [job.sender]
+      }, { quoted: job.msg });
+
       await handleDownload(job);
+
     } catch (err) {
       console.log('❌ Error en cola youtube/play:', err?.message || err);
 
       await job.sock.sendMessage(job.remoteJid, {
         text: '❌ Error al procesar esta canción.'
       }, { quoted: job.msg });
+
     } finally {
       userPending.delete(job.sender);
     }
@@ -214,7 +227,7 @@ module.exports = {
       }
 
       const position = queue.length + (processingQueue ? 1 : 0);
-      const waitMin = position * 2;
+      const waitMin = position === 0 ? 0 : position * 2;
 
       queue.push({
         sock,
@@ -228,18 +241,23 @@ module.exports = {
 
       userPending.add(sender);
 
-      if (position > 0) {
-        await sock.sendMessage(remoteJid, {
-          text:
-`📥 *Canción añadida a la cola*
+      await sock.sendMessage(remoteJid, {
+        text:
+position === 0
+? `📥 *Canción añadida a la cola*
+
+👤 Pedido por: @${sender.split('@')[0]}
+🎶 Búsqueda: *${query}*
+📌 Posición: *#1*
+⏳ Se enviará ahora automáticamente.`
+: `📥 *Canción añadida a la cola*
 
 👤 Pedido por: @${sender.split('@')[0]}
 🎶 Búsqueda: *${query}*
 📌 Posición: *#${position + 1}*
-⏳ Espera aproximada: *${waitMin} minuto(s)*`,
-          mentions: [sender]
-        }, { quoted: msg });
-      }
+⏳ Se enviará automáticamente en aprox. *${waitMin} minuto(s)*.`,
+        mentions: [sender]
+      }, { quoted: msg });
 
       processQueue();
 
