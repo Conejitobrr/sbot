@@ -302,7 +302,8 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
-    if (body && messagePlugins.length) {
+    // 🔥 Ejecutar plugins onMessage aunque no sea comando
+    if (messagePlugins.length) {
       for (const plugin of messagePlugins) {
         try {
           await plugin.onMessage({
