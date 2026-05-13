@@ -332,25 +332,15 @@ async function messageHandler(sock, msg, store = {}) {
     const number = getRealSenderNumber(msg, key, sender, groupMetadata);
     const userKey = number || cleanNumber(sender);
 
-    const ownerNumbers = Array.isArray(config.owner)
-      ? config.owner.map(n => String(n).replace(/\D/g, ''))
+    // 🔥 OWNER SEGURO POR JID, NO POR NÚMERO/LID
+    const ownerJids = Array.isArray(config.owner)
+      ? config.owner.map(jid => normalizeJid(String(jid)))
       : [];
-
-    const senderNumber = number;
-    const remoteNumber = cleanNumber(remoteJid);
-    const participantNumber = cleanNumber(key.participant || '');
-    const participantAltNumber = cleanNumber(key.participantAlt || '');
-    const participantPnNumber = cleanNumber(key.participantPn || '');
-    const realNumber = cleanNumber(msg.realNumber || '');
 
     const isOwner =
       fromMe ||
-      ownerNumbers.includes(senderNumber) ||
-      ownerNumbers.includes(remoteNumber) ||
-      ownerNumbers.includes(participantNumber) ||
-      ownerNumbers.includes(participantAltNumber) ||
-      ownerNumbers.includes(participantPnNumber) ||
-      ownerNumbers.includes(realNumber);
+      ownerJids.includes(sender) ||
+      ownerJids.includes(remoteJid);
 
     if (config.debug) {
       console.log(chalk.gray('\n╔══════════════════════════════'));
