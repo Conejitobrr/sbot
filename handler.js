@@ -196,6 +196,16 @@ function cleanNumber(jid = '') {
     .replace(/\D/g, '');
 }
 
+function getRealSenderNumber(msg, key, sender) {
+  return (
+    cleanNumber(msg.realNumber) ||
+    cleanNumber(key.participantAlt) ||
+    cleanNumber(key.participantPn) ||
+    cleanNumber(key.participant) ||
+    cleanNumber(sender)
+  );
+}
+
 function getReadableMessage(msg) {
   const body = getBody(msg);
   if (body) return body;
@@ -251,7 +261,7 @@ async function messageHandler(sock, msg, store = {}) {
       store.contacts?.[sender]?.notify ||
       'Sin nombre';
 
-    const number = cleanNumber(sender);
+    const number = getRealSenderNumber(msg, key, sender);
     const userKey = number;
 
     let groupMetadata = null;
@@ -278,9 +288,11 @@ async function messageHandler(sock, msg, store = {}) {
       ? config.owner.map(n => String(n).replace(/\D/g, ''))
       : [];
 
-    const senderNumber = cleanNumber(sender);
+    const senderNumber = number;
     const remoteNumber = cleanNumber(remoteJid);
     const participantNumber = cleanNumber(key.participant || '');
+    const participantAltNumber = cleanNumber(key.participantAlt || '');
+    const participantPnNumber = cleanNumber(key.participantPn || '');
     const realNumber = cleanNumber(msg.realNumber || '');
 
     const isOwner =
@@ -288,6 +300,8 @@ async function messageHandler(sock, msg, store = {}) {
       ownerNumbers.includes(senderNumber) ||
       ownerNumbers.includes(remoteNumber) ||
       ownerNumbers.includes(participantNumber) ||
+      ownerNumbers.includes(participantAltNumber) ||
+      ownerNumbers.includes(participantPnNumber) ||
       ownerNumbers.includes(realNumber);
 
     if (config.debug) {
@@ -301,7 +315,6 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
-    // 🔥 VERIFICAR SI EL BOT ESTÁ ACTIVADO
     let botEnabled = true;
 
     if (!isOwner) {
@@ -314,7 +327,6 @@ async function messageHandler(sock, msg, store = {}) {
       }
     }
 
-    // 🔥 SI EL BOT ESTÁ DESACTIVADO SOLO PERMITIR .enable
     if (!botEnabled) {
       const parsedDisable = detectPrefix(body || '', config.prefix);
 
