@@ -14,16 +14,15 @@ const execFileAsync = promisify(execFile);
 
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-const queue = [];
-let processingQueue = false;
-
 // 🎵 límite normal
 const FREE_LIMIT = 3;
 const userUses = new Map();
 
-// ⏳ cola entre 1 y 2 minutos
+// ⏳ cola por chat entre 1 y 2 minutos
 const MIN_DELAY = 60 * 1000;
 const MAX_DELAY = 2 * 60 * 1000;
+const queues = new Map();
+const processingChats = new Set();
 
 // ⏱️ máximo 10 minutos
 const MAX_DURATION_SECONDS = 10 * 60;
@@ -173,27 +172,17 @@ async function downloadAudio(url, output) {
   ]);
 }
 
-async function processQueue() {
-  if (processingQueue) return;
+async function processQueue(chatId) {
+  if (processingChats.has(chatId)) return;
 
-  processingQueue = true;
+  processingChats.add(chatId);
+
+  const queue = queues.get(chatId) || [];
 
   while (queue.length > 0) {
     const job = queue.shift();
 
     try {
-
-      await job.sock.sendMessage(job.remoteJid, {
-        text:
-`🎧 *Turno de música*
-
-👤 Pedido por: @${job.sender.split('@')[0]}
-🔍 Búsqueda: *${job.query}*
-
-⏳ Preparando descarga...`,
-        mentions: [job.sender]
-      }, { quoted: job.msg });
-
       await handleDownload(job);
 
     } catch (err) {
@@ -210,7 +199,8 @@ async function processQueue() {
     }
   }
 
-  processingQueue = false;
+  queues.delete(chatId);
+  processingChats.delete(chatId);
 }
 
 async function handleDownload(job) {
@@ -229,11 +219,6 @@ async function handleDownload(job) {
     let video = null;
 
     if (!isYouTubeUrl(query)) {
-
-      await sock.sendMessage(remoteJid, {
-        text: '🔍 Buscando canción...'
-      }, { quoted: msg });
-
       video = await searchYouTube(query);
 
       if (!video) {
@@ -271,18 +256,6 @@ async function handleDownload(job) {
     const title = sanitizeFileName(video.title || 'Audio');
     const artist = sanitizeFileName(video.author?.name || 'Desconocido');
     const duration = video.timestamp || 'Desconocido';
-
-    await sock.sendMessage(remoteJid, {
-      text:
-`🎵 *Descargando música*
-
-🎶 ${title}
-👤 ${artist}
-⏱️ ${duration}
-💿 MP3 320K
-
-⏳ Preparando audio con carátula...`
-    }, { quoted: msg });
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
@@ -430,7 +403,16 @@ Ejemplo:
         remaining = limit.remaining;
       }
 
-      const position = queue.length + (processingQueue ? 1 : 0);
+      if (!queues.has(remoteJid)) {
+        queues.set(remoteJid, []);
+      }
+
+      const queue = queues.get(remoteJid);
+
+      const position =
+        queue.length +
+        (processingChats.has(remoteJid) ? 1 : 0);
+
       const waitMin = position === 0 ? 0 : position;
 
       queue.push({
@@ -463,7 +445,7 @@ position === 0
         mentions: [sender]
       }, { quoted: msg });
 
-      processQueue();
+      processQueue(remoteJid);
 
     } catch (err) {
 
