@@ -13,7 +13,6 @@ const TEMP_DIR = path.join(process.cwd(), 'temp');
 const QUEUE_DELAY = 2 * 60 * 1000;
 const queue = [];
 let processingQueue = false;
-const userPending = new Set();
 
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
@@ -29,7 +28,6 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// 🔥 MEJOR BÚSQUEDA
 async function searchYouTube(query) {
   const res = await yts(query);
 
@@ -44,7 +42,6 @@ async function searchYouTube(query) {
   );
 }
 
-// 🔥 DESCARGA MEJORADA
 async function downloadAudio(url, output) {
   await execFileAsync('yt-dlp', [
     '--extractor-args', 'youtube:player_client=android',
@@ -100,9 +97,6 @@ async function processQueue() {
       await job.sock.sendMessage(job.remoteJid, {
         text: '❌ Error al procesar esta canción.'
       }, { quoted: job.msg });
-
-    } finally {
-      userPending.delete(job.sender);
     }
 
     if (queue.length > 0) {
@@ -126,9 +120,7 @@ async function handleDownload(job) {
     let title = 'Audio de YouTube';
     let duration = '';
 
-    // 🔍 BUSCAR SI NO ES LINK
     if (!isYouTubeUrl(query)) {
-
       await sock.sendMessage(remoteJid, {
         text: '🔍 Buscando en YouTube...'
       }, { quoted: msg });
@@ -154,7 +146,6 @@ async function handleDownload(job) {
       }, { quoted: msg });
 
     } else {
-
       await sock.sendMessage(remoteJid, {
         text: '⏳ Descargando audio...'
       }, { quoted: msg });
@@ -167,10 +158,8 @@ async function handleDownload(job) {
       `yt_audio_${id}.%(ext)s`
     );
 
-    // 🔥 DESCARGAR
     await downloadAudio(url, file);
 
-    // 🔥 BUSCAR MP3 REAL
     const files = fs.readdirSync(TEMP_DIR);
 
     const downloaded = files.find(f =>
@@ -220,12 +209,6 @@ module.exports = {
 
       const query = args.join(' ').trim();
 
-      if (userPending.has(sender)) {
-        return sock.sendMessage(remoteJid, {
-          text: '⏳ Ya tienes una canción en cola. Espera a que se envíe primero.'
-        }, { quoted: msg });
-      }
-
       const position = queue.length + (processingQueue ? 1 : 0);
       const waitMin = position === 0 ? 0 : position * 2;
 
@@ -239,8 +222,6 @@ module.exports = {
         query
       });
 
-      userPending.add(sender);
-
       await sock.sendMessage(remoteJid, {
         text:
 position === 0
@@ -248,21 +229,23 @@ position === 0
 
 👤 Pedido por: @${sender.split('@')[0]}
 🎶 Búsqueda: *${query}*
-📌 Posición: *#1*
-⏳ Se enviará ahora automáticamente.`
+
+⏳ Tu canción se está procesando automáticamente...`
 : `📥 *Canción añadida a la cola*
 
 👤 Pedido por: @${sender.split('@')[0]}
 🎶 Búsqueda: *${query}*
-📌 Posición: *#${position + 1}*
-⏳ Se enviará automáticamente en aprox. *${waitMin} minuto(s)*.`,
+📌 Posición en cola: *#${position + 1}*
+
+⏳ La canción anterior se está enviando.
+🎶 Tu pedido se cargará automáticamente en *${waitMin} minuto(s)*.
+🚫 No necesitas volver a usar el comando.`,
         mentions: [sender]
       }, { quoted: msg });
 
       processQueue();
 
     } catch (err) {
-
       console.log('❌ Error en youtube/play:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
@@ -272,7 +255,6 @@ position === 0
 📌 Prueba otra canción o link.
 📌 Verifica yt-dlp y ffmpeg.`
       }, { quoted: msg });
-
     }
   }
 };
