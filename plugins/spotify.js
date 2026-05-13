@@ -17,8 +17,10 @@ const FREE_LIMIT = 3;
 const MAX_DURATION_SECONDS = 10 * 60;
 const QUEUE_DELAY = 2 * 60 * 1000;
 
-const queue = [];
-let processingQueue = false;
+// ✅ Cola independiente por cada chat
+const queues = new Map();
+const processingChats = new Set();
+
 const dailyUses = new Map();
 
 function ensureTemp() {
@@ -213,10 +215,12 @@ async function downloadAudio(url, output) {
   ]);
 }
 
-async function processQueue() {
-  if (processingQueue) return;
+async function processQueue(chatId) {
+  if (processingChats.has(chatId)) return;
 
-  processingQueue = true;
+  processingChats.add(chatId);
+
+  const queue = queues.get(chatId) || [];
 
   while (queue.length > 0) {
     const job = queue.shift();
@@ -237,7 +241,8 @@ async function processQueue() {
     }
   }
 
-  processingQueue = false;
+  queues.delete(chatId);
+  processingChats.delete(chatId);
 }
 
 async function handleDownload(job) {
@@ -412,7 +417,16 @@ Ejemplo:
         remaining = limit.remaining;
       }
 
-      const position = queue.length + (processingQueue ? 1 : 0);
+      if (!queues.has(remoteJid)) {
+        queues.set(remoteJid, []);
+      }
+
+      const queue = queues.get(remoteJid);
+
+      const position =
+        queue.length +
+        (processingChats.has(remoteJid) ? 1 : 0);
+
       const waitMin = position === 0 ? 0 : position * 2;
 
       queue.push({
@@ -445,7 +459,7 @@ position === 0
         mentions: [sender]
       }, { quoted: msg });
 
-      processQueue();
+      processQueue(remoteJid);
 
     } catch (err) {
       console.log('❌ Error en spotify:', err?.message || err);
