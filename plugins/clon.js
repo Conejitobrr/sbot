@@ -4,7 +4,9 @@ const fs = require('fs');
 const path = require('path');
 
 const MEMORY_PATH = path.join(process.cwd(), 'lib', 'clon_memory.json');
-const MAX_MESSAGES = 80;
+const MAX_MESSAGES = 120;
+
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
 function ensureMemory() {
   const dir = path.dirname(MEMORY_PATH);
@@ -27,9 +29,7 @@ function saveMemory(data) {
 }
 
 function cleanText(text = '') {
-  return String(text)
-    .replace(/\s+/g, ' ')
-    .trim();
+  return String(text).replace(/\s+/g, ' ').trim();
 }
 
 function mention(jid = '') {
@@ -51,79 +51,112 @@ function getTarget(msg, args) {
   return null;
 }
 
-function getStyle(messages = []) {
-  const joined = messages.join(' ');
-  const emojis = joined.match(/[\u{1F300}-\u{1FAFF}]/gu) || [];
-  const laughs = joined.match(/(jaja+|JAJA+|xd|XD|jsjs+|ksks+)/g) || [];
+function removeTargetFromQuestion(args = []) {
+  return args
+    .join(' ')
+    .replace(/@\d+/g, '')
+    .replace(/\d{5,}/g, '')
+    .trim();
+}
 
-  const commonWords = joined
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
-    .split(/\s+/)
-    .filter(w => w.length >= 3)
+function getStyleStats(messages = []) {
+  const joined = messages.join(' ');
+
+  const emojis = joined.match(/[\u{1F300}-\u{1FAFF}]/gu) || [];
+  const laughs = joined.match(/(jaja+|JAJA+|xd|XD|jsjs+|JSJS+|ksks+)/g) || [];
+
+  const shortSamples = messages
+    .filter(m => m.length <= 120)
     .slice(-25);
 
   return {
-    emojis: emojis.slice(-8),
-    laughs: laughs.slice(-5),
-    words: commonWords
+    emojis: [...new Set(emojis)].slice(-10),
+    laughs: [...new Set(laughs)].slice(-8),
+    samples: shortSamples
   };
 }
 
-function makeReply(targetName, question, samples = []) {
-  const style = getStyle(samples);
+async function askGroq({ targetName, question, samples, emojis, laughs }) {
+  const apiKey = process.env.GROQ_API_KEY;
 
-  const bases = [
-    'ni cagando',
-    'sí pe',
-    'no sé causa',
-    'obvio que sí',
-    'qué hablas oe',
-    'jajaja ya empezaste',
-    'anda duerme mejor',
-    'eso está bien raro',
-    'yo digo que sí',
-    'yo digo que no',
-    'cállate oe',
-    'qué fue mano',
-    'no molestes',
-    'literalmente sí',
-    'me llega pero ya'
-  ];
-
-  let base = samples.length
-    ? samples[Math.floor(Math.random() * samples.length)]
-    : bases[Math.floor(Math.random() * bases.length)];
-
-  base = cleanText(base);
-
-  if (base.length > 120) {
-    base = base.slice(0, 120).trim();
+  if (!apiKey) {
+    throw new Error('Falta GROQ_API_KEY en .env');
   }
 
-  const laugh = style.laughs.length
-    ? style.laughs[Math.floor(Math.random() * style.laughs.length)]
-    : Math.random() < 0.5 ? 'jaja' : '';
+  const prompt = `
+Eres un generador de respuestas estilo chat de WhatsApp.
 
-  const emoji = style.emojis.length
-    ? style.emojis[Math.floor(Math.random() * style.emojis.length)]
-    : Math.random() < 0.4 ? '😹' : '';
+Debes responder como si imitaras el estilo de escritura de una persona del grupo, usando sus frases, emojis, risas y tono.
 
-  const extra = [
-    `sobre eso de "${question}", ${base}`,
-    `${base}`,
-    `${question}? ${base}`,
-    `yo diría que ${base}`,
-    `mmm ${base}`,
-    `oe ${base}`
-  ];
+IMPORTANTE:
+- No digas que eres una IA.
+- No expliques nada.
+- No uses comillas.
+- No digas "simulación".
+- Responde corto, natural y como chat real.
+- Puedes usar humor, burla o tono picante si encaja con los ejemplos.
+- No repitas exactamente una frase antigua salvo que tenga sentido.
+- Responde coherentemente a la pregunta.
 
-  let reply = extra[Math.floor(Math.random() * extra.length)];
+Persona a imitar: ${targetName}
 
-  if (laugh && Math.random() < 0.7) reply += ` ${laugh}`;
-  if (emoji && Math.random() < 0.7) reply += ` ${emoji}`;
+Pregunta o contexto:
+${question}
 
-  return `🎭 *Clon de ${targetName}:*\n\n"${reply}"`;
+Mensajes reales recientes de esa persona:
+${samples.map(x => `- ${x}`).join('\n') || '- Sin suficientes mensajes aún'}
+
+Emojis frecuentes:
+${emojis.join(' ') || 'ninguno'}
+
+Risas frecuentes:
+${laughs.join(', ') || 'ninguna'}
+
+Genera SOLO la respuesta.
+`;
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      temperature: 0.9,
+      max_tokens: 90,
+      messages: [
+        {
+          role: 'system',
+          content: 'Responde como un usuario de WhatsApp imitado por estilo. Sé breve, natural y directo.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    })
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message || 'Error llamando Groq');
+  }
+
+  return cleanText(data.choices?.[0]?.message?.content || '');
+}
+
+function fallbackReply(question, samples = []) {
+  const base = samples.length
+    ? samples[Math.floor(Math.random() * samples.length)]
+    : 'no sé pe jaja';
+
+  if (question.includes('?')) {
+    return `mmm ${base}`;
+  }
+
+  return base;
 }
 
 module.exports = {
@@ -140,33 +173,40 @@ module.exports = {
 `❌ Uso:
 
 .clon @usuario pregunta
-.clon @usuario qué opinas de mí?
 
-También puedes responder a alguien con:
-.clon pregunta`
+Ejemplo:
+.clon @usuario qué opinas de mí?`
       }, { quoted: msg });
     }
 
-    let question = args.join(' ').trim();
-
-    question = question
-      .replace(/@\d+/g, '')
-      .replace(/\d{5,}/g, '')
-      .trim();
-
-    if (!question) {
-      question = 'qué responderías';
-    }
+    const question = removeTargetFromQuestion(args) || 'responde algo como tú responderías';
 
     const memory = loadMemory();
-    const samples = memory[target]?.messages || [];
+    const messages = memory[target]?.messages || [];
+    const stats = getStyleStats(messages);
 
     const targetName = mention(target);
 
-    const response = makeReply(targetName, question, samples);
+    let answer;
+
+    try {
+      answer = await askGroq({
+        targetName,
+        question,
+        samples: stats.samples,
+        emojis: stats.emojis,
+        laughs: stats.laughs
+      });
+    } catch (e) {
+      console.log('❌ Error Groq clon:', e?.message || e);
+      answer = fallbackReply(question, stats.samples);
+    }
 
     await sock.sendMessage(remoteJid, {
-      text: response,
+      text:
+`🎭 *Clon de ${targetName}:*
+
+${answer}`,
       mentions: [target]
     }, { quoted: msg });
   },
@@ -181,7 +221,8 @@ También puedes responder a alguien con:
     if (!text) return;
     if (text.startsWith('.')) return;
     if (text.length < 3) return;
-    if (text.length > 180) return;
+    if (text.length > 220) return;
+    if (/https?:\/\//i.test(text)) return;
 
     const memory = loadMemory();
 
