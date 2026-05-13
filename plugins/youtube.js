@@ -44,9 +44,11 @@ async function downloadAudio(url, output) {
     '--ignore-errors',
     '--no-warnings',
 
+    '-f', 'bestaudio[abr<=320]/bestaudio',
+
     '-x',
     '--audio-format', 'mp3',
-    '--audio-quality', '128K',
+    '--audio-quality', '320K',
 
     '-o', output,
     url
