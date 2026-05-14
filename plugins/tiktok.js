@@ -38,10 +38,25 @@ async function convertVideo(input, output) {
   await execFileAsync('ffmpeg', [
     '-y',
     '-i', input,
+
+    // ✅ Video compatible con WhatsApp / Estados
+    '-vf', "scale='min(720,iw)':-2",
     '-c:v', 'libx264',
-    '-c:a', 'aac',
     '-preset', 'veryfast',
     '-crf', '28',
+    '-pix_fmt', 'yuv420p',
+    '-profile:v', 'baseline',
+    '-level', '3.1',
+
+    // ✅ Audio compatible
+    '-c:a', 'aac',
+    '-b:a', '128k',
+    '-ar', '44100',
+    '-ac', '2',
+
+    // ✅ Mejora compatibilidad al subir/descargar
+    '-movflags', '+faststart',
+
     output
   ]);
 }
