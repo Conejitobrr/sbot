@@ -75,6 +75,7 @@ module.exports = {
 ━━━━━━━━━━━━━━━━━━━
 🎨 *MULTIMEDIA*
 ━━━━━━━━━━━━━━━━━━━
+➤ *${p}letra* → letra de canciones
 ➤ *${p}sticker* → Crear sticker
 ➤ *${p}toimage* → Sticker a imagen
 ➤ *${p}tovideo* → Sticker a video
