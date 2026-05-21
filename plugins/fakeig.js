@@ -308,38 +308,97 @@ Ejemplo:
       const lines = wrapText(comment, 34);
       const likes = randomLikes();
 
-      const lineHeight = 58;
-      const baseHeight = 245;
+      const lineHeight = 54;
+      const baseHeight = 270;
       const extraHeight = Math.max(0, lines.length - 1) * lineHeight;
       const height = baseHeight + extraHeight;
 
       const commentLines = lines.map((line, i) => {
-        return `<text x="170" y="${125 + i * lineHeight}" font-size="43" fill="#f1f1f1" font-family="Arial, sans-serif">${escapeXml(line)}</text>`;
+        return `
+  <text
+    x="172"
+    y="${132 + i * lineHeight}"
+    font-size="46"
+    fill="#f5f5f5"
+    font-family="Helvetica, Arial, sans-serif"
+    font-weight="400"
+  >${escapeXml(line)}</text>`;
       }).join('\n');
 
-      const timeX = Math.min(760, 185 + username.length * 25);
+      const timeX = Math.min(
+        820,
+        182 + (username.length * 27)
+      );
 
       const svg =
 `<svg width="1080" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1080" height="${height}" fill="#11181c"/>
+
+  <rect width="1080" height="${height}" fill="#0d1418"/>
 
   <defs>
     <clipPath id="avatarClip">
-      <circle cx="78" cy="78" r="62"/>
+      <circle cx="82" cy="82" r="64"/>
     </clipPath>
   </defs>
 
-  <image href="data:image/jpeg;base64,${avatarBase64}" x="16" y="16" width="124" height="124" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
+  <image
+    href="data:image/jpeg;base64,${avatarBase64}"
+    x="18"
+    y="22"
+    width="128"
+    height="128"
+    clip-path="url(#avatarClip)"
+    preserveAspectRatio="xMidYMid slice"
+  />
 
-  <text x="170" y="58" font-size="43" font-weight="700" fill="#f5f5f5" font-family="Arial, sans-serif">${escapeXml(username)}</text>
-  <text x="${timeX}" y="58" font-size="42" fill="#9da3a8" font-family="Arial, sans-serif">1 min</text>
+  <text
+    x="172"
+    y="64"
+    font-size="44"
+    font-family="Helvetica, Arial, sans-serif"
+    font-weight="700"
+    fill="#ffffff"
+  >${escapeXml(username)}</text>
+
+  <text
+    x="${timeX}"
+    y="64"
+    font-size="40"
+    font-family="Helvetica, Arial, sans-serif"
+    fill="#9aa0a6"
+  >1 min</text>
 
   ${commentLines}
 
-  <text x="170" y="${height - 35}" font-size="39" font-weight="700" fill="#aeb4b8" font-family="Arial, sans-serif">Responder</text>
+  <text
+    x="172"
+    y="${height - 38}"
+    font-size="38"
+    font-family="Helvetica, Arial, sans-serif"
+    font-weight="700"
+    fill="#9aa0a6"
+  >Responder</text>
 
-  <text x="980" y="105" font-size="70" fill="none" stroke="#d5d5d5" stroke-width="4" font-family="Arial, sans-serif">♡</text>
-  <text x="970" y="174" font-size="38" fill="#aeb4b8" font-family="Arial, sans-serif" text-anchor="middle">${escapeXml(likes)}</text>
+  <text
+    x="980"
+    y="118"
+    font-size="76"
+    fill="none"
+    stroke="#d7d7d7"
+    stroke-width="3"
+    text-anchor="middle"
+    font-family="Helvetica, Arial, sans-serif"
+  >♡</text>
+
+  <text
+    x="980"
+    y="196"
+    font-size="36"
+    fill="#9aa0a6"
+    text-anchor="middle"
+    font-family="Helvetica, Arial, sans-serif"
+  >${escapeXml(likes)}</text>
+
 </svg>`;
 
       fs.writeFileSync(svgPath, svg);
