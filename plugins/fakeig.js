@@ -3,14 +3,14 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { createCanvas, loadImage } = require('canvas');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 
+const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
 function ensureTemp() {
-  if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
-  }
+  if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
 function getMentioned(msg) {
@@ -25,13 +25,49 @@ function getText(msg) {
   );
 }
 
+function escapeXml(text = '') {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function wrapText(text = '', max = 38) {
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let line = '';
+
+  for (const word of words) {
+    if ((line + ' ' + word).trim().length > max) {
+      lines.push(line.trim());
+      line = word;
+    } else {
+      line += ' ' + word;
+    }
+  }
+
+  if (line.trim()) lines.push(line.trim());
+
+  return lines.slice(0, 4);
+}
+
+async function convertSvgToPng(svgPath, pngPath) {
+  try {
+    await execFileAsync('magick', [svgPath, pngPath]);
+  } catch {
+    await execFileAsync('convert', [svgPath, pngPath]);
+  }
+}
+
 module.exports = {
   commands: ['fakeig', 'igcoment'],
 
-  async execute({ sock, remoteJid, msg, sender }) {
+  async execute({ sock, remoteJid, msg }) {
+    let svgPath = null;
+    let pngPath = null;
 
     try {
-
       const mentioned = getMentioned(msg)[0];
 
       if (!mentioned) {
@@ -53,7 +89,7 @@ Ejemplo:
 
       if (!comment) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Escribe el comentario falso de Instagram.'
+          text: '❌ Escribe el comentario.'
         }, { quoted: msg });
       }
 
@@ -67,106 +103,70 @@ Ejemplo:
         pfp = 'https://i.imgur.com/JP3QZ7B.jpeg';
       }
 
+      const avatarRes = await axios.get(pfp, {
+        responseType: 'arraybuffer'
+      });
+
+      const avatarBase64 = Buffer.from(avatarRes.data).toString('base64');
+
       const username = mentioned
         .split('@')[0]
         .replace(/\D/g, '');
 
-      // 📥 DESCARGAR FOTO
-      const response = await axios.get(pfp, {
-        responseType: 'arraybuffer'
-      });
+      const lines = wrapText(comment);
 
-      const profileBuffer = Buffer.from(response.data);
+      const textLines = lines.map((line, i) => {
+        return `<text x="180" y="${130 + i * 42}" font-size="34" fill="#111">${escapeXml(line)}</text>`;
+      }).join('\n');
 
-      // 🎨 CANVAS
-      const canvas = createCanvas(1080, 260);
-      const ctx = canvas.getContext('2d');
+      const height = Math.max(260, 190 + lines.length * 42);
 
-      // Fondo IG
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const svg =
+`<svg width="1080" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1080" height="${height}" fill="#ffffff"/>
 
-      // Foto perfil
-      const avatar = await loadImage(profileBuffer);
+  <defs>
+    <clipPath id="avatarClip">
+      <circle cx="90" cy="90" r="55"/>
+    </clipPath>
+  </defs>
 
-      ctx.save();
+  <image href="data:image/jpeg;base64,${avatarBase64}" x="35" y="35" width="110" height="110" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
 
-      ctx.beginPath();
-      ctx.arc(90, 90, 55, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
+  <text x="180" y="75" font-size="38" font-weight="700" fill="#000">${escapeXml(username)}</text>
 
-      ctx.drawImage(avatar, 35, 35, 110, 110);
+  ${textLines}
 
-      ctx.restore();
+  <text x="180" y="${height - 40}" font-size="28" fill="#8e8e8e">Hace 1 min</text>
+</svg>`;
 
-      // Username
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 38px Sans';
+      const id = Date.now();
 
-      ctx.fillText(username, 180, 75);
+      svgPath = path.join(TEMP_DIR, `fakeig_${id}.svg`);
+      pngPath = path.join(TEMP_DIR, `fakeig_${id}.png`);
 
-      // Comentario
-      ctx.font = '34px Sans';
-      ctx.fillStyle = '#111111';
+      fs.writeFileSync(svgPath, svg);
 
-      const text = `${comment}`;
+      await convertSvgToPng(svgPath, pngPath);
 
-      wrapText(ctx, text, 180, 130, 820, 42);
-
-      // Detalles tipo IG
-      ctx.font = '28px Sans';
-      ctx.fillStyle = '#8e8e8e';
-
-      ctx.fillText('Hace 1 min', 180, 220);
-
-      const output = path.join(
-        TEMP_DIR,
-        `fakeig_${Date.now()}.png`
-      );
-
-      fs.writeFileSync(output, canvas.toBuffer());
-
-      // 📤 ENVIAR
       await sock.sendMessage(remoteJid, {
-        image: fs.readFileSync(output),
+        image: fs.readFileSync(pngPath),
         caption: '📸 Comentario falso de Instagram'
       }, { quoted: msg });
 
-      try {
-        fs.unlinkSync(output);
-      } catch {}
-
     } catch (err) {
-
       console.log('❌ Error fakeig:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error creando comentario falso.'
+        text: '❌ Error creando comentario falso. Verifica que tengas instalado imagemagick.'
       }, { quoted: msg });
+
+    } finally {
+      for (const file of [svgPath, pngPath]) {
+        try {
+          if (file && fs.existsSync(file)) fs.unlinkSync(file);
+        } catch {}
+      }
     }
   }
 };
-
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-
-  const words = text.split(' ');
-  let line = '';
-
-  for (let n = 0; n < words.length; n++) {
-
-    const testLine = line + words[n] + ' ';
-    const metrics = ctx.measureText(testLine);
-    const testWidth = metrics.width;
-
-    if (testWidth > maxWidth && n > 0) {
-      ctx.fillText(line, x, y);
-      line = words[n] + ' ';
-      y += lineHeight;
-    } else {
-      line = testLine;
-    }
-  }
-
-  ctx.fillText(line, x, y);
-}
