@@ -7,12 +7,69 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
+
 const TEMP_DIR = path.join(process.cwd(), 'temp');
+const NICKS_PATH = path.join(process.cwd(), 'lib', 'fakeig_nicks.json');
 
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
   }
+}
+
+function ensureNickDB() {
+  const dir = path.dirname(NICKS_PATH);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  if (!fs.existsSync(NICKS_PATH)) {
+    fs.writeFileSync(NICKS_PATH, JSON.stringify({}, null, 2));
+  }
+}
+
+function loadNicks() {
+  ensureNickDB();
+
+  try {
+    return JSON.parse(fs.readFileSync(NICKS_PATH, 'utf8') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveNicks(data) {
+  ensureNickDB();
+  fs.writeFileSync(NICKS_PATH, JSON.stringify(data, null, 2));
+}
+
+function cleanJid(jid = '') {
+  return String(jid).split(':')[0];
+}
+
+function cleanNick(name = '') {
+  return String(name || '')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24) || 'usuario';
+}
+
+function saveNick(jid, name) {
+  jid = cleanJid(jid);
+  name = cleanNick(name);
+
+  if (!jid || !name || name === 'usuario' || name === 'Sin nombre') return;
+
+  const data = loadNicks();
+
+  data[jid] = {
+    name,
+    updatedAt: Date.now()
+  };
+
+  saveNicks(data);
 }
 
 function getMentioned(msg) {
@@ -33,6 +90,14 @@ function escapeXml(text = '') {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function cleanComment(body = '') {
+  return String(body)
+    .replace(/^[\s./#!]*(fakeig|igcoment)\s*/i, '')
+    .replace(/@\S+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function wrapText(text = '', max = 34) {
@@ -78,32 +143,30 @@ async function convertSvgToPng(svgPath, pngPath) {
   }
 }
 
-function cleanNick(name = '') {
-  return String(name || '')
-    .replace(/\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 22) || 'usuario';
-}
-
 async function getNick(sock, store, groupMetadata, jid) {
+  jid = cleanJid(jid);
+
   try {
+    const saved = loadNicks();
+    if (saved[jid]?.name) return cleanNick(saved[jid].name);
+
     const contact =
       store?.contacts?.[jid] ||
       sock?.contacts?.[jid] ||
       {};
 
     const participant = groupMetadata?.participants?.find(p =>
-      p.id === jid ||
-      p.jid === jid ||
-      p.lid === jid ||
-      p.participant === jid
+      cleanJid(p.id) === jid ||
+      cleanJid(p.jid) === jid ||
+      cleanJid(p.lid) === jid ||
+      cleanJid(p.participant) === jid
     ) || {};
 
     return cleanNick(
       contact.name ||
       contact.notify ||
       contact.verifiedName ||
+      contact.pushName ||
       participant.name ||
       participant.notify ||
       participant.verifiedName ||
@@ -115,16 +178,27 @@ async function getNick(sock, store, groupMetadata, jid) {
   }
 }
 
-function cleanComment(body = '') {
-  return String(body)
-    .replace(/^[\s./#!]*(fakeig|igcoment)\s*/i, '')
-    .replace(/@\S+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 module.exports = {
   commands: ['fakeig', 'igcoment'],
+
+  async onMessage({ sender, pushName, store }) {
+    try {
+      if (sender && pushName) {
+        saveNick(sender, pushName);
+
+        if (store) {
+          if (!store.contacts) store.contacts = {};
+
+          store.contacts[sender] = {
+            ...(store.contacts[sender] || {}),
+            id: sender,
+            name: pushName,
+            notify: pushName
+          };
+        }
+      }
+    } catch {}
+  },
 
   async execute({ sock, remoteJid, msg, store, groupMetadata }) {
     let avatarPath = null;
@@ -132,7 +206,7 @@ module.exports = {
     let pngPath = null;
 
     try {
-      const mentioned = getMentioned(msg)[0];
+      const mentioned = cleanJid(getMentioned(msg)[0]);
 
       if (!mentioned) {
         return sock.sendMessage(remoteJid, {
