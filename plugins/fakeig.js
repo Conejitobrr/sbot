@@ -10,7 +10,9 @@ const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
 function ensureTemp() {
-  if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
 }
 
 function getMentioned(msg) {
@@ -33,23 +35,39 @@ function escapeXml(text = '') {
     .replace(/"/g, '&quot;');
 }
 
-function wrapText(text = '', max = 38) {
+function wrapText(text = '', max = 36) {
   const words = String(text).split(/\s+/);
   const lines = [];
   let line = '';
 
   for (const word of words) {
-    if ((line + ' ' + word).trim().length > max) {
+    const test = `${line} ${word}`.trim();
+
+    if (test.length > max && line) {
       lines.push(line.trim());
       line = word;
     } else {
-      line += ' ' + word;
+      line = test;
     }
   }
 
   if (line.trim()) lines.push(line.trim());
 
-  return lines.slice(0, 4);
+  return lines;
+}
+
+function randomLikes() {
+  const n = Math.random();
+
+  if (n < 0.45) {
+    return `${(Math.random() * 8.3 + 1.7).toFixed(1)}k`;
+  }
+
+  if (n < 0.85) {
+    return `${Math.floor(Math.random() * 900 + 100)}k`;
+  }
+
+  return `${(Math.random() * 4 + 1).toFixed(1)}M`;
 }
 
 async function convertSvgToPng(svgPath, pngPath) {
@@ -60,10 +78,30 @@ async function convertSvgToPng(svgPath, pngPath) {
   }
 }
 
+async function getNick(sock, store, jid) {
+  try {
+    const contact =
+      store?.contacts?.[jid] ||
+      sock?.contacts?.[jid] ||
+      {};
+
+    return (
+      contact.name ||
+      contact.notify ||
+      contact.verifiedName ||
+      contact.pushName ||
+      'usuario'
+    );
+  } catch {
+    return 'usuario';
+  }
+}
+
 module.exports = {
   commands: ['fakeig', 'igcoment'],
 
-  async execute({ sock, remoteJid, msg }) {
+  async execute({ sock, remoteJid, msg, store }) {
+    let avatarPath = null;
     let svgPath = null;
     let pngPath = null;
 
@@ -76,7 +114,7 @@ module.exports = {
 `❌ Menciona a alguien.
 
 Ejemplo:
-.fakeig @usuario qué hermosa foto 😻`
+.fakeig @usuario Que si te amo? A veces hasta lloro...`
         }, { quoted: msg });
       }
 
@@ -95,6 +133,12 @@ Ejemplo:
 
       ensureTemp();
 
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+
+      avatarPath = path.join(TEMP_DIR, `fakeig_avatar_${id}.jpg`);
+      svgPath = path.join(TEMP_DIR, `fakeig_${id}.svg`);
+      pngPath = path.join(TEMP_DIR, `fakeig_${id}.png`);
+
       let pfp;
 
       try {
@@ -107,43 +151,45 @@ Ejemplo:
         responseType: 'arraybuffer'
       });
 
-      const avatarBase64 = Buffer.from(avatarRes.data).toString('base64');
+      fs.writeFileSync(avatarPath, avatarRes.data);
 
-      const username = mentioned
-        .split('@')[0]
-        .replace(/\D/g, '');
+      const avatarBase64 = fs.readFileSync(avatarPath).toString('base64');
 
-      const lines = wrapText(comment);
+      const username = await getNick(sock, store, mentioned);
+      const lines = wrapText(comment, 34);
+      const likes = randomLikes();
 
-      const textLines = lines.map((line, i) => {
-        return `<text x="180" y="${130 + i * 42}" font-size="34" fill="#111">${escapeXml(line)}</text>`;
+      const lineHeight = 58;
+      const baseHeight = 245;
+      const extraHeight = Math.max(0, lines.length - 1) * lineHeight;
+      const height = baseHeight + extraHeight;
+
+      const commentLines = lines.map((line, i) => {
+        return `<text x="170" y="${125 + i * lineHeight}" font-size="43" fill="#f1f1f1" font-family="Arial, sans-serif">${escapeXml(line)}</text>`;
       }).join('\n');
-
-      const height = Math.max(260, 190 + lines.length * 42);
 
       const svg =
 `<svg width="1080" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1080" height="${height}" fill="#ffffff"/>
+  <rect width="1080" height="${height}" fill="#11181c"/>
 
   <defs>
     <clipPath id="avatarClip">
-      <circle cx="90" cy="90" r="55"/>
+      <circle cx="78" cy="78" r="62"/>
     </clipPath>
   </defs>
 
-  <image href="data:image/jpeg;base64,${avatarBase64}" x="35" y="35" width="110" height="110" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
+  <image href="data:image/jpeg;base64,${avatarBase64}" x="16" y="16" width="124" height="124" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
 
-  <text x="180" y="75" font-size="38" font-weight="700" fill="#000">${escapeXml(username)}</text>
+  <text x="170" y="58" font-size="43" font-weight="700" fill="#f5f5f5" font-family="Arial, sans-serif">${escapeXml(username)}</text>
+  <text x="${175 + username.length * 26}" y="58" font-size="42" fill="#9da3a8" font-family="Arial, sans-serif">4 d</text>
 
-  ${textLines}
+  ${commentLines}
 
-  <text x="180" y="${height - 40}" font-size="28" fill="#8e8e8e">Hace 1 min</text>
+  <text x="170" y="${height - 35}" font-size="39" font-weight="700" fill="#aeb4b8" font-family="Arial, sans-serif">Responder</text>
+
+  <text x="980" y="105" font-size="70" fill="none" stroke="#d5d5d5" stroke-width="4" font-family="Arial, sans-serif">♡</text>
+  <text x="970" y="174" font-size="38" fill="#aeb4b8" font-family="Arial, sans-serif" text-anchor="middle">${escapeXml(likes)}</text>
 </svg>`;
-
-      const id = Date.now();
-
-      svgPath = path.join(TEMP_DIR, `fakeig_${id}.svg`);
-      pngPath = path.join(TEMP_DIR, `fakeig_${id}.png`);
 
       fs.writeFileSync(svgPath, svg);
 
@@ -151,7 +197,7 @@ Ejemplo:
 
       await sock.sendMessage(remoteJid, {
         image: fs.readFileSync(pngPath),
-        caption: '📸 Comentario falso de Instagram'
+        caption: '📸 Comentario falso'
       }, { quoted: msg });
 
     } catch (err) {
@@ -162,7 +208,7 @@ Ejemplo:
       }, { quoted: msg });
 
     } finally {
-      for (const file of [svgPath, pngPath]) {
+      for (const file of [avatarPath, svgPath, pngPath]) {
         try {
           if (file && fs.existsSync(file)) fs.unlinkSync(file);
         } catch {}
