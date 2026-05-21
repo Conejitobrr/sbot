@@ -1,200 +1,167 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
 const { createCanvas, loadImage } = require('canvas');
 
-module.exports = {
-  commands: ['fakeig', 'igcomment'],
+const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-  async execute(ctx) {
-    const { sock, msg, remoteJid, args } = ctx;
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
+
+function getMentioned(msg) {
+  return msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+}
+
+function getText(msg) {
+  return (
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    ''
+  );
+}
+
+module.exports = {
+  commands: ['fakeig', 'igcoment'],
+
+  async execute({ sock, remoteJid, msg, sender }) {
 
     try {
-      const context = msg.message?.extendedTextMessage?.contextInfo;
-      const mentioned = context?.mentionedJid?.[0];
+
+      const mentioned = getMentioned(msg)[0];
 
       if (!mentioned) {
         return sock.sendMessage(remoteJid, {
           text:
-`📸 *Fake comentario de Instagram*
-
-Uso:
-.fakeig @persona texto del comentario
+`❌ Menciona a alguien.
 
 Ejemplo:
-.fakeig @persona Este bot está god 🔥`
+.fakeig @usuario qué hermosa foto 😻`
         }, { quoted: msg });
       }
 
-      // Texto comentario
-      let commentText = args.join(' ')
+      const body = getText(msg);
+
+      const comment = body
+        .replace(/^[./#!]?(fakeig|igcoment)\s*/i, '')
         .replace(/@\d+/g, '')
         .trim();
 
-      if (!commentText) {
-        commentText = 'Comentario de Instagram 🖤';
+      if (!comment) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Escribe el comentario falso de Instagram.'
+        }, { quoted: msg });
       }
 
-      // Obtener nombre/nick de WhatsApp
-      let username = mentioned.split('@')[0];
+      ensureTemp();
+
+      let pfp;
 
       try {
-        const contact =
-          sock.contacts?.[mentioned] ||
-          sock.store?.contacts?.[mentioned];
+        pfp = await sock.profilePictureUrl(mentioned, 'image');
+      } catch {
+        pfp = 'https://i.imgur.com/JP3QZ7B.jpeg';
+      }
 
-        username =
-          contact?.notify ||
-          contact?.name ||
-          contact?.verifiedName ||
-          username;
-      } catch {}
+      const username = mentioned
+        .split('@')[0]
+        .replace(/\D/g, '');
 
-      // Limpiar espacios
-      username = username.replace(/\s+/g, '_');
+      // 📥 DESCARGAR FOTO
+      const response = await axios.get(pfp, {
+        responseType: 'arraybuffer'
+      });
+
+      const profileBuffer = Buffer.from(response.data);
+
+      // 🎨 CANVAS
+      const canvas = createCanvas(1080, 260);
+      const ctx = canvas.getContext('2d');
+
+      // Fondo IG
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Foto perfil
-      let ppBuffer = null;
+      const avatar = await loadImage(profileBuffer);
 
-      try {
-        const ppUrl = await sock.profilePictureUrl(mentioned, 'image');
-        const res = await fetch(ppUrl);
-        ppBuffer = Buffer.from(await res.arrayBuffer());
-      } catch {}
+      ctx.save();
 
-      // Canvas
-      const width = 900;
-      const height = 360;
+      ctx.beginPath();
+      ctx.arc(90, 90, 55, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
 
-      const canvas = createCanvas(width, height);
-      const ctx2d = canvas.getContext('2d');
+      ctx.drawImage(avatar, 35, 35, 110, 110);
 
-      // Fondo
-      ctx2d.fillStyle = '#ffffff';
-      ctx2d.fillRect(0, 0, width, height);
+      ctx.restore();
 
-      // Header Instagram
-      ctx2d.fillStyle = '#111';
-      ctx2d.font = 'bold 32px Arial';
-      ctx2d.fillText('Comentarios', 40, 55);
+      // Username
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 38px Sans';
 
-      ctx2d.strokeStyle = '#e5e5e5';
-      ctx2d.lineWidth = 2;
-
-      ctx2d.beginPath();
-      ctx2d.moveTo(0, 80);
-      ctx2d.lineTo(width, 80);
-      ctx2d.stroke();
-
-      // Avatar
-      const avatarX = 45;
-      const avatarY = 115;
-      const avatarSize = 74;
-
-      ctx2d.save();
-
-      ctx2d.beginPath();
-      ctx2d.arc(
-        avatarX + avatarSize / 2,
-        avatarY + avatarSize / 2,
-        avatarSize / 2,
-        0,
-        Math.PI * 2
-      );
-
-      ctx2d.closePath();
-      ctx2d.clip();
-
-      if (ppBuffer) {
-        const img = await loadImage(ppBuffer);
-        ctx2d.drawImage(img, avatarX, avatarY, avatarSize, avatarSize);
-      } else {
-        ctx2d.fillStyle = '#ddd';
-        ctx2d.fillRect(avatarX, avatarY, avatarSize, avatarSize);
-
-        ctx2d.fillStyle = '#777';
-        ctx2d.font = 'bold 34px Arial';
-        ctx2d.textAlign = 'center';
-
-        ctx2d.fillText(
-          username.charAt(0).toUpperCase(),
-          avatarX + 37,
-          avatarY + 49
-        );
-
-        ctx2d.textAlign = 'left';
-      }
-
-      ctx2d.restore();
-
-      // Usuario IG
-      const textX = 140;
-      const textY = 135;
-
-      ctx2d.fillStyle = '#111';
-      ctx2d.font = 'bold 25px Arial';
-
-      ctx2d.fillText(username, textX, textY);
+      ctx.fillText(username, 180, 75);
 
       // Comentario
-      ctx2d.fillStyle = '#222';
-      ctx2d.font = '25px Arial';
+      ctx.font = '34px Sans';
+      ctx.fillStyle = '#111111';
 
-      wrapText(
-        ctx2d,
-        commentText,
-        textX,
-        textY + 38,
-        670,
-        34
+      const text = `${comment}`;
+
+      wrapText(ctx, text, 180, 130, 820, 42);
+
+      // Detalles tipo IG
+      ctx.font = '28px Sans';
+      ctx.fillStyle = '#8e8e8e';
+
+      ctx.fillText('Hace 1 min', 180, 220);
+
+      const output = path.join(
+        TEMP_DIR,
+        `fakeig_${Date.now()}.png`
       );
 
-      // Footer
-      ctx2d.fillStyle = '#8e8e8e';
-      ctx2d.font = '21px Arial';
+      fs.writeFileSync(output, canvas.toBuffer());
 
-      ctx2d.fillText(
-        '1 min   Me gusta   Responder',
-        textX,
-        280
-      );
-
-      // Corazón IG
-      ctx2d.fillStyle = '#999';
-      ctx2d.font = '32px Arial';
-      ctx2d.fillText('♡', 820, 155);
-
-      // Imagen final
-      const buffer = canvas.toBuffer('image/png');
-
+      // 📤 ENVIAR
       await sock.sendMessage(remoteJid, {
-        image: buffer,
-        caption:
-`📸 *Comentario fake de Instagram*
-👤 @${username}`,
-        mentions: [mentioned]
+        image: fs.readFileSync(output),
+        caption: '📸 Comentario falso de Instagram'
       }, { quoted: msg });
 
-    } catch (e) {
-      console.error('Error en fakeig:', e);
+      try {
+        fs.unlinkSync(output);
+      } catch {}
+
+    } catch (err) {
+
+      console.log('❌ Error fakeig:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error creando el comentario fake.'
+        text: '❌ Error creando comentario falso.'
       }, { quoted: msg });
     }
   }
 };
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+
   const words = text.split(' ');
   let line = '';
 
-  for (const word of words) {
-    const testLine = line + word + ' ';
-    const width = ctx.measureText(testLine).width;
+  for (let n = 0; n < words.length; n++) {
 
-    if (width > maxWidth && line.length > 0) {
+    const testLine = line + words[n] + ' ';
+    const metrics = ctx.measureText(testLine);
+    const testWidth = metrics.width;
+
+    if (testWidth > maxWidth && n > 0) {
       ctx.fillText(line, x, y);
-      line = word + ' ';
+      line = words[n] + ' ';
       y += lineHeight;
     } else {
       line = testLine;
