@@ -1,31 +1,45 @@
 'use strict';
 
+function getMentioned(msg) {
+  return msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+}
+
 module.exports = {
   commands: ['felizcumple'],
 
   async execute({ sock, remoteJid, sender, msg, args }) {
 
-    const nombre = args.join(' ').trim() || 'Mi amor 💖';
+    const mentioned = getMentioned(msg)[0];
+
+    if (!mentioned) {
+      return sock.sendMessage(remoteJid, {
+        text:
+`❌ Debes mencionar a tu novia.
+
+Ejemplo:
+.felizcumple @usuario`
+      }, { quoted: msg });
+    }
 
     let pfp;
 
     try {
-      pfp = await sock.profilePictureUrl(sender, 'image');
+      pfp = await sock.profilePictureUrl(mentioned, 'image');
     } catch {
       pfp = 'https://i.imgur.com/JP3QZ7B.jpeg';
     }
+
+    const tag = `@${mentioned.split('@')[0]}`;
 
     const texto =
 `🎂✨ *FELIZ CUMPLEAÑOS* ✨🎂
 
 🎉 Hoy cumple años la niña más hermosa 😻💖
 
-💌 *${nombre}*, espero que tengas un día increíble,
-lleno de amor, regalos, felicidad y muchísimas sonrisas ✨
+💌 Feliz cumpleaños ${tag}
 
-Gracias por existir,
-por hacerme feliz
-y por ser alguien tan especial 💕
+Espero que tengas un día increíble,
+lleno de amor, regalos y muchísima felicidad ✨
 
 💖 Que nunca te falten motivos para sonreír
 🌟 Que todos tus sueños se hagan realidad
@@ -37,7 +51,8 @@ Te mereces todo lo bonito del mundo 😻
 
     await sock.sendMessage(remoteJid, {
       image: { url: pfp },
-      caption: texto
+      caption: texto,
+      mentions: [mentioned]
     }, { quoted: msg });
   }
 };
