@@ -35,7 +35,7 @@ function escapeXml(text = '') {
     .replace(/"/g, '&quot;');
 }
 
-function wrapText(text = '', max = 36) {
+function wrapText(text = '', max = 34) {
   const words = String(text).split(/\s+/);
   const lines = [];
   let line = '';
@@ -78,18 +78,36 @@ async function convertSvgToPng(svgPath, pngPath) {
   }
 }
 
-async function getNick(sock, store, jid) {
+function cleanNick(name = '') {
+  return String(name || '')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 22) || 'usuario';
+}
+
+async function getNick(sock, store, groupMetadata, jid) {
   try {
     const contact =
       store?.contacts?.[jid] ||
       sock?.contacts?.[jid] ||
       {};
 
-    return (
+    const participant = groupMetadata?.participants?.find(p =>
+      p.id === jid ||
+      p.jid === jid ||
+      p.lid === jid ||
+      p.participant === jid
+    ) || {};
+
+    return cleanNick(
       contact.name ||
       contact.notify ||
       contact.verifiedName ||
-      contact.pushName ||
+      participant.name ||
+      participant.notify ||
+      participant.verifiedName ||
+      participant.pushName ||
       'usuario'
     );
   } catch {
@@ -97,10 +115,18 @@ async function getNick(sock, store, jid) {
   }
 }
 
+function cleanComment(body = '') {
+  return String(body)
+    .replace(/^[\s./#!]*(fakeig|igcoment)\s*/i, '')
+    .replace(/@\S+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 module.exports = {
   commands: ['fakeig', 'igcoment'],
 
-  async execute({ sock, remoteJid, msg, store }) {
+  async execute({ sock, remoteJid, msg, store, groupMetadata }) {
     let avatarPath = null;
     let svgPath = null;
     let pngPath = null;
@@ -119,11 +145,7 @@ Ejemplo:
       }
 
       const body = getText(msg);
-
-      const comment = body
-        .replace(/^[./#!]?(fakeig|igcoment)\s*/i, '')
-        .replace(/@\d+/g, '')
-        .trim();
+      const comment = cleanComment(body);
 
       if (!comment) {
         return sock.sendMessage(remoteJid, {
@@ -155,7 +177,7 @@ Ejemplo:
 
       const avatarBase64 = fs.readFileSync(avatarPath).toString('base64');
 
-      const username = await getNick(sock, store, mentioned);
+      const username = await getNick(sock, store, groupMetadata, mentioned);
       const lines = wrapText(comment, 34);
       const likes = randomLikes();
 
@@ -181,7 +203,7 @@ Ejemplo:
   <image href="data:image/jpeg;base64,${avatarBase64}" x="16" y="16" width="124" height="124" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
 
   <text x="170" y="58" font-size="43" font-weight="700" fill="#f5f5f5" font-family="Arial, sans-serif">${escapeXml(username)}</text>
-  <text x="${175 + username.length * 26}" y="58" font-size="42" fill="#9da3a8" font-family="Arial, sans-serif">4 d</text>
+  <text x="${185 + username.length * 25}" y="58" font-size="42" fill="#9da3a8" font-family="Arial, sans-serif">1 min</text>
 
   ${commentLines}
 
