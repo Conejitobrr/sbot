@@ -406,9 +406,8 @@ Ejemplo:
       await convertSvgToPng(svgPath, pngPath);
 
       await sock.sendMessage(remoteJid, {
-        image: fs.readFileSync(pngPath),
-        caption: '📸 Comentario falso'
-      }, { quoted: msg });
+        image: fs.readFileSync(pngPath)
+      });
 
     } catch (err) {
       console.log('❌ Error fakeig:', err?.message || err);
