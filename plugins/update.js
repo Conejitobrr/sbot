@@ -6,23 +6,25 @@ module.exports = {
   commands: ['update'],
 
   async execute(ctx) {
-    const { sock, remoteJid, msg } = ctx;
+    const { sock, remoteJid, msg, isOwner } = ctx;
+
+    if (!isOwner) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Solo el owner puede usar este comando.'
+      }, { quoted: msg });
+    }
 
     try {
       await sock.sendMessage(remoteJid, {
         text: '🔄 Actualizando bot desde GitHub...'
       }, { quoted: msg });
 
-      // 🔥 Obtener commit actual ANTES del update
       const oldCommit = execSync('git rev-parse HEAD').toString().trim();
 
-      // 🔥 Hacer update
       execSync('git pull', { stdio: 'pipe' });
 
-      // 🔥 Obtener commit nuevo
       const newCommit = execSync('git rev-parse HEAD').toString().trim();
 
-      // 🔥 Ver archivos modificados
       let changes = [];
       if (oldCommit !== newCommit) {
         const diff = execSync(`git diff --name-only ${oldCommit} ${newCommit}`)
@@ -34,27 +36,22 @@ module.exports = {
         }
       }
 
-      // 🔥 Instalar dependencias si hay package.json
       try {
         execSync('npm install', { stdio: 'pipe' });
       } catch {}
 
-      // 🔥 Recargar plugins
       if (global.loadPlugins) {
         global.loadPlugins();
       }
 
-      // 🔥 Separar cambios
       const mediaFiles = changes.filter(f => f.startsWith('media/'));
       const pluginFiles = changes.filter(f => f.startsWith('plugins/'));
 
-      // 🔥 Formatear texto
       let report = '✅ *Bot actualizado correctamente*\n\n';
 
       if (changes.length === 0) {
         report += '📌 No hubo cambios nuevos';
       } else {
-
         if (mediaFiles.length) {
           report += '🎵 *Archivos multimedia agregados/actualizados:*\n';
           mediaFiles.forEach(f => {
@@ -71,8 +68,7 @@ module.exports = {
           report += '\n';
         }
 
-        // 🔥 Otros archivos
-        const others = changes.filter(f => 
+        const others = changes.filter(f =>
           !f.startsWith('media/') && !f.startsWith('plugins/')
         );
 
