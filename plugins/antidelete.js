@@ -1,12 +1,3 @@
-Reemplaza tu plugins/antidelete.js por este. Solo cambié lo necesario para que:
-
-En grupos siga funcionando igual con .antidelete on/off.
-
-En privado esté siempre activo.
-
-En privado también guarde mensajes para poder detectar eliminados.
-
-
 'use strict';
 
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
