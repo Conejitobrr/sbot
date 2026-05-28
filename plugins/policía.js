@@ -17,6 +17,20 @@ const DEFAULT_PROFILE = path.join(process.cwd(), 'assets', 'Sinperfil.jpg');
 const JAIL_TIME = 10 * 60 * 1000;
 const ROB_TIME = 5 * 60 * 1000;
 
+// 💰 FIANZA
+const BASE_FIANZA = 1000;
+const EXTRA_FIANZA_POR_FAMA = 100;
+const MAX_FIANZA = 50000;
+
+// 💸 SOBORNO
+const BASE_SOBORNO = 500;
+const EXTRA_SOBORNO_POR_FAMA = 50;
+const MAX_SOBORNO = 25000;
+
+// 📉 FAMA BAJA SI DEJA DE ROBAR
+const DECAY_INTERVAL = 12 * 60 * 60 * 1000;
+const DECAY_AMOUNT = 5;
+
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -48,18 +62,41 @@ function ensureFile(file, def) {
 }
 
 function loadJail() {
-  ensureFile(JAIL_PATH, { jailed: {}, fame: {} });
+  ensureFile(JAIL_PATH, {
+    jailed: {},
+    fame: {},
+    lastCrimeAt: {}
+  });
 
   try {
-    return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{}');
+    const data = JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{}');
+
+    return {
+      jailed: data.jailed || {},
+      fame: data.fame || {},
+      lastCrimeAt: data.lastCrimeAt || {}
+    };
   } catch {
-    return { jailed: {}, fame: {} };
+    return {
+      jailed: {},
+      fame: {},
+      lastCrimeAt: {}
+    };
   }
 }
 
 function saveJail(data) {
-  ensureFile(JAIL_PATH, { jailed: {}, fame: {} });
-  fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2));
+  ensureFile(JAIL_PATH, {
+    jailed: {},
+    fame: {},
+    lastCrimeAt: {}
+  });
+
+  fs.writeFileSync(JAIL_PATH, JSON.stringify({
+    jailed: data.jailed || {},
+    fame: data.fame || {},
+    lastCrimeAt: data.lastCrimeAt || {}
+  }, null, 2));
 }
 
 function loadRobos() {
@@ -135,6 +172,65 @@ function tag(jid, store, groupMetadata) {
   return `@${number(jid)}`;
 }
 
+function applyFameDecay(jailDB, jid) {
+  const user = cleanJid(jid);
+
+  jailDB.fame = jailDB.fame || {};
+  jailDB.lastCrimeAt = jailDB.lastCrimeAt || {};
+
+  let fame = Number(jailDB.fame[user] || 0);
+
+  if (fame <= 0) {
+    jailDB.fame[user] = 0;
+    jailDB.lastCrimeAt[user] = Date.now();
+    return 0;
+  }
+
+  const lastCrime = Number(jailDB.lastCrimeAt[user] || 0);
+
+  if (!lastCrime) {
+    jailDB.lastCrimeAt[user] = Date.now();
+    return fame;
+  }
+
+  const passed = Date.now() - lastCrime;
+  const steps = Math.floor(passed / DECAY_INTERVAL);
+
+  if (steps > 0) {
+    fame = Math.max(0, fame - (steps * DECAY_AMOUNT));
+    jailDB.fame[user] = fame;
+    jailDB.lastCrimeAt[user] = Date.now();
+  }
+
+  return fame;
+}
+
+function addFame(jailDB, jid, amount) {
+  const user = cleanJid(jid);
+
+  jailDB.fame = jailDB.fame || {};
+  jailDB.lastCrimeAt = jailDB.lastCrimeAt || {};
+
+  jailDB.fame[user] = Math.max(0, Number(jailDB.fame[user] || 0) + Number(amount || 0));
+  jailDB.lastCrimeAt[user] = Date.now();
+
+  return jailDB.fame[user];
+}
+
+function getFianzaCost(fame = 0) {
+  return Math.min(
+    MAX_FIANZA,
+    BASE_FIANZA + (Number(fame || 0) * EXTRA_FIANZA_POR_FAMA)
+  );
+}
+
+function getSobornoCost(fame = 0) {
+  return Math.min(
+    MAX_SOBORNO,
+    BASE_SOBORNO + (Number(fame || 0) * EXTRA_SOBORNO_POR_FAMA)
+  );
+}
+
 async function downloadProfile(sock, jid, output) {
   try {
     const url = await sock.profilePictureUrl(jid, 'image');
@@ -162,11 +258,9 @@ async function makeArrestTile(input, output, title = 'ARRESTADO') {
     '-gravity', 'center',
     '-extent', '720x720',
 
-    // Oscurecer foto
     '-fill', 'rgba(0,0,0,0.28)',
     '-draw', 'rectangle 0,0 720,720',
 
-    // Rejas verticales con efecto metálico
     '-fill', 'rgba(18,18,18,0.92)',
     '-draw', 'rectangle 72,0 108,720',
     '-draw', 'rectangle 218,0 254,720',
@@ -174,7 +268,6 @@ async function makeArrestTile(input, output, title = 'ARRESTADO') {
     '-draw', 'rectangle 510,0 546,720',
     '-draw', 'rectangle 656,0 692,720',
 
-    // Brillo izquierdo de cada barra
     '-fill', 'rgba(255,255,255,0.32)',
     '-draw', 'rectangle 78,0 86,720',
     '-draw', 'rectangle 224,0 232,720',
@@ -182,7 +275,6 @@ async function makeArrestTile(input, output, title = 'ARRESTADO') {
     '-draw', 'rectangle 516,0 524,720',
     '-draw', 'rectangle 662,0 670,720',
 
-    // Sombra derecha de cada barra
     '-fill', 'rgba(0,0,0,0.55)',
     '-draw', 'rectangle 98,0 108,720',
     '-draw', 'rectangle 244,0 254,720',
@@ -190,25 +282,21 @@ async function makeArrestTile(input, output, title = 'ARRESTADO') {
     '-draw', 'rectangle 536,0 546,720',
     '-draw', 'rectangle 682,0 692,720',
 
-    // Rejas horizontales con efecto metálico
     '-fill', 'rgba(18,18,18,0.92)',
     '-draw', 'rectangle 0,138 720,170',
     '-draw', 'rectangle 0,350 720,382',
     '-draw', 'rectangle 0,562 720,594',
 
-    // Brillo superior horizontal
     '-fill', 'rgba(255,255,255,0.28)',
     '-draw', 'rectangle 0,142 720,149',
     '-draw', 'rectangle 0,354 720,361',
     '-draw', 'rectangle 0,566 720,573',
 
-    // Sombra inferior horizontal
     '-fill', 'rgba(0,0,0,0.55)',
     '-draw', 'rectangle 0,162 720,170',
     '-draw', 'rectangle 0,374 720,382',
     '-draw', 'rectangle 0,586 720,594',
 
-    // Sombras en cruces de rejas
     '-fill', 'rgba(0,0,0,0.35)',
     '-draw', 'circle 90,154 118,154',
     '-draw', 'circle 236,154 264,154',
@@ -228,17 +316,14 @@ async function makeArrestTile(input, output, title = 'ARRESTADO') {
     '-draw', 'circle 528,578 556,578',
     '-draw', 'circle 674,578 702,578',
 
-    // Cinta roja
     '-fill', 'rgba(185,0,0,0.86)',
     '-draw', 'rectangle 0,292 720,420',
 
-    // Bordes de cinta
     '-fill', 'rgba(255,255,255,0.18)',
     '-draw', 'rectangle 0,292 720,302',
     '-fill', 'rgba(0,0,0,0.30)',
     '-draw', 'rectangle 0,410 720,420',
 
-    // Texto ARRESTADO
     '-fill', '#ffffff',
     '-stroke', '#000000',
     '-strokewidth', '4',
@@ -296,9 +381,9 @@ async function makeArrestCollage(sock, captured, output) {
 }
 
 module.exports = {
-  commands: ['policia', 'policía', 'denunciar', 'carcel', 'fama', 'sobornar'],
+  commands: ['policia', 'policía', 'denunciar', 'carcel', 'fama', 'sobornar', 'fianza'],
 
-  async execute({ sock, remoteJid, msg, sender, command, store, groupMetadata }) {
+  async execute({ sock, remoteJid, msg, sender, command, args, store, groupMetadata, db }) {
     let collagePath = null;
 
     try {
@@ -308,6 +393,9 @@ module.exports = {
       const jailDB = loadJail();
       jailDB.jailed = jailDB.jailed || {};
       jailDB.fame = jailDB.fame || {};
+      jailDB.lastCrimeAt = jailDB.lastCrimeAt || {};
+
+      applyFameDecay(jailDB, me);
 
       if (command === 'carcel') {
         const jail = jailDB.jailed[me];
@@ -321,17 +409,21 @@ module.exports = {
           }, { quoted: msg });
         }
 
+        saveJail(jailDB);
+
         return sock.sendMessage(remoteJid, {
           text:
 `⛓️ *ESTÁS ARRESTADO*
 
 ⏳ Tiempo restante: *${msToTime(jail.until - now)}*
-💸 Usa *.sobornar* para intentar salir antes.`
+💸 Usa *.sobornar* para intentar salir antes.
+💰 Usa *.fianza* para pagar salida segura.`
         }, { quoted: msg });
       }
 
       if (command === 'fama') {
         const fame = jailDB.fame[me] || 0;
+        saveJail(jailDB);
 
         return sock.sendMessage(remoteJid, {
           text:
@@ -339,7 +431,88 @@ module.exports = {
 
 👤 ${tag(me, store, groupMetadata)}
 🔥 Nivel criminal: *${fame}*
-🚨 Riesgo policial: *${Math.min(90, 10 + fame)}%*`,
+🚨 Riesgo policial: *${Math.min(90, 10 + fame)}%*
+
+📉 Si dejas de robar seguido, tu fama bajará poco a poco.`,
+          mentions: [me]
+        }, { quoted: msg });
+      }
+
+      if (command === 'fianza') {
+        const jail = jailDB.jailed[me];
+
+        if (!jail || jail.until <= now) {
+          if (jail) {
+            delete jailDB.jailed[me];
+            saveJail(jailDB);
+          }
+
+          return sock.sendMessage(remoteJid, {
+            text: '✅ No estás arrestado. No necesitas pagar fianza.'
+          }, { quoted: msg });
+        }
+
+        const fame = jailDB.fame[me] || 0;
+        const cost = getFianzaCost(fame);
+        const userData = await db.getUser(me);
+        const xp = Number(userData.xp || 0);
+        const option = (args?.[0] || '').toLowerCase();
+
+        if (!['pagar', 'pay', 'si', 'sí', 'confirmar'].includes(option)) {
+          saveJail(jailDB);
+
+          return sock.sendMessage(remoteJid, {
+            text:
+`💰 *FIANZA DISPONIBLE*
+
+👤 Usuario: ${tag(me, store, groupMetadata)}
+⛓️ Tiempo restante: *${msToTime(jail.until - now)}*
+
+☠️ Fama criminal: *${fame}*
+💸 Costo de fianza: *${cost} XP*
+⭐ Tu XP actual: *${xp} XP*
+
+📌 La fianza es salida segura.
+📌 Mientras más fama criminal tengas, más cara será.
+📉 Si dejas de robar seguido, tu fama baja poco a poco.
+
+Para pagar:
+*.fianza pagar*`,
+            mentions: [me]
+          }, { quoted: msg });
+        }
+
+        if (xp < cost) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`❌ No tienes suficiente XP para pagar la fianza.
+
+💸 Fianza: *${cost} XP*
+⭐ Tu XP actual: *${xp} XP*
+📌 Te faltan: *${cost - xp} XP*
+
+Usa más el bot, reclama XP o participa en eventos para juntar más.`
+          }, { quoted: msg });
+        }
+
+        await db.removeXP(me, cost);
+
+        delete jailDB.jailed[me];
+        jailDB.fame[me] = Math.max(0, Number(jailDB.fame[me] || 0) - 3);
+        jailDB.lastCrimeAt[me] = Date.now();
+
+        saveJail(jailDB);
+
+        return sock.sendMessage(remoteJid, {
+          text:
+`💰 *FIANZA PAGADA*
+
+👤 ${tag(me, store, groupMetadata)} pagó *${cost} XP*.
+
+✅ Saliste de prisión.
+☠️ Tu fama criminal bajó un poco.
+
+Ya puedes usar comandos nuevamente.`,
           mentions: [me]
         }, { quoted: msg });
       }
@@ -356,32 +529,64 @@ module.exports = {
           }, { quoted: msg });
         }
 
+        const fame = jailDB.fame[me] || 0;
+        const cost = getSobornoCost(fame);
+        const userData = await db.getUser(me);
+        const xp = Number(userData.xp || 0);
+
+        if (xp < cost) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`❌ No tienes suficiente XP para intentar sobornar.
+
+💸 Soborno: *${cost} XP*
+⭐ Tu XP actual: *${xp} XP*
+📌 Te faltan: *${cost - xp} XP*
+
+Puedes intentar:
+*.fianza*
+
+O comprar una llave:
+*.comprar llave*`
+          }, { quoted: msg });
+        }
+
+        await db.removeXP(me, cost);
+
         const success = Math.random() < 0.45;
 
         if (success) {
           delete jailDB.jailed[me];
           jailDB.fame[me] = Math.max(0, (jailDB.fame[me] || 0) - 5);
+          jailDB.lastCrimeAt[me] = Date.now();
+
           saveJail(jailDB);
 
           return sock.sendMessage(remoteJid, {
             text:
 `💸 *SOBORNO EXITOSO*
 
+Pagaste *${cost} XP*.
+
 🚓 La policía aceptó el dinero.
-✅ Quedaste libre antes de tiempo.`
+✅ Quedaste libre antes de tiempo.
+☠️ Tu fama criminal bajó un poco.`
           }, { quoted: msg });
         }
 
         jail.until += 2 * 60 * 1000;
-        jailDB.fame[me] = (jailDB.fame[me] || 0) + 3;
+        addFame(jailDB, me, 3);
+
         saveJail(jailDB);
 
         return sock.sendMessage(remoteJid, {
           text:
 `❌ *SOBORNO FALLIDO*
 
-👮 El policía rechazó el dinero.
+Pagaste *${cost} XP*, pero el policía rechazó el trato.
+
 ⛓️ Tu condena aumentó *2 minutos*.
+☠️ Tu fama criminal aumentó.
 
 ⏳ Tiempo restante: *${msToTime(jail.until - now)}*`
         }, { quoted: msg });
@@ -447,6 +652,8 @@ ${escapedMentions.map(j => `➤ ${tag(j, store, groupMetadata)}`).join('\n')}`,
       for (const robbery of suspects) {
         const thief = cleanJid(robbery.thief);
 
+        applyFameDecay(jailDB, thief);
+
         const fame = jailDB.fame[thief] || 0;
         const captureChance = Math.min(0.85, 0.55 + fame / 200);
 
@@ -460,11 +667,11 @@ ${escapedMentions.map(j => `➤ ${tag(j, store, groupMetadata)}`).join('\n')}`,
             at: now
           };
 
-          jailDB.fame[thief] = (jailDB.fame[thief] || 0) + 10;
+          addFame(jailDB, thief, 10);
           robbery.caught = true;
         } else {
           escaped.push(robbery);
-          jailDB.fame[thief] = (jailDB.fame[thief] || 0) + 5;
+          addFame(jailDB, thief, 5);
         }
       }
 
@@ -493,7 +700,8 @@ ${escapedMentions.map(j => `➤ ${tag(j, store, groupMetadata)}`).join('\n')}`,
         }
 
         text += `\n📌 Condena: *10 minutos en prisión*\n`;
-        text += `💸 Pueden usar *.sobornar* para intentar salir.\n\n`;
+        text += `💸 Pueden usar *.sobornar* para intentar salir.\n`;
+        text += `💰 Pueden usar *.fianza* para salida segura.\n\n`;
       }
 
       if (escaped.length) {
