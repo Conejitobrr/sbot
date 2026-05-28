@@ -408,18 +408,17 @@ async function messageHandler(sock, msg, store = {}) {
     // ⛓️ BLOQUEAR COMANDOS SI ESTÁ ARRESTADO
     const jail = checkJail(sender);
 
-    if (jail && command !== 'sobornar') {
-      return sock.sendMessage(remoteJid, {
-        text:
+    if (jail && !isOwner && command !== 'sobornar') {
+  return sock.sendMessage(remoteJid, {
+    text:
 `⛓️ *ESTÁS ARRESTADO*
 
 No puedes usar comandos del bot por ahora.
 
 ⏳ Tiempo restante: *${msToTime(jail.until - Date.now())}*
 💸 Usa *.sobornar* para intentar salir antes.`
-      }, { quoted: msg });
+  }, { quoted: msg });
     }
-
     if (!isOwner) {
       if (fromGroup) {
         const groupData = await db.getGroup(remoteJid);
