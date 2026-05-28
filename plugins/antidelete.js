@@ -1,3 +1,12 @@
+Reemplaza tu plugins/antidelete.js por este. Solo cambié lo necesario para que:
+
+En grupos siga funcionando igual con .antidelete on/off.
+
+En privado esté siempre activo.
+
+En privado también guarde mensajes para poder detectar eliminados.
+
+
 'use strict';
 
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
@@ -138,7 +147,6 @@ function saveMessage(msg, remoteJid, sender, pushName) {
   const id = msg.key?.id;
 
   if (!id || !msg.message) return;
-
   if (isDeleteMessage(msg)) return;
 
   const message = unwrapMessage(msg.message);
@@ -173,14 +181,14 @@ function cleanOldCache() {
 
 async function isEnabled(db, remoteJid, fromGroup) {
   try {
-    if (fromGroup) {
-      const value = await db.getGroupSetting(remoteJid, 'antidelete');
-      return value === true;
-    }
+    // ✅ En privado siempre activo
+    if (!fromGroup) return true;
 
-    return false;
+    // ✅ En grupos depende de configuración
+    const value = await db.getGroupSetting(remoteJid, 'antidelete');
+    return value === true;
   } catch {
-    return false;
+    return !fromGroup;
   }
 }
 
@@ -199,10 +207,9 @@ module.exports = {
     } = ctx;
 
     try {
-      if (!fromGroup) return;
-
       cleanOldCache();
 
+      // ✅ Ahora guarda mensajes tanto en grupos como en privado
       if (!isDeleteMessage(msg)) {
         saveMessage(msg, remoteJid, sender, pushName);
         return;
@@ -329,9 +336,10 @@ ${text}`,
     } = ctx;
 
     try {
+      // ✅ En privado siempre activo
       if (!fromGroup) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Este comando solo funciona en grupos.'
+          text: '✅ En chats privados, *antidelete* siempre está activo.'
         }, { quoted: msg });
       }
 
