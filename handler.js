@@ -419,7 +419,7 @@ async function messageHandler(sock, msg, store = {}) {
     // ⛓️ BLOQUEAR COMANDOS SI ESTÁ ARRESTADO
     const jail = checkJail(sender);
 
-    if (jail && !isOwner && !['sobornar', 'usar', 'llave', 'inventario'].includes(command)) {
+    if (jail && !isOwner && !['sobornar', 'fianza', 'usar', 'llave', 'inventario'].includes(command)) {
       return sock.sendMessage(remoteJid, {
         text:
 `⛓️ *ESTÁS ARRESTADO*
