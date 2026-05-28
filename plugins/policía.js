@@ -2,169 +2,92 @@
 
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 
-const execFileAsync = promisify(execFile);
-
-const TEMP_DIR = path.join(process.cwd(), 'temp');
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
-const DEFAULT_PROFILE = path.join(process.cwd(), 'assets', 'Sinperfil.jpg');
+const ROBOS_PATH = path.join(process.cwd(), 'lib', 'robos_recientes.json');
 
 const JAIL_TIME = 10 * 60 * 1000;
-
-function ensureTemp() {
-  if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
-  }
-}
-
-function ensureDB() {
-  const dir = path.dirname(JAIL_PATH);
-
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  if (!fs.existsSync(JAIL_PATH)) {
-    fs.writeFileSync(JAIL_PATH, JSON.stringify({
-      jailed: {},
-      fame: {}
-    }, null, 2));
-  }
-}
-
-function loadDB() {
-  ensureDB();
-
-  try {
-    return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{}');
-  } catch {
-    return {
-      jailed: {},
-      fame: {}
-    };
-  }
-}
-
-function saveDB(data) {
-  ensureDB();
-  fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2));
-}
+const ROB_TIME = 5 * 60 * 1000;
 
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
 }
 
 function number(jid = '') {
-  return cleanJid(jid)
-    .split('@')[0]
-    .replace(/\D/g, '');
+  return cleanJid(jid).split('@')[0].replace(/\D/g, '');
 }
 
 function getMentioned(msg) {
   return msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
 }
 
-function msToTime(ms = 0) {
-  const total = Math.max(0, Math.floor(ms / 1000));
+function ensureFile(file, def) {
+  const dir = path.dirname(file);
 
-  const m = Math.floor(total / 60);
-  const s = total % 60;
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 
-  return `${m} min ${s} seg`;
-}
-
-async function downloadProfile(sock, jid, output) {
-  try {
-    const url = await sock.profilePictureUrl(jid, 'image');
-
-    const res = await axios.get(url, {
-      responseType: 'arraybuffer'
-    });
-
-    fs.writeFileSync(output, res.data);
-
-  } catch {
-
-    if (fs.existsSync(DEFAULT_PROFILE)) {
-      fs.copyFileSync(DEFAULT_PROFILE, output);
-    } else {
-      throw new Error('Falta assets/Sinperfil.jpg');
-    }
+  if (!fs.existsSync(file)) {
+    fs.writeFileSync(file, JSON.stringify(def, null, 2));
   }
 }
 
-async function makeArrestImage(input, output, username) {
+function loadJail() {
+  ensureFile(JAIL_PATH, { jailed: {}, fame: {} });
 
-  await execFileAsync('convert', [
-    input,
+  try {
+    return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{}');
+  } catch {
+    return { jailed: {}, fame: {} };
+  }
+}
 
-    '-resize', '720x720^',
-    '-gravity', 'center',
-    '-extent', '720x720',
+function saveJail(data) {
+  ensureFile(JAIL_PATH, { jailed: {}, fame: {} });
+  fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2));
+}
 
-    '-fill', 'rgba(0,0,0,0.45)',
-    '-draw', 'rectangle 0,0 720,720',
+function loadRobos() {
+  ensureFile(ROBOS_PATH, {});
 
-    '-fill', '#ff2d2d',
-    '-stroke', '#ffffff',
-    '-strokewidth', '3',
+  try {
+    return JSON.parse(fs.readFileSync(ROBOS_PATH, 'utf8') || '{}');
+  } catch {
+    return {};
+  }
+}
 
-    '-gravity', 'center',
+function saveRobos(data) {
+  ensureFile(ROBOS_PATH, {});
+  fs.writeFileSync(ROBOS_PATH, JSON.stringify(data, null, 2));
+}
 
-    '-font', 'DejaVu-Sans-Bold',
-    '-pointsize', '82',
-
-    '-annotate', '-20', 'ARRESTADO',
-
-    '-fill', '#ffffff',
-    '-stroke', 'none',
-
-    '-gravity', 'south',
-
-    '-pointsize', '34',
-
-    '-annotate', '+0+40', username,
-
-    output
-  ]);
+function msToTime(ms = 0) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m} min ${s} seg`;
 }
 
 module.exports = {
-  commands: ['policia', 'denunciar', 'carcel', 'fama'],
+  commands: ['policia', 'denunciar', 'carcel', 'fama', 'sobornar'],
 
-  async execute({
-    sock,
-    remoteJid,
-    msg,
-    sender,
-    pushName,
-    command
-  }) {
-
-    let profile = null;
-    let image = null;
-
+  async execute({ sock, remoteJid, msg, sender, command }) {
     try {
-
-      const db = loadDB();
-
-      db.jailed = db.jailed || {};
-      db.fame = db.fame || {};
-
       const now = Date.now();
+      const me = cleanJid(sender);
+
+      const jailDB = loadJail();
+      jailDB.jailed = jailDB.jailed || {};
+      jailDB.fame = jailDB.fame || {};
 
       if (command === 'carcel') {
-
-        const jail = db.jailed[cleanJid(sender)];
+        const jail = jailDB.jailed[me];
 
         if (!jail || jail.until <= now) {
-
-          delete db.jailed[cleanJid(sender)];
-
-          saveDB(db);
+          delete jailDB.jailed[me];
+          saveJail(jailDB);
 
           return sock.sendMessage(remoteJid, {
             text: '✅ No estás arrestado.'
@@ -175,125 +98,200 @@ module.exports = {
           text:
 `⛓️ *ESTÁS ARRESTADO*
 
-⏳ Tiempo restante:
-*${msToTime(jail.until - now)}*
-
-💸 Usa *.sobornar* para intentar salir.`
+⏳ Tiempo restante: *${msToTime(jail.until - now)}*
+💸 Usa *.sobornar* para intentar salir antes.`
         }, { quoted: msg });
       }
 
       if (command === 'fama') {
-
-        const fame = db.fame[cleanJid(sender)] || 0;
+        const fame = jailDB.fame[me] || 0;
 
         return sock.sendMessage(remoteJid, {
           text:
 `☠️ *FAMA CRIMINAL*
 
-👤 @${number(sender)}
+👤 @${number(me)}
 🔥 Nivel criminal: *${fame}*
-🚨 Riesgo policial: *${Math.min(90, fame + 10)}%*`,
-          mentions: [sender]
+🚨 Riesgo policial: *${Math.min(90, 10 + fame)}%*`,
+          mentions: [me]
         }, { quoted: msg });
       }
 
-      const target = cleanJid(getMentioned(msg)[0]);
+      if (command === 'sobornar') {
+        const jail = jailDB.jailed[me];
 
-      if (!target) {
+        if (!jail || jail.until <= now) {
+          delete jailDB.jailed[me];
+          saveJail(jailDB);
+
+          return sock.sendMessage(remoteJid, {
+            text: '✅ No estás arrestado.'
+          }, { quoted: msg });
+        }
+
+        const success = Math.random() < 0.45;
+
+        if (success) {
+          delete jailDB.jailed[me];
+          jailDB.fame[me] = Math.max(0, (jailDB.fame[me] || 0) - 5);
+          saveJail(jailDB);
+
+          return sock.sendMessage(remoteJid, {
+            text:
+`💸 *SOBORNO EXITOSO*
+
+🚓 La policía aceptó el dinero.
+✅ Quedaste libre antes de tiempo.`
+          }, { quoted: msg });
+        }
+
+        jail.until += 2 * 60 * 1000;
+        jailDB.fame[me] = (jailDB.fame[me] || 0) + 3;
+        saveJail(jailDB);
+
         return sock.sendMessage(remoteJid, {
           text:
-`❌ Menciona al sospechoso.
+`❌ *SOBORNO FALLIDO*
 
-Ejemplo:
-.policia @usuario`
+👮 El policía rechazó el dinero.
+⛓️ Tu condena aumentó *2 minutos*.
+
+⏳ Tiempo restante: *${msToTime(jail.until - now)}*`
         }, { quoted: msg });
       }
 
-      if (target === cleanJid(sender)) {
-        return sock.sendMessage(remoteJid, {
-          text: '😹 No puedes denunciarte a ti mismo.'
-        }, { quoted: msg });
-      }
+      const robosDB = loadRobos();
+      const robos = robosDB[remoteJid] || [];
+      const mentioned = cleanJid(getMentioned(msg)[0]);
 
-      const escaped = Math.random() < 0.35;
-
-      if (escaped) {
-
-        db.fame[target] = (db.fame[target] || 0) + 5;
-
-        saveDB(db);
-
-        return sock.sendMessage(remoteJid, {
-          text:
-`🚓 *LA POLICÍA LLEGÓ TARDE*
-
-@${number(target)} escapó del país 😹
-
-☠️ Fama criminal: *${db.fame[target]}*`,
-          mentions: [target]
-        }, { quoted: msg });
-      }
-
-      ensureTemp();
-
-      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-
-      profile = path.join(TEMP_DIR, `arrest_${id}.jpg`);
-      image = path.join(TEMP_DIR, `arrest_final_${id}.jpg`);
-
-      await downloadProfile(sock, target, profile);
-
-      await makeArrestImage(
-        profile,
-        image,
-        number(target)
+      let suspects = robos.filter(r =>
+        !r.caught &&
+        now - Number(r.time || 0) <= ROB_TIME
       );
 
-      db.jailed[target] = {
-        until: now + JAIL_TIME,
-        by: cleanJid(sender)
-      };
+      if (mentioned) {
+        suspects = suspects.filter(r => cleanJid(r.thief) === mentioned);
+      }
 
-      db.fame[target] = (db.fame[target] || 0) + 10;
+      const oldRobos = robos.filter(r =>
+        !r.caught &&
+        now - Number(r.time || 0) > ROB_TIME
+      );
 
-      saveDB(db);
+      if (!suspects.length) {
+        if (mentioned) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`🚓 *SIN PRUEBAS*
 
-      await sock.sendMessage(remoteJid, {
-        image: fs.readFileSync(image),
-        caption:
-`🚔 *POLICÍA DEL GRUPO*
+@${number(mentioned)} no tiene robos recientes o ya escapó.`,
+            mentions: [mentioned]
+          }, { quoted: msg });
+        }
 
-👮 Sospechoso arrestado:
-@${number(target)}
+        if (oldRobos.length) {
+          const escapedMentions = [...new Set(oldRobos.map(r => cleanJid(r.thief)))];
 
-⛓️ Condena:
-*10 minutos en prisión*
+          robosDB[remoteJid] = robos.filter(r =>
+            now - Number(r.time || 0) <= 10 * 60 * 1000
+          );
 
-☠️ Fama criminal:
-*${db.fame[target]}*
+          saveRobos(robosDB);
 
-💸 Puede intentar escapar usando:
-*.sobornar*`,
-        mentions: [target]
+          return sock.sendMessage(remoteJid, {
+            text:
+`🚓 *LA POLICÍA LLEGÓ TARDE*
+
+Los sospechosos ya escaparon:
+
+${escapedMentions.map(j => `➤ @${number(j)}`).join('\n')}`,
+            mentions: escapedMentions
+          }, { quoted: msg });
+        }
+
+        return sock.sendMessage(remoteJid, {
+          text: '✅ No hay robos recientes en los últimos 5 minutos.'
+        }, { quoted: msg });
+      }
+
+      const captured = [];
+      const escaped = [];
+
+      for (const robbery of suspects) {
+        const thief = cleanJid(robbery.thief);
+
+        const fame = jailDB.fame[thief] || 0;
+        const captureChance = Math.min(0.85, 0.55 + fame / 200);
+
+        if (Math.random() < captureChance) {
+          captured.push(robbery);
+
+          jailDB.jailed[thief] = {
+            until: now + JAIL_TIME,
+            by: me,
+            chat: remoteJid,
+            at: now
+          };
+
+          jailDB.fame[thief] = (jailDB.fame[thief] || 0) + 10;
+          robbery.caught = true;
+        } else {
+          escaped.push(robbery);
+          jailDB.fame[thief] = (jailDB.fame[thief] || 0) + 5;
+        }
+      }
+
+      robosDB[remoteJid] = robos.filter(r =>
+        now - Number(r.time || 0) <= 10 * 60 * 1000
+      );
+
+      saveRobos(robosDB);
+      saveJail(jailDB);
+
+      const mentions = [
+        ...captured.map(r => cleanJid(r.thief)),
+        ...escaped.map(r => cleanJid(r.thief)),
+        me
+      ];
+
+      let text = `🚔 *OPERATIVO POLICIAL*\n\n`;
+
+      if (captured.length) {
+        text += `⛓️ *Arrestados:*\n`;
+
+        for (const r of captured) {
+          text += `➤ @${number(r.thief)} por robar *${r.amount} XP* a @${number(r.victim)}\n`;
+        }
+
+        text += `\n📌 Condena: *10 minutos en prisión*\n`;
+        text += `💸 Pueden usar *.sobornar* para intentar salir.\n\n`;
+      }
+
+      if (escaped.length) {
+        text += `🚓 *Escaparon:*\n`;
+
+        for (const r of escaped) {
+          text += `➤ @${number(r.thief)} escapó con *${r.amount} XP*\n`;
+        }
+
+        text += `\n☠️ Su fama criminal aumentó.\n\n`;
+      }
+
+      if (!captured.length && !escaped.length) {
+        text += '✅ No se encontró a ningún sospechoso.';
+      }
+
+      return sock.sendMessage(remoteJid, {
+        text,
+        mentions
       }, { quoted: msg });
 
     } catch (err) {
-
       console.log('❌ Error policia:', err?.message || err);
 
-      await sock.sendMessage(remoteJid, {
+      return sock.sendMessage(remoteJid, {
         text: '❌ Error usando el sistema policial.'
       }, { quoted: msg });
-
-    } finally {
-
-      for (const file of [profile, image]) {
-        try {
-          if (file && fs.existsSync(file)) {
-            fs.unlinkSync(file);
-          }
-        } catch {}
-      }
     }
   }
 };
