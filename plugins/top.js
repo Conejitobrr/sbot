@@ -2,13 +2,48 @@
 
 const db = require('../lib/database');
 
+function cleanJid(jid = '') {
+  return String(jid).split(':')[0];
+}
+
+function number(jid = '') {
+  return cleanJid(jid)
+    .split('@')[0]
+    .replace(/\D/g, '');
+}
+
+function getMentioned(msg) {
+  return msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+}
+
+function fixTextMentions(text = '', mentioned = []) {
+  let result = String(text || '');
+
+  for (const jid of mentioned) {
+    const num = number(jid);
+
+    if (!num) continue;
+
+    result = result.replace(/@\S+/, `@${num}`);
+  }
+
+  return result;
+}
+
 module.exports = {
   commands: ['top'],
 
   async execute(ctx) {
     const { sock, remoteJid, msg, args, sender } = ctx;
 
-    const text = args.join(' ');
+    const mentioned = getMentioned(msg).map(cleanJid);
+
+    let text = args.join(' ').trim();
+
+    if (mentioned.length) {
+      text = fixTextMentions(text, mentioned);
+    }
+
     if (!text) {
       return sock.sendMessage(remoteJid, {
         text: '❌ Ejemplo:\n.top guapos'
@@ -25,7 +60,7 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    let participants = metadata.participants.map(v => v.id);
+    let participants = metadata.participants.map(v => cleanJid(v.id));
 
     // 🔥 EVITAR ERRORES SI HAY MENOS DE 10
     if (participants.length < 2) {
@@ -46,7 +81,7 @@ module.exports = {
     const emojiList = ['🤓','😅','😂','😳','😎','🥵','😱','🤑','🙄','💩','🍑','🤨','🥴','🔥','👇🏻','😔','👀','🌚'];
     const emoji = emojiList[Math.floor(Math.random() * emojiList.length)];
 
-    const tag = (u) => '@' + u.split('@')[0];
+    const tag = (u) => '@' + number(u);
 
     let textTop = `*${emoji} TOP 10 ${text.toUpperCase()} ${emoji}*\n\n`;
 
@@ -55,10 +90,17 @@ module.exports = {
       textTop += `${pos} ${tag(user)}\n`;
     });
 
+    const mentions = [
+      ...new Set([
+        ...top10,
+        ...mentioned
+      ])
+    ];
+
     // 🔥 ENVIAR
     await sock.sendMessage(remoteJid, {
       text: textTop,
-      mentions: top10
+      mentions
     }, { quoted: msg });
 
     // ⭐ XP silencioso por usar el comando: 20 - 50 XP
