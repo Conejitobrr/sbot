@@ -2,12 +2,26 @@
 
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 
+const execFileAsync = promisify(execFile);
+
+const TEMP_DIR = path.join(process.cwd(), 'temp');
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
 const ROBOS_PATH = path.join(process.cwd(), 'lib', 'robos_recientes.json');
+const NICKS_PATH = path.join(process.cwd(), 'lib', 'fakeig_nicks.json');
+const DEFAULT_PROFILE = path.join(process.cwd(), 'assets', 'Sinperfil.jpg');
 
 const JAIL_TIME = 10 * 60 * 1000;
 const ROB_TIME = 5 * 60 * 1000;
+
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
 
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
@@ -63,6 +77,23 @@ function saveRobos(data) {
   fs.writeFileSync(ROBOS_PATH, JSON.stringify(data, null, 2));
 }
 
+function loadNicks() {
+  try {
+    if (!fs.existsSync(NICKS_PATH)) return {};
+    return JSON.parse(fs.readFileSync(NICKS_PATH, 'utf8') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function cleanName(name = '') {
+  return String(name || '')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 25);
+}
+
 function msToTime(ms = 0) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60);
@@ -70,10 +101,150 @@ function msToTime(ms = 0) {
   return `${m} min ${s} seg`;
 }
 
-module.exports = {
-  commands: ['policia', 'denunciar', 'carcel', 'fama', 'sobornar'],
+function getNickFromSources(jid, store, groupMetadata) {
+  jid = cleanJid(jid);
 
-  async execute({ sock, remoteJid, msg, sender, command }) {
+  const saved = loadNicks();
+  if (saved[jid]?.name) return cleanName(saved[jid].name);
+
+  const contact =
+    store?.contacts?.[jid] ||
+    {};
+
+  const participant = groupMetadata?.participants?.find(p =>
+    cleanJid(p.id) === jid ||
+    cleanJid(p.jid) === jid ||
+    cleanJid(p.lid) === jid ||
+    cleanJid(p.participant) === jid
+  ) || {};
+
+  return cleanName(
+    contact.name ||
+    contact.notify ||
+    contact.verifiedName ||
+    contact.pushName ||
+    participant.name ||
+    participant.notify ||
+    participant.verifiedName ||
+    participant.pushName ||
+    ''
+  );
+}
+
+function tag(jid, store, groupMetadata) {
+  const nick = getNickFromSources(jid, store, groupMetadata);
+  return `@${nick || number(jid)}`;
+}
+
+async function downloadProfile(sock, jid, output) {
+  try {
+    const url = await sock.profilePictureUrl(jid, 'image');
+
+    const res = await axios.get(url, {
+      responseType: 'arraybuffer'
+    });
+
+    fs.writeFileSync(output, res.data);
+
+  } catch {
+    if (fs.existsSync(DEFAULT_PROFILE)) {
+      fs.copyFileSync(DEFAULT_PROFILE, output);
+    } else {
+      throw new Error('Falta assets/Sinperfil.jpg');
+    }
+  }
+}
+
+async function makeArrestTile(input, output, title = 'ARRESTADO') {
+  await execFileAsync('convert', [
+    input,
+
+    '-resize', '720x720^',
+    '-gravity', 'center',
+    '-extent', '720x720',
+
+    '-fill', 'rgba(0,0,0,0.35)',
+    '-draw', 'rectangle 0,0 720,720',
+
+    // Rejas verticales
+    '-fill', 'rgba(20,20,20,0.65)',
+    '-draw', 'rectangle 80,0 110,720',
+    '-draw', 'rectangle 230,0 260,720',
+    '-draw', 'rectangle 380,0 410,720',
+    '-draw', 'rectangle 530,0 560,720',
+    '-draw', 'rectangle 680,0 710,720',
+
+    // Rejas horizontales
+    '-draw', 'rectangle 0,150 720,175',
+    '-draw', 'rectangle 0,360 720,385',
+    '-draw', 'rectangle 0,570 720,595',
+
+    // Cinta roja
+    '-fill', 'rgba(180,0,0,0.88)',
+    '-draw', 'rectangle 0,295 720,420',
+
+    '-fill', '#ffffff',
+    '-stroke', '#000000',
+    '-strokewidth', '3',
+    '-gravity', 'center',
+    '-font', 'DejaVu-Sans-Bold',
+    '-pointsize', '76',
+    '-annotate', '0', title,
+
+    output
+  ]);
+}
+
+async function makeArrestCollage(sock, captured, output) {
+  ensureTemp();
+
+  const files = [];
+
+  try {
+    for (let i = 0; i < captured.length; i++) {
+      const jid = cleanJid(captured[i].thief);
+
+      const profile = path.join(TEMP_DIR, `police_profile_${Date.now()}_${i}.jpg`);
+      const tile = path.join(TEMP_DIR, `police_tile_${Date.now()}_${i}.jpg`);
+
+      await downloadProfile(sock, jid, profile);
+      await makeArrestTile(profile, tile);
+
+      files.push(profile, tile);
+    }
+
+    const tiles = files.filter(f => f.includes('police_tile_'));
+
+    if (tiles.length === 1) {
+      fs.copyFileSync(tiles[0], output);
+      return;
+    }
+
+    const columns = tiles.length <= 2 ? 2 : 3;
+
+    await execFileAsync('montage', [
+      ...tiles,
+      '-tile', `${columns}x`,
+      '-geometry', '720x720+8+8',
+      '-background', '#111111',
+      output
+    ]);
+
+  } finally {
+    for (const file of files) {
+      try {
+        if (file && fs.existsSync(file)) fs.unlinkSync(file);
+      } catch {}
+    }
+  }
+}
+
+module.exports = {
+  commands: ['policia', 'policía', 'denunciar', 'carcel', 'fama', 'sobornar'],
+
+  async execute({ sock, remoteJid, msg, sender, command, store, groupMetadata }) {
+    let collagePath = null;
+
     try {
       const now = Date.now();
       const me = cleanJid(sender);
@@ -110,7 +281,7 @@ module.exports = {
           text:
 `☠️ *FAMA CRIMINAL*
 
-👤 @${number(me)}
+👤 ${tag(me, store, groupMetadata)}
 🔥 Nivel criminal: *${fame}*
 🚨 Riesgo policial: *${Math.min(90, 10 + fame)}%*`,
           mentions: [me]
@@ -184,7 +355,7 @@ module.exports = {
             text:
 `🚓 *SIN PRUEBAS*
 
-@${number(mentioned)} no tiene robos recientes o ya escapó.`,
+${tag(mentioned, store, groupMetadata)} no tiene robos recientes o ya escapó.`,
             mentions: [mentioned]
           }, { quoted: msg });
         }
@@ -204,7 +375,7 @@ module.exports = {
 
 Los sospechosos ya escaparon:
 
-${escapedMentions.map(j => `➤ @${number(j)}`).join('\n')}`,
+${escapedMentions.map(j => `➤ ${tag(j, store, groupMetadata)}`).join('\n')}`,
             mentions: escapedMentions
           }, { quoted: msg });
         }
@@ -250,7 +421,9 @@ ${escapedMentions.map(j => `➤ @${number(j)}`).join('\n')}`,
 
       const mentions = [
         ...captured.map(r => cleanJid(r.thief)),
+        ...captured.map(r => cleanJid(r.victim)),
         ...escaped.map(r => cleanJid(r.thief)),
+        ...escaped.map(r => cleanJid(r.victim)),
         me
       ];
 
@@ -260,7 +433,7 @@ ${escapedMentions.map(j => `➤ @${number(j)}`).join('\n')}`,
         text += `⛓️ *Arrestados:*\n`;
 
         for (const r of captured) {
-          text += `➤ @${number(r.thief)} por robar *${r.amount} XP* a @${number(r.victim)}\n`;
+          text += `➤ ${tag(r.thief, store, groupMetadata)} fue arrestado por robar *${r.amount} XP* a ${tag(r.victim, store, groupMetadata)}\n`;
         }
 
         text += `\n📌 Condena: *10 minutos en prisión*\n`;
@@ -271,14 +444,23 @@ ${escapedMentions.map(j => `➤ @${number(j)}`).join('\n')}`,
         text += `🚓 *Escaparon:*\n`;
 
         for (const r of escaped) {
-          text += `➤ @${number(r.thief)} escapó con *${r.amount} XP*\n`;
+          text += `➤ ${tag(r.thief, store, groupMetadata)} escapó con *${r.amount} XP* robados a ${tag(r.victim, store, groupMetadata)}\n`;
         }
 
         text += `\n☠️ Su fama criminal aumentó.\n\n`;
       }
 
-      if (!captured.length && !escaped.length) {
-        text += '✅ No se encontró a ningún sospechoso.';
+      if (captured.length) {
+        const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+        collagePath = path.join(TEMP_DIR, `police_collage_${id}.jpg`);
+
+        await makeArrestCollage(sock, captured, collagePath);
+
+        return sock.sendMessage(remoteJid, {
+          image: fs.readFileSync(collagePath),
+          caption: text,
+          mentions
+        }, { quoted: msg });
       }
 
       return sock.sendMessage(remoteJid, {
@@ -292,6 +474,12 @@ ${escapedMentions.map(j => `➤ @${number(j)}`).join('\n')}`,
       return sock.sendMessage(remoteJid, {
         text: '❌ Error usando el sistema policial.'
       }, { quoted: msg });
+    } finally {
+      try {
+        if (collagePath && fs.existsSync(collagePath)) {
+          fs.unlinkSync(collagePath);
+        }
+      } catch {}
     }
   }
 };
