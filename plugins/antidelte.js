@@ -1,0 +1,387 @@
+'use strict';
+
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+
+const deletedCache = new Map();
+
+const MAX_CACHE = 1000;
+const CACHE_TIME = 2 * 60 * 60 * 1000;
+
+function cleanJid(jid = '') {
+  return String(jid).split(':')[0];
+}
+
+function number(jid = '') {
+  return cleanJid(jid)
+    .split('@')[0]
+    .replace(/\D/g, '');
+}
+
+function getMsgKey(remoteJid, id) {
+  return `${remoteJid}:${id}`;
+}
+
+function isDeleteMessage(msg) {
+  const protocol = msg.message?.protocolMessage;
+
+  if (!protocol) return false;
+
+  return (
+    protocol.type === 0 ||
+    protocol.type === 'REVOKE' ||
+    protocol.key?.id
+  );
+}
+
+function getDeletedKey(msg) {
+  return msg.message?.protocolMessage?.key || null;
+}
+
+function unwrapMessage(message = {}) {
+  if (message.ephemeralMessage?.message) {
+    return unwrapMessage(message.ephemeralMessage.message);
+  }
+
+  if (message.documentWithCaptionMessage?.message) {
+    return unwrapMessage(message.documentWithCaptionMessage.message);
+  }
+
+  return message;
+}
+
+function getText(message = {}) {
+  return (
+    message.conversation ||
+    message.extendedTextMessage?.text ||
+    message.imageMessage?.caption ||
+    message.videoMessage?.caption ||
+    message.documentMessage?.caption ||
+    ''
+  );
+}
+
+function isViewOnce(message = {}) {
+  return (
+    message.viewOnceMessage ||
+    message.viewOnceMessageV2 ||
+    message.viewOnceMessageV2Extension ||
+    message.imageMessage?.viewOnce === true ||
+    message.videoMessage?.viewOnce === true
+  );
+}
+
+function getMediaInfo(message = {}) {
+  if (message.imageMessage) {
+    return {
+      type: 'image',
+      mediaType: 'image',
+      media: message.imageMessage,
+      mimetype: message.imageMessage.mimetype || 'image/jpeg',
+      caption: message.imageMessage.caption || ''
+    };
+  }
+
+  if (message.videoMessage) {
+    return {
+      type: 'video',
+      mediaType: 'video',
+      media: message.videoMessage,
+      mimetype: message.videoMessage.mimetype || 'video/mp4',
+      caption: message.videoMessage.caption || ''
+    };
+  }
+
+  if (message.audioMessage) {
+    return {
+      type: 'audio',
+      mediaType: 'audio',
+      media: message.audioMessage,
+      mimetype: message.audioMessage.mimetype || 'audio/mpeg',
+      ptt: message.audioMessage.ptt || false
+    };
+  }
+
+  if (message.stickerMessage) {
+    return {
+      type: 'sticker',
+      mediaType: 'sticker',
+      media: message.stickerMessage,
+      mimetype: message.stickerMessage.mimetype || 'image/webp'
+    };
+  }
+
+  if (message.documentMessage) {
+    return {
+      type: 'document',
+      mediaType: 'document',
+      media: message.documentMessage,
+      mimetype: message.documentMessage.mimetype || 'application/octet-stream',
+      fileName: message.documentMessage.fileName || 'archivo',
+      caption: message.documentMessage.caption || ''
+    };
+  }
+
+  return null;
+}
+
+async function streamToBuffer(stream) {
+  let buffer = Buffer.from([]);
+
+  for await (const chunk of stream) {
+    buffer = Buffer.concat([buffer, chunk]);
+  }
+
+  return buffer;
+}
+
+function saveMessage(msg, remoteJid, sender, pushName) {
+  const id = msg.key?.id;
+
+  if (!id || !msg.message) return;
+
+  if (isDeleteMessage(msg)) return;
+
+  const message = unwrapMessage(msg.message);
+
+  if (isViewOnce(message)) return;
+
+  const key = getMsgKey(remoteJid, id);
+
+  deletedCache.set(key, {
+    remoteJid,
+    sender: cleanJid(sender),
+    pushName: pushName || 'Usuario',
+    message,
+    time: Date.now()
+  });
+
+  if (deletedCache.size > MAX_CACHE) {
+    const first = deletedCache.keys().next().value;
+    deletedCache.delete(first);
+  }
+}
+
+function cleanOldCache() {
+  const now = Date.now();
+
+  for (const [key, value] of deletedCache.entries()) {
+    if (now - value.time > CACHE_TIME) {
+      deletedCache.delete(key);
+    }
+  }
+}
+
+async function isEnabled(db, remoteJid, fromGroup) {
+  try {
+    if (fromGroup) {
+      const value = await db.getGroupSetting(remoteJid, 'antidelete');
+      return value === true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+module.exports = {
+  commands: ['antidelete', 'antiborrar'],
+
+  async onMessage(ctx) {
+    const {
+      sock,
+      msg,
+      remoteJid,
+      sender,
+      pushName,
+      fromGroup,
+      db
+    } = ctx;
+
+    try {
+      if (!fromGroup) return;
+
+      cleanOldCache();
+
+      if (!isDeleteMessage(msg)) {
+        saveMessage(msg, remoteJid, sender, pushName);
+        return;
+      }
+
+      const enabled = await isEnabled(db, remoteJid, fromGroup);
+      if (!enabled) return;
+
+      const deletedKey = getDeletedKey(msg);
+      const deletedId = deletedKey?.id;
+
+      if (!deletedId) return;
+
+      const cacheKey = getMsgKey(remoteJid, deletedId);
+      const saved = deletedCache.get(cacheKey);
+
+      if (!saved) return;
+
+      const user = saved.sender;
+      const text = getText(saved.message);
+      const media = getMediaInfo(saved.message);
+
+      if (!media) {
+        if (!text) return;
+
+        await sock.sendMessage(remoteJid, {
+          text:
+`🕵️ *MENSAJE ELIMINADO*
+
+👤 Usuario: @${number(user)}
+
+💬 Mensaje:
+${text}`,
+          mentions: [user]
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      const stream = await downloadContentFromMessage(
+        media.media,
+        media.mediaType
+      );
+
+      const buffer = await streamToBuffer(stream);
+
+      if (!buffer || !buffer.length) return;
+
+      const caption =
+`🕵️ *MENSAJE ELIMINADO*
+
+👤 Usuario: @${number(user)}${media.caption ? `\n\n💬 Caption:\n${media.caption}` : ''}`;
+
+      if (media.type === 'image') {
+        await sock.sendMessage(remoteJid, {
+          image: buffer,
+          mimetype: media.mimetype,
+          caption,
+          mentions: [user]
+        });
+      }
+
+      if (media.type === 'video') {
+        await sock.sendMessage(remoteJid, {
+          video: buffer,
+          mimetype: media.mimetype,
+          caption,
+          mentions: [user]
+        });
+      }
+
+      if (media.type === 'audio') {
+        await sock.sendMessage(remoteJid, {
+          audio: buffer,
+          mimetype: media.mimetype,
+          ptt: media.ptt || false
+        });
+
+        await sock.sendMessage(remoteJid, {
+          text: caption,
+          mentions: [user]
+        });
+      }
+
+      if (media.type === 'sticker') {
+        await sock.sendMessage(remoteJid, {
+          sticker: buffer
+        });
+
+        await sock.sendMessage(remoteJid, {
+          text: caption,
+          mentions: [user]
+        });
+      }
+
+      if (media.type === 'document') {
+        await sock.sendMessage(remoteJid, {
+          document: buffer,
+          mimetype: media.mimetype,
+          fileName: media.fileName,
+          caption,
+          mentions: [user]
+        });
+      }
+
+      deletedCache.delete(cacheKey);
+
+    } catch (err) {
+      console.log('❌ Error en antidelete:', err?.message || err);
+    }
+  },
+
+  async execute(ctx) {
+    const {
+      sock,
+      msg,
+      remoteJid,
+      args,
+      fromGroup,
+      isAdmin,
+      isOwner,
+      db
+    } = ctx;
+
+    try {
+      if (!fromGroup) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Este comando solo funciona en grupos.'
+        }, { quoted: msg });
+      }
+
+      if (!isOwner && !isAdmin) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Solo admins o owner pueden usar este comando.'
+        }, { quoted: msg });
+      }
+
+      const option = (args[0] || '').toLowerCase();
+
+      if (!option) {
+        const enabled = await isEnabled(db, remoteJid, fromGroup);
+
+        return sock.sendMessage(remoteJid, {
+          text:
+`🕵️ *ANTIDELETE*
+
+Estado: *${enabled ? 'Activado ✅' : 'Desactivado ❌'}*
+
+Uso:
+.antidelete on
+.antidelete off`
+        }, { quoted: msg });
+      }
+
+      if (!['on', 'off'].includes(option)) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Usa:\n.antidelete on\n.antidelete off'
+        }, { quoted: msg });
+      }
+
+      await db.setGroupSetting(
+        remoteJid,
+        'antidelete',
+        option === 'on'
+      );
+
+      return sock.sendMessage(remoteJid, {
+        text: option === 'on'
+          ? '✅ Antidelete activado en este grupo.'
+          : '✅ Antidelete desactivado en este grupo.'
+      }, { quoted: msg });
+
+    } catch (err) {
+      console.log('❌ Error comando antidelete:', err?.message || err);
+
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Error configurando antidelete.'
+      }, { quoted: msg });
+    }
+  }
+};
