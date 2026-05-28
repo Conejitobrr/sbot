@@ -162,29 +162,102 @@ async function makeArrestTile(input, output, title = 'ARRESTADO') {
     '-gravity', 'center',
     '-extent', '720x720',
 
-    '-fill', 'rgba(0,0,0,0.35)',
+    // Oscurecer foto
+    '-fill', 'rgba(0,0,0,0.28)',
     '-draw', 'rectangle 0,0 720,720',
 
-    // Rejas verticales
-    '-fill', 'rgba(20,20,20,0.65)',
-    '-draw', 'rectangle 80,0 110,720',
-    '-draw', 'rectangle 230,0 260,720',
-    '-draw', 'rectangle 380,0 410,720',
-    '-draw', 'rectangle 530,0 560,720',
-    '-draw', 'rectangle 680,0 710,720',
+    // Rejas verticales con efecto metálico
+    '-fill', 'rgba(18,18,18,0.92)',
+    '-draw', 'rectangle 72,0 108,720',
+    '-draw', 'rectangle 218,0 254,720',
+    '-draw', 'rectangle 364,0 400,720',
+    '-draw', 'rectangle 510,0 546,720',
+    '-draw', 'rectangle 656,0 692,720',
 
-    // Rejas horizontales
-    '-draw', 'rectangle 0,150 720,175',
-    '-draw', 'rectangle 0,360 720,385',
-    '-draw', 'rectangle 0,570 720,595',
+    // Brillo izquierdo de cada barra
+    '-fill', 'rgba(255,255,255,0.32)',
+    '-draw', 'rectangle 78,0 86,720',
+    '-draw', 'rectangle 224,0 232,720',
+    '-draw', 'rectangle 370,0 378,720',
+    '-draw', 'rectangle 516,0 524,720',
+    '-draw', 'rectangle 662,0 670,720',
+
+    // Sombra derecha de cada barra
+    '-fill', 'rgba(0,0,0,0.55)',
+    '-draw', 'rectangle 98,0 108,720',
+    '-draw', 'rectangle 244,0 254,720',
+    '-draw', 'rectangle 390,0 400,720',
+    '-draw', 'rectangle 536,0 546,720',
+    '-draw', 'rectangle 682,0 692,720',
+
+    // Rejas horizontales con efecto metálico
+    '-fill', 'rgba(18,18,18,0.92)',
+    '-draw', 'rectangle 0,138 720,170',
+    '-draw', 'rectangle 0,350 720,382',
+    '-draw', 'rectangle 0,562 720,594',
+
+    // Brillo superior horizontal
+    '-fill', 'rgba(255,255,255,0.28)',
+    '-draw', 'rectangle 0,142 720,149',
+    '-draw', 'rectangle 0,354 720,361',
+    '-draw', 'rectangle 0,566 720,573',
+
+    // Sombra inferior horizontal
+    '-fill', 'rgba(0,0,0,0.55)',
+    '-draw', 'rectangle 0,162 720,170',
+    '-draw', 'rectangle 0,374 720,382',
+    '-draw', 'rectangle 0,586 720,594',
+
+    // Sombras en cruces de rejas
+    '-fill', 'rgba(0,0,0,0.35)',
+    '-draw', 'circle 90,154 118,154',
+    '-draw', 'circle 236,154 264,154',
+    '-draw', 'circle 382,154 410,154',
+    '-draw', 'circle 528,154 556,154',
+    '-draw', 'circle 674,154 702,154',
+
+    '-draw', 'circle 90,366 118,366',
+    '-draw', 'circle 236,366 264,366',
+    '-draw', 'circle 382,366 410,366',
+    '-draw', 'circle 528,366 556,366',
+    '-draw', 'circle 674,366 702,366',
+
+    '-draw', 'circle 90,578 118,578',
+    '-draw', 'circle 236,578 264,578',
+    '-draw', 'circle 382,578 410,578',
+    '-draw', 'circle 528,578 556,578',
+    '-draw', 'circle 674,578 702,578',
+
+    // Candado abajo izquierda
+    '-fill', 'rgba(45,45,45,0.95)',
+    '-stroke', 'rgba(180,180,180,0.75)',
+    '-strokewidth', '4',
+    '-draw', 'roundrectangle 42,510 182,660 10,10',
+
+    '-fill', 'none',
+    '-stroke', 'rgba(180,180,180,0.85)',
+    '-strokewidth', '12',
+    '-draw', 'arc 75,445 150,555 200,140',
+
+    '-fill', 'rgba(0,0,0,0.75)',
+    '-stroke', 'none',
+    '-draw', 'circle 112,580 126,580',
+    '-draw', 'rectangle 106,580 118,620',
 
     // Cinta roja
-    '-fill', 'rgba(180,0,0,0.88)',
-    '-draw', 'rectangle 0,295 720,420',
+    '-fill', 'rgba(185,0,0,0.86)',
+    '-draw', 'rectangle 0,292 720,420',
 
+    // Bordes de cinta
+    '-fill', 'rgba(255,255,255,0.18)',
+    '-draw', 'rectangle 0,292 720,302',
+    '-fill', 'rgba(0,0,0,0.30)',
+    '-draw', 'rectangle 0,410 720,420',
+
+    // Texto ARRESTADO
     '-fill', '#ffffff',
     '-stroke', '#000000',
-    '-strokewidth', '3',
+    '-strokewidth', '4',
     '-gravity', 'center',
     '-font', 'DejaVu-Sans-Bold',
     '-pointsize', '76',
