@@ -376,7 +376,7 @@ function buildHtml({ nombre, autor, frase }) {
   </div>
 
   <audio id="bg-music" loop>
-    <source src="https://github.com/Gon-p/G-/raw/refs/heads/main/adore%20-%20_did%20i%20tell%20u%20that%20i%20miss%20u_%20(lyric%20video).m4a" type="audio/mp4">
+    <source src="https://raw.githubusercontent.com/Conejitobrr/sbot/main/media/cunumi.mp3" type="audio/mpeg">
   </audio>
 
   <script type="module">
