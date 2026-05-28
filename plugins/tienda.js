@@ -80,16 +80,19 @@ function shopText() {
 ➤ Uso de *.ver*
 ➤ Precio: *${ITEMS.ver.price} XP*
 ➤ Compra: *.comprar ver*
+➤ Desc: 'Permite usar .ver 1 vez'
 
 🎵 *spotify*
 ➤ Uso de *.spotify*
 ➤ Precio: *${ITEMS.spotify.price} XP*
 ➤ Compra: *.comprar spotify*
+➤ Dkesc: 'Permite usar .spotify 1 vez'
 
 🔑 *llave*
 ➤ Llave de celda
 ➤ Precio: *${ITEMS.llave.price} XP*
 ➤ Compra: *.comprar llave*
+➤ Desc: 'Permite salir de la cárcel 1 vez'
 
 📦 También puedes comprar varios:
 *.comprar ver 2*
