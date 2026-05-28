@@ -376,7 +376,7 @@ function buildHtml({ nombre, autor, frase }) {
   </div>
 
   <audio id="bg-music" loop>
-    <source src="https://raw.githubusercontent.com/Conejitobrr/sbot/main/media/cunumi.mp3" type="audio/mpeg">
+    <source src="https://raw.githubusercontent.com/Conejitobrr/sbot/main/media/Golden.mp3" type="audio/mpeg">
   </audio>
 
   <script type="module">
