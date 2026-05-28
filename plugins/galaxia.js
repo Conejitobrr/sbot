@@ -39,7 +39,7 @@ function parseInput(args = []) {
 
   return {
     nombre: safeText(parts[0] || 'Mi amor'),
-    autor: safeText(parts[1] || 'Jose'),
+    autor: safeText(parts[1] || ''),
     frase: safeText(parts[2] || 'Te Amo Muchote')
   };
 }
