@@ -100,19 +100,20 @@ function buildHtml({ nombre, autor, frase }) {
 
     .credits {
       position: fixed;
-      bottom: 15px;
+      bottom: 85px;
       left: 50%;
       transform: translateX(-50%);
       color: #fff;
       font-family: 'Pacifico', cursive;
-      font-size: 16px;
+      font-size: 20px;
       text-align: center;
+      line-height: 1.3;
       text-shadow:
         0 0 3px #fff,
         0 0 6px #fff,
         0 0 10px #ff6030,
         0 0 15px #ff6030;
-      z-index: 10;
+      z-index: 30;
       pointer-events: none;
     }
 
