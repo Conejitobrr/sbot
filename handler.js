@@ -224,6 +224,59 @@ async function safeGroupMetadata(sock, jid) {
   }
 }
 
+// ⛓️ SISTEMA DE CÁRCEL
+const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
+
+function msToTime(ms = 0) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m} min ${s} seg`;
+}
+
+function loadJailDB() {
+  try {
+    if (!fs.existsSync(JAIL_PATH)) {
+      return { jailed: {}, fame: {} };
+    }
+
+    return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{}');
+  } catch {
+    return { jailed: {}, fame: {} };
+  }
+}
+
+function saveJailDB(data) {
+  try {
+    const dir = path.dirname(JAIL_PATH);
+
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2));
+  } catch {}
+}
+
+function checkJail(jid) {
+  const data = loadJailDB();
+
+  data.jailed = data.jailed || {};
+
+  const clean = String(jid || '').split(':')[0];
+  const jail = data.jailed[clean];
+
+  if (!jail) return null;
+
+  if (Number(jail.until || 0) <= Date.now()) {
+    delete data.jailed[clean];
+    saveJailDB(data);
+    return null;
+  }
+
+  return jail;
+}
+
 async function messageHandler(sock, msg, store = {}) {
   try {
     attachSendLogger(sock);
@@ -351,6 +404,21 @@ async function messageHandler(sock, msg, store = {}) {
 
     const plugin = plugins.get(command);
     if (!plugin) return;
+
+    // ⛓️ BLOQUEAR COMANDOS SI ESTÁ ARRESTADO
+    const jail = checkJail(sender);
+
+    if (jail && command !== 'sobornar') {
+      return sock.sendMessage(remoteJid, {
+        text:
+`⛓️ *ESTÁS ARRESTADO*
+
+No puedes usar comandos del bot por ahora.
+
+⏳ Tiempo restante: *${msToTime(jail.until - Date.now())}*
+💸 Usa *.sobornar* para intentar salir antes.`
+      }, { quoted: msg });
+    }
 
     if (!isOwner) {
       if (fromGroup) {
