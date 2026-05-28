@@ -132,14 +132,7 @@ function getNickFromSources(jid, store, groupMetadata) {
 }
 
 function tag(jid, store, groupMetadata) {
-  const nick = getNickFromSources(jid, store, groupMetadata);
-  const realMention = `@${number(jid)}`;
-
-  if (nick) {
-    return `${realMention} (${nick})`;
-  }
-
-  return realMention;
+  return `@${number(jid)}`;
 }
 
 async function downloadProfile(sock, jid, output) {
