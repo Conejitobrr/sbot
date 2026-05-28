@@ -18,14 +18,14 @@ const ITEMS = {
   spotify: {
     key: 'spotifyUses',
     name: '🎵 Uso de .spotify',
-    price: 15000,
+    price: 1500,
     desc: 'Permite usar .spotify 1 vez'
   },
 
   llave: {
     key: 'keys',
     name: '🔑 Llave de celda',
-    price: 12000,
+    price: 1000,
     desc: 'Permite salir de la cárcel 1 vez'
   }
 };
