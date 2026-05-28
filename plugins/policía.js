@@ -788,4 +788,82 @@ ${escapedMentions.map(j => `➤ ${tag(j, store, groupMetadata)}`).join('\n')}`,
         }
       }
 
-      ro
+      robosDB[remoteJid] = robos.filter(r =>
+        now - Number(r.time || 0) <= 10 * 60 * 1000
+      );
+
+      saveRobos(robosDB);
+      saveJail(jailDB);
+
+      const mentions = [
+        ...captured.map(r => cleanJid(r.thief)),
+        ...captured.map(r => cleanJid(r.victim)),
+        ...escaped.map(r => cleanJid(r.thief)),
+        ...escaped.map(r => cleanJid(r.victim)),
+        me
+      ];
+
+      let text = `🚔 *OPERATIVO POLICIAL*\n\n`;
+
+      if (captured.length) {
+        text += `⛓️ *Arrestados:*\n`;
+
+        for (const r of captured) {
+          const thief = cleanJid(r.thief);
+          const options = await getJailOptions(jailDB, thief);
+
+          text += `➤ ${tag(r.thief, store, groupMetadata)} fue arrestado por robar *${r.amount} XP* a ${tag(r.victim, store, groupMetadata)}\n`;
+          text += `   💰 Fianza: *${options.fianzaCost} XP* → *.fianza pagar*\n`;
+          text += `   💸 Soborno: *${options.sobornoCost} XP* → *.sobornar pagar* (*${options.remainingAttempts}/${MAX_SOBORNO_INTENTOS} intentos*)\n`;
+          text += `   🔑 Llaves: *${options.keys}* → *.usar llave*\n\n`;
+        }
+
+        text += `📌 Condena: *10 minutos en prisión*\n`;
+        text += `❌ Si falla el soborno: *+5 minutos* y sube el precio.\n\n`;
+      }
+
+      if (escaped.length) {
+        text += `🚓 *Escaparon:*\n`;
+
+        for (const r of escaped) {
+          text += `➤ ${tag(r.thief, store, groupMetadata)} escapó con *${r.amount} XP* robados a ${tag(r.victim, store, groupMetadata)}\n`;
+        }
+
+        text += `\n☠️ Su fama criminal aumentó.\n\n`;
+      }
+
+      saveJail(jailDB);
+
+      if (captured.length) {
+        const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+        collagePath = path.join(TEMP_DIR, `police_collage_${id}.jpg`);
+
+        await makeArrestCollage(sock, captured, collagePath);
+
+        return sock.sendMessage(remoteJid, {
+          image: fs.readFileSync(collagePath),
+          caption: text,
+          mentions
+        }, { quoted: msg });
+      }
+
+      return sock.sendMessage(remoteJid, {
+        text,
+        mentions
+      }, { quoted: msg });
+
+    } catch (err) {
+      console.log('❌ Error policia:', err?.message || err);
+
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Error usando el sistema policial.'
+      }, { quoted: msg });
+    } finally {
+      try {
+        if (collagePath && fs.existsSync(collagePath)) {
+          fs.unlinkSync(collagePath);
+        }
+      } catch {}
+    }
+  }
+};
