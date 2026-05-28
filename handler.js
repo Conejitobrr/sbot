@@ -405,20 +405,32 @@ async function messageHandler(sock, msg, store = {}) {
     const plugin = plugins.get(command);
     if (!plugin) return;
 
+    // 🚫 BLOQUEAR USUARIOS BANEADOS
+    if (!isOwner) {
+      const banned = await db.isBanned(sender);
+
+      if (banned) {
+        return sock.sendMessage(remoteJid, {
+          text: '🚫 Estás baneado del bot.\n\nNo puedes usar comandos.'
+        }, { quoted: msg });
+      }
+    }
+
     // ⛓️ BLOQUEAR COMANDOS SI ESTÁ ARRESTADO
     const jail = checkJail(sender);
 
     if (jail && !isOwner && command !== 'sobornar') {
-  return sock.sendMessage(remoteJid, {
-    text:
+      return sock.sendMessage(remoteJid, {
+        text:
 `⛓️ *ESTÁS ARRESTADO*
 
 No puedes usar comandos del bot por ahora.
 
 ⏳ Tiempo restante: *${msToTime(jail.until - Date.now())}*
 💸 Usa *.sobornar* para intentar salir antes.`
-  }, { quoted: msg });
+      }, { quoted: msg });
     }
+
     if (!isOwner) {
       if (fromGroup) {
         const groupData = await db.getGroup(remoteJid);
