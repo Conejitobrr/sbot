@@ -5,7 +5,9 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+
 const config = require('../config');
+const shop = require('../lib/shop');
 
 const execFileAsync = promisify(execFile);
 
@@ -307,7 +309,8 @@ module.exports = {
   commands: ['ver'],
 
   async execute({ sock, remoteJid, msg, sender, args, db, isOwner }) {
-    let charged = false;
+    let chargedXp = false;
+    let usedTicket = false;
 
     try {
       const userKey = cleanJid(sender);
@@ -317,6 +320,7 @@ module.exports = {
       const xp = Number(user.xp || 0);
       const premium = isPremiumUser(user);
       const owner = isOwner || isOwnerUser(userKey);
+      const verUses = await shop.getItem(userKey, 'verUses');
 
       if (['cancelar', 'cancel', 'no'].includes(option)) {
         pendingVer.delete(userKey);
@@ -334,10 +338,16 @@ module.exports = {
             text:
 `❌ No tienes ningún uso pendiente de *.ver*.
 
-Para canjear 1 uso, responde a una imagen, video, audio o gif y escribe:
-*.ver*
+🎟️ Usos comprados: *${verUses}*
 
-💰 Costo para usuarios normales: *${COSTO_VER} XP*
+Para usarlo:
+1. Responde a una imagen, video, audio o gif.
+2. Escribe *.ver*
+
+🛒 También puedes comprar usos:
+*.comprar ver*
+
+💰 Precio: *${COSTO_VER} XP*
 👑 Premium y owner: gratis`
           }, { quoted: msg });
         }
@@ -369,7 +379,7 @@ Usa más el bot, reclama recompensas, participa en eventos o sube de nivel para 
         }
 
         await db.removeXP(userKey, COSTO_VER);
-        charged = true;
+        chargedXp = true;
 
         await sendMedia(
           sock,
@@ -398,16 +408,30 @@ Responde al archivo y escribe *.ver*
           }, { quoted: msg });
         }
 
+        if (verUses > 0) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`🎟️ Tienes *${verUses}* uso(s) comprado(s) de *.ver*.
+
+Para usar uno:
+1. Responde a una imagen, video, audio o gif.
+2. Escribe *.ver*`
+          }, { quoted: msg });
+        }
+
         if (xp < COSTO_VER) {
           return sock.sendMessage(remoteJid, {
             text:
-`❌ No tienes ningún uso canjeado de *.ver*.
+`❌ No tienes usos comprados de *.ver*.
 
-💰 Necesitas *${COSTO_VER} XP* para canjear 1 uso.
+💰 Necesitas *${COSTO_VER} XP* para comprar o canjear 1 uso.
 ⭐ Tu XP actual: *${xp} XP*
 📌 Te faltan: *${COSTO_VER - xp} XP*
 
-Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder canjearlo.`
+Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder comprarlo.
+
+🛒 Cuando juntes XP, usa:
+*.comprar ver*`
           }, { quoted: msg });
         }
 
@@ -415,12 +439,16 @@ Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder can
           text:
 `ℹ️ No tienes ningún uso pendiente de *.ver*.
 
-✅ Tienes XP suficiente para canjear 1 uso.
+✅ Tienes XP suficiente para comprar o canjear 1 uso.
 
-💰 Costo: *${COSTO_VER} XP*
+💰 Precio: *${COSTO_VER} XP*
 ⭐ Tu XP actual: *${xp} XP*
 
-Para canjearlo:
+Opciones:
+🛒 Comprar uso para después:
+*.comprar ver*
+
+⚡ Usarlo ahora:
 1. Responde a una imagen, video, audio o gif.
 2. Escribe *.ver*
 3. Confirma con *.ver aceptar*`
@@ -439,6 +467,21 @@ Para canjearlo:
         return sendMedia(sock, remoteJid, mediaInfo, quotedOriginal);
       }
 
+      if (verUses > 0) {
+        const used = await shop.useItem(userKey, 'verUses', 1);
+
+        if (!used) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ No se pudo usar tu ticket de *.ver*. Intenta otra vez.'
+          }, { quoted: msg });
+        }
+
+        usedTicket = true;
+
+        await sendMedia(sock, remoteJid, mediaInfo, quotedOriginal);
+        return;
+      }
+
       if (xp < COSTO_VER) {
         return sock.sendMessage(remoteJid, {
           text:
@@ -448,7 +491,10 @@ Para canjearlo:
 ⭐ Tu XP actual: *${xp} XP*
 📌 Te faltan: *${COSTO_VER - xp} XP*
 
-Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder canjear 1 uso.`
+Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder canjear 1 uso.
+
+🛒 También puedes comprarlo cuando tengas XP:
+*.comprar ver*`
         }, { quoted: msg });
       }
 
@@ -462,6 +508,8 @@ Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder can
       return sock.sendMessage(remoteJid, {
         text:
 `⚠️ *Confirmar canje*
+
+No tienes usos comprados de *.ver*.
 
 Vas a gastar *${COSTO_VER} XP* para usar *.ver* una vez.
 
@@ -480,16 +528,24 @@ Para cancelar:
     } catch (err) {
       console.log('❌ Error en ver:', err?.message || err);
 
-      if (charged) {
+      if (chargedXp) {
         try {
           await db.addXP(cleanJid(sender), COSTO_VER);
         } catch {}
       }
 
+      if (usedTicket) {
+        try {
+          await shop.addItem(cleanJid(sender), 'verUses', 1);
+        } catch {}
+      }
+
       return sock.sendMessage(remoteJid, {
-        text: charged
+        text: chargedXp
           ? '❌ Error reenviando el archivo.\n\n💰 Se devolvieron tus 10000 XP.'
-          : '❌ Error reenviando el archivo.'
+          : usedTicket
+            ? '❌ Error reenviando el archivo.\n\n🎟️ Se devolvió tu uso de .ver.'
+            : '❌ Error reenviando el archivo.'
       }, { quoted: msg });
     }
   }
