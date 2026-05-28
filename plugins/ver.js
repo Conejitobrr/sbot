@@ -98,7 +98,8 @@ function getMediaInfo(message = {}) {
       type: 'image',
       mediaType: 'image',
       media: message.imageMessage,
-      mimetype: message.imageMessage.mimetype || 'image/jpeg'
+      mimetype: message.imageMessage.mimetype || 'image/jpeg',
+      caption: message.imageMessage.caption || ''
     };
   }
 
@@ -107,7 +108,8 @@ function getMediaInfo(message = {}) {
       type: 'video',
       mediaType: 'video',
       media: message.videoMessage,
-      mimetype: message.videoMessage.mimetype || 'video/mp4'
+      mimetype: message.videoMessage.mimetype || 'video/mp4',
+      caption: message.videoMessage.caption || ''
     };
   }
 
@@ -117,13 +119,15 @@ function getMediaInfo(message = {}) {
       mediaType: 'audio',
       media: message.audioMessage,
       mimetype: message.audioMessage.mimetype || 'audio/mpeg',
-      ptt: message.audioMessage.ptt || false
+      ptt: message.audioMessage.ptt || false,
+      caption: ''
     };
   }
 
   if (message.documentMessage) {
     const mimetype = message.documentMessage.mimetype || '';
     const fileName = message.documentMessage.fileName || 'archivo';
+    const caption = message.documentMessage.caption || '';
 
     if (mimetype.startsWith('image/')) {
       return {
@@ -131,7 +135,8 @@ function getMediaInfo(message = {}) {
         mediaType: 'document',
         media: message.documentMessage,
         mimetype,
-        fileName
+        fileName,
+        caption
       };
     }
 
@@ -141,7 +146,8 @@ function getMediaInfo(message = {}) {
         mediaType: 'document',
         media: message.documentMessage,
         mimetype,
-        fileName
+        fileName,
+        caption
       };
     }
 
@@ -152,7 +158,8 @@ function getMediaInfo(message = {}) {
         media: message.documentMessage,
         mimetype,
         fileName,
-        ptt: false
+        ptt: false,
+        caption
       };
     }
   }
@@ -175,23 +182,33 @@ async function sendMedia(sock, remoteJid, mediaInfo, quotedOriginal) {
   if (mediaInfo.type === 'image') {
     return sock.sendMessage(remoteJid, {
       image: buffer,
-      mimetype: mediaInfo.mimetype
+      mimetype: mediaInfo.mimetype,
+      caption: mediaInfo.caption || ''
     }, { quoted: quotedOriginal });
   }
 
   if (mediaInfo.type === 'video') {
     return sock.sendMessage(remoteJid, {
       video: buffer,
-      mimetype: mediaInfo.mimetype
+      mimetype: mediaInfo.mimetype,
+      caption: mediaInfo.caption || ''
     }, { quoted: quotedOriginal });
   }
 
   if (mediaInfo.type === 'audio') {
-    return sock.sendMessage(remoteJid, {
+    await sock.sendMessage(remoteJid, {
       audio: buffer,
       mimetype: mediaInfo.mimetype,
       ptt: mediaInfo.ptt || false
     }, { quoted: quotedOriginal });
+
+    if (mediaInfo.caption) {
+      return sock.sendMessage(remoteJid, {
+        text: mediaInfo.caption
+      }, { quoted: quotedOriginal });
+    }
+
+    return;
   }
 }
 
@@ -204,6 +221,11 @@ module.exports = {
     try {
       const userKey = cleanJid(sender);
       const option = (args?.[0] || '').toLowerCase();
+
+      const user = await db.getUser(userKey);
+      const xp = Number(user.xp || 0);
+      const premium = isPremiumUser(user);
+      const owner = isOwner || isOwnerUser(userKey);
 
       if (['cancelar', 'cancel', 'no'].includes(option)) {
         pendingVer.delete(userKey);
@@ -219,10 +241,13 @@ module.exports = {
         if (!pending) {
           return sock.sendMessage(remoteJid, {
             text:
-`❌ No tienes ningún canje pendiente.
+`❌ No tienes ningún uso pendiente de *.ver*.
 
-Responde a una imagen, video o audio y usa:
-.ver`
+Para canjear 1 uso, responde a una imagen, video o audio y escribe:
+*.ver*
+
+💰 Costo para usuarios normales: *${COSTO_VER} XP*
+👑 Premium y owner: gratis`
           }, { quoted: msg });
         }
 
@@ -230,22 +255,25 @@ Responde a una imagen, video o audio y usa:
           pendingVer.delete(userKey);
 
           return sock.sendMessage(remoteJid, {
-            text: '⏳ El canje expiró. Vuelve a usar *.ver*.'
+            text: '⏳ El canje expiró. Vuelve a responder al archivo y usa *.ver*.'
           }, { quoted: msg });
         }
 
-        const user = await db.getUser(userKey);
-        const xp = Number(user.xp || 0);
+        const freshUser = await db.getUser(userKey);
+        const freshXp = Number(freshUser.xp || 0);
 
-        if (xp < COSTO_VER) {
+        if (freshXp < COSTO_VER) {
           pendingVer.delete(userKey);
 
           return sock.sendMessage(remoteJid, {
             text:
-`❌ Ya no tienes suficiente XP.
+`❌ No tienes suficiente XP para canjear *.ver*.
 
 💰 Costo: *${COSTO_VER} XP*
-⭐ Tu XP actual: *${xp} XP*`
+⭐ Tu XP actual: *${freshXp} XP*
+📌 Te faltan: *${COSTO_VER - freshXp} XP*
+
+Usa más el bot, reclama recompensas, participa en eventos o sube de nivel para juntar XP.`
           }, { quoted: msg });
         }
 
@@ -260,7 +288,6 @@ Responde a una imagen, video o audio y usa:
         );
 
         pendingVer.delete(userKey);
-
         return;
       }
 
@@ -268,15 +295,44 @@ Responde a una imagen, video o audio y usa:
       const quotedOriginal = getQuotedWAMessage(msg, remoteJid);
 
       if (!quoted) {
-        return sock.sendMessage(remoteJid, {
-          text:
+        if (owner || premium) {
+          return sock.sendMessage(remoteJid, {
+            text:
 `❌ Responde a una imagen, video o audio.
 
 Ejemplo:
 Responde al archivo y escribe *.ver*
 
-💰 Costo usuarios normales: *${COSTO_VER} XP*
-👑 Owner y premium: gratis`
+👑 Para ti es gratis.`
+          }, { quoted: msg });
+        }
+
+        if (xp < COSTO_VER) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`❌ No tienes ningún uso canjeado de *.ver*.
+
+💰 Necesitas *${COSTO_VER} XP* para canjear 1 uso.
+⭐ Tu XP actual: *${xp} XP*
+📌 Te faltan: *${COSTO_VER - xp} XP*
+
+Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder canjearlo.`
+          }, { quoted: msg });
+        }
+
+        return sock.sendMessage(remoteJid, {
+          text:
+`ℹ️ No tienes ningún uso pendiente de *.ver*.
+
+✅ Tienes XP suficiente para canjear 1 uso.
+
+💰 Costo: *${COSTO_VER} XP*
+⭐ Tu XP actual: *${xp} XP*
+
+Para canjearlo:
+1. Responde a una imagen, video o audio.
+2. Escribe *.ver*
+3. Confirma con *.ver aceptar*`
         }, { quoted: msg });
       }
 
@@ -288,15 +344,9 @@ Responde al archivo y escribe *.ver*
         }, { quoted: msg });
       }
 
-      const user = await db.getUser(userKey);
-      const premium = isPremiumUser(user);
-      const owner = isOwner || isOwnerUser(userKey);
-
       if (owner || premium) {
         return sendMedia(sock, remoteJid, mediaInfo, quotedOriginal);
       }
-
-      const xp = Number(user.xp || 0);
 
       if (xp < COSTO_VER) {
         return sock.sendMessage(remoteJid, {
@@ -307,7 +357,7 @@ Responde al archivo y escribe *.ver*
 ⭐ Tu XP actual: *${xp} XP*
 📌 Te faltan: *${COSTO_VER - xp} XP*
 
-👑 Premium y owner lo usan gratis.`
+Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder canjear 1 uso.`
         }, { quoted: msg });
       }
 
@@ -322,12 +372,12 @@ Responde al archivo y escribe *.ver*
         text:
 `⚠️ *Confirmar canje*
 
-Usar *.ver* cuesta *${COSTO_VER} XP*.
+Vas a gastar *${COSTO_VER} XP* para usar *.ver* una vez.
 
 ⭐ Tu XP actual: *${xp} XP*
 ⭐ Te quedaría: *${xp - COSTO_VER} XP*
 
-Para confirmar escribe:
+Para confirmar:
 *.ver aceptar*
 
 Para cancelar:
