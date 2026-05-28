@@ -228,22 +228,6 @@ async function makeArrestTile(input, output, title = 'ARRESTADO') {
     '-draw', 'circle 528,578 556,578',
     '-draw', 'circle 674,578 702,578',
 
-    // Candado abajo izquierda
-    '-fill', 'rgba(45,45,45,0.95)',
-    '-stroke', 'rgba(180,180,180,0.75)',
-    '-strokewidth', '4',
-    '-draw', 'roundrectangle 42,510 182,660 10,10',
-
-    '-fill', 'none',
-    '-stroke', 'rgba(180,180,180,0.85)',
-    '-strokewidth', '12',
-    '-draw', 'arc 75,445 150,555 200,140',
-
-    '-fill', 'rgba(0,0,0,0.75)',
-    '-stroke', 'none',
-    '-draw', 'circle 112,580 126,580',
-    '-draw', 'rectangle 106,580 118,620',
-
     // Cinta roja
     '-fill', 'rgba(185,0,0,0.86)',
     '-draw', 'rectangle 0,292 720,420',
