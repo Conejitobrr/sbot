@@ -995,8 +995,7 @@ Ejemplos:
         caption:
 `💛 *Galaxy of Love*
 
-👑 Nombre: *${data.nombre}*
-✍️ De: *${data.autor}*
+👑 Nombre: *${data.nombre}*${data.autor ? `\n✍️ De: *${data.autor}*` : ''}
 
 Abre el archivo HTML en tu navegador.`
       }, { quoted: msg });
