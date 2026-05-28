@@ -24,15 +24,38 @@ function unwrapMessage(message = {}) {
   return message;
 }
 
+function getQuotedContext(msg) {
+  return (
+    msg.message?.extendedTextMessage?.contextInfo ||
+    msg.message?.imageMessage?.contextInfo ||
+    msg.message?.videoMessage?.contextInfo ||
+    msg.message?.audioMessage?.contextInfo ||
+    msg.message?.documentMessage?.contextInfo ||
+    null
+  );
+}
+
 function getQuotedMessage(msg) {
-  const quoted =
-    msg.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
-    msg.message?.imageMessage?.contextInfo?.quotedMessage ||
-    msg.message?.videoMessage?.contextInfo?.quotedMessage ||
-    msg.message?.audioMessage?.contextInfo?.quotedMessage ||
-    null;
+  const ctx = getQuotedContext(msg);
+  const quoted = ctx?.quotedMessage || null;
 
   return quoted ? unwrapMessage(quoted) : null;
+}
+
+function getQuotedWAMessage(msg, remoteJid) {
+  const ctx = getQuotedContext(msg);
+
+  if (!ctx?.quotedMessage || !ctx?.stanzaId) return msg;
+
+  return {
+    key: {
+      remoteJid,
+      id: ctx.stanzaId,
+      participant: ctx.participant,
+      fromMe: false
+    },
+    message: ctx.quotedMessage
+  };
 }
 
 function getMediaInfo(message = {}) {
@@ -109,6 +132,7 @@ module.exports = {
   async execute({ sock, remoteJid, msg }) {
     try {
       const quoted = getQuotedMessage(msg);
+      const quotedOriginal = getQuotedWAMessage(msg, remoteJid);
 
       if (!quoted) {
         return sock.sendMessage(remoteJid, {
@@ -141,29 +165,26 @@ Responde al archivo y escribe *.ver*`
         }, { quoted: msg });
       }
 
-      // 📷 Reenviar imagen limpia, sin citar y sin descripción
       if (mediaInfo.type === 'image') {
         return sock.sendMessage(remoteJid, {
           image: buffer,
           mimetype: mediaInfo.mimetype
-        });
+        }, { quoted: quotedOriginal });
       }
 
-      // 🎥 Reenviar video limpio, sin citar y sin descripción
       if (mediaInfo.type === 'video') {
         return sock.sendMessage(remoteJid, {
           video: buffer,
           mimetype: mediaInfo.mimetype
-        });
+        }, { quoted: quotedOriginal });
       }
 
-      // 🎧 Reenviar audio limpio, sin citar
       if (mediaInfo.type === 'audio') {
         return sock.sendMessage(remoteJid, {
           audio: buffer,
           mimetype: mediaInfo.mimetype,
           ptt: mediaInfo.ptt || false
-        });
+        }, { quoted: quotedOriginal });
       }
 
     } catch (err) {
