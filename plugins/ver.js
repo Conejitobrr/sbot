@@ -12,47 +12,92 @@ async function streamToBuffer(stream) {
   return buffer;
 }
 
+function unwrapMessage(message = {}) {
+  if (message.ephemeralMessage?.message) {
+    return unwrapMessage(message.ephemeralMessage.message);
+  }
+
+  if (message.documentWithCaptionMessage?.message) {
+    return unwrapMessage(message.documentWithCaptionMessage.message);
+  }
+
+  return message;
+}
+
 function getQuotedMessage(msg) {
-  return msg.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
+  const quoted =
+    msg.message?.extendedTextMessage?.contextInfo?.quotedMessage ||
+    msg.message?.imageMessage?.contextInfo?.quotedMessage ||
+    msg.message?.videoMessage?.contextInfo?.quotedMessage ||
+    msg.message?.audioMessage?.contextInfo?.quotedMessage ||
+    null;
+
+  return quoted ? unwrapMessage(quoted) : null;
 }
 
-function isViewOnce(message = {}) {
-  return (
-    message.viewOnceMessage ||
-    message.viewOnceMessageV2 ||
-    message.viewOnceMessageV2Extension ||
-    message.imageMessage?.viewOnce === true ||
-    message.videoMessage?.viewOnce === true ||
-    message.audioMessage?.viewOnce === true
-  );
-}
-
-function getMediaMessage(message = {}) {
+function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
       type: 'image',
+      mediaType: 'image',
       media: message.imageMessage,
-      mimetype: message.imageMessage.mimetype || 'image/jpeg',
-      caption: message.imageMessage.caption || ''
+      mimetype: message.imageMessage.mimetype || 'image/jpeg'
     };
   }
 
   if (message.videoMessage) {
     return {
       type: 'video',
+      mediaType: 'video',
       media: message.videoMessage,
-      mimetype: message.videoMessage.mimetype || 'video/mp4',
-      caption: message.videoMessage.caption || ''
+      mimetype: message.videoMessage.mimetype || 'video/mp4'
     };
   }
 
   if (message.audioMessage) {
     return {
       type: 'audio',
+      mediaType: 'audio',
       media: message.audioMessage,
       mimetype: message.audioMessage.mimetype || 'audio/mpeg',
       ptt: message.audioMessage.ptt || false
     };
+  }
+
+  if (message.documentMessage) {
+    const mimetype = message.documentMessage.mimetype || '';
+    const fileName = message.documentMessage.fileName || 'archivo';
+
+    if (mimetype.startsWith('image/')) {
+      return {
+        type: 'image',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName
+      };
+    }
+
+    if (mimetype.startsWith('video/')) {
+      return {
+        type: 'video',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName
+      };
+    }
+
+    if (mimetype.startsWith('audio/')) {
+      return {
+        type: 'audio',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        ptt: false
+      };
+    }
   }
 
   return null;
@@ -68,58 +113,56 @@ module.exports = {
       if (!quoted) {
         return sock.sendMessage(remoteJid, {
           text:
-`❌ Responde a una foto, video o audio.
+`❌ Responde a una imagen, video o audio.
 
 Ejemplo:
-Responde al mensaje y escribe *.ver*`
+Responde al archivo y escribe *.ver*`
         }, { quoted: msg });
       }
 
-      if (isViewOnce(quoted)) {
+      const mediaInfo = getMediaInfo(quoted);
+
+      if (!mediaInfo) {
         return sock.sendMessage(remoteJid, {
-          text:
-`🔒 No puedo reenviar contenido de *ver una sola vez*.
-
-Pídele a la persona que lo envíe como foto, video o audio normal.`
-        }, { quoted: msg });
-      }
-
-      const mediaData = getMediaMessage(quoted);
-
-      if (!mediaData) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ El mensaje citado no contiene foto, video ni audio normal.'
+          text: '❌ El mensaje citado no es imagen, video ni audio.'
         }, { quoted: msg });
       }
 
       const stream = await downloadContentFromMessage(
-        mediaData.media,
-        mediaData.type
+        mediaInfo.media,
+        mediaInfo.mediaType
       );
 
       const buffer = await streamToBuffer(stream);
 
-      if (mediaData.type === 'image') {
+      if (!buffer || !buffer.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se pudo descargar el archivo.'
+        }, { quoted: msg });
+      }
+
+      // 📷 Reenviar imagen limpia, sin citar y sin descripción
+      if (mediaInfo.type === 'image') {
         return sock.sendMessage(remoteJid, {
           image: buffer,
-          mimetype: mediaData.mimetype,
-          caption: mediaData.caption || ''
+          mimetype: mediaInfo.mimetype
         });
       }
 
-      if (mediaData.type === 'video') {
+      // 🎥 Reenviar video limpio, sin citar y sin descripción
+      if (mediaInfo.type === 'video') {
         return sock.sendMessage(remoteJid, {
           video: buffer,
-          mimetype: mediaData.mimetype,
-          caption: mediaData.caption || ''
+          mimetype: mediaInfo.mimetype
         });
       }
 
-      if (mediaData.type === 'audio') {
+      // 🎧 Reenviar audio limpio, sin citar
+      if (mediaInfo.type === 'audio') {
         return sock.sendMessage(remoteJid, {
           audio: buffer,
-          mimetype: mediaData.mimetype,
-          ptt: mediaData.ptt
+          mimetype: mediaInfo.mimetype,
+          ptt: mediaInfo.ptt || false
         });
       }
 
@@ -127,7 +170,7 @@ Pídele a la persona que lo envíe como foto, video o audio normal.`
       console.log('❌ Error en ver:', err?.message || err);
 
       return sock.sendMessage(remoteJid, {
-        text: '❌ Error al procesar el archivo.'
+        text: '❌ Error reenviando el archivo.'
       }, { quoted: msg });
     }
   }
