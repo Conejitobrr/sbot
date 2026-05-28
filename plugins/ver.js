@@ -1,12 +1,25 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const config = require('../config');
 
+const execFileAsync = promisify(execFile);
+
 const COSTO_VER = 10000;
 const PENDING_TIME = 60 * 1000;
+const TEMP_DIR = path.join(process.cwd(), 'temp');
 
 const pendingVer = new Map();
+
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
 
 async function streamToBuffer(stream) {
   let buffer = Buffer.from([]);
@@ -104,6 +117,17 @@ function getMediaInfo(message = {}) {
   }
 
   if (message.videoMessage) {
+    if (message.videoMessage.gifPlayback) {
+      return {
+        type: 'gif',
+        mediaType: 'video',
+        media: message.videoMessage,
+        mimetype: message.videoMessage.mimetype || 'video/mp4',
+        caption: message.videoMessage.caption || '',
+        gifPlayback: true
+      };
+    }
+
     return {
       type: 'video',
       mediaType: 'video',
@@ -128,6 +152,18 @@ function getMediaInfo(message = {}) {
     const mimetype = message.documentMessage.mimetype || '';
     const fileName = message.documentMessage.fileName || 'archivo';
     const caption = message.documentMessage.caption || '';
+    const lowerName = String(fileName).toLowerCase();
+
+    if (mimetype === 'image/gif' || lowerName.endsWith('.gif')) {
+      return {
+        type: 'gif_file',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption
+      };
+    }
 
     if (mimetype.startsWith('image/')) {
       return {
@@ -167,48 +203,103 @@ function getMediaInfo(message = {}) {
   return null;
 }
 
+async function convertGifToMp4(inputPath, outputPath) {
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i', inputPath,
+    '-movflags', '+faststart',
+    '-pix_fmt', 'yuv420p',
+    '-vf', 'fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2',
+    outputPath
+  ]);
+}
+
 async function sendMedia(sock, remoteJid, mediaInfo, quotedOriginal) {
-  const stream = await downloadContentFromMessage(
-    mediaInfo.media,
-    mediaInfo.mediaType
-  );
+  let tempInput = null;
+  let tempOutput = null;
 
-  const buffer = await streamToBuffer(stream);
+  try {
+    const stream = await downloadContentFromMessage(
+      mediaInfo.media,
+      mediaInfo.mediaType
+    );
 
-  if (!buffer || !buffer.length) {
-    throw new Error('No se pudo descargar el archivo.');
-  }
+    const buffer = await streamToBuffer(stream);
 
-  if (mediaInfo.type === 'image') {
-    return sock.sendMessage(remoteJid, {
-      image: buffer,
-      mimetype: mediaInfo.mimetype,
-      caption: mediaInfo.caption || ''
-    }, { quoted: quotedOriginal });
-  }
+    if (!buffer || !buffer.length) {
+      throw new Error('No se pudo descargar el archivo.');
+    }
 
-  if (mediaInfo.type === 'video') {
-    return sock.sendMessage(remoteJid, {
-      video: buffer,
-      mimetype: mediaInfo.mimetype,
-      caption: mediaInfo.caption || ''
-    }, { quoted: quotedOriginal });
-  }
-
-  if (mediaInfo.type === 'audio') {
-    await sock.sendMessage(remoteJid, {
-      audio: buffer,
-      mimetype: mediaInfo.mimetype,
-      ptt: mediaInfo.ptt || false
-    }, { quoted: quotedOriginal });
-
-    if (mediaInfo.caption) {
+    if (mediaInfo.type === 'image') {
       return sock.sendMessage(remoteJid, {
-        text: mediaInfo.caption
+        image: buffer,
+        mimetype: mediaInfo.mimetype,
+        caption: mediaInfo.caption || ''
       }, { quoted: quotedOriginal });
     }
 
-    return;
+    if (mediaInfo.type === 'video') {
+      return sock.sendMessage(remoteJid, {
+        video: buffer,
+        mimetype: mediaInfo.mimetype,
+        caption: mediaInfo.caption || ''
+      }, { quoted: quotedOriginal });
+    }
+
+    if (mediaInfo.type === 'gif') {
+      return sock.sendMessage(remoteJid, {
+        video: buffer,
+        mimetype: 'video/mp4',
+        gifPlayback: true,
+        caption: mediaInfo.caption || ''
+      }, { quoted: quotedOriginal });
+    }
+
+    if (mediaInfo.type === 'gif_file') {
+      ensureTemp();
+
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+      tempInput = path.join(TEMP_DIR, `ver_gif_${id}.gif`);
+      tempOutput = path.join(TEMP_DIR, `ver_gif_${id}.mp4`);
+
+      fs.writeFileSync(tempInput, buffer);
+
+      await convertGifToMp4(tempInput, tempOutput);
+
+      const mp4Buffer = fs.readFileSync(tempOutput);
+
+      return sock.sendMessage(remoteJid, {
+        video: mp4Buffer,
+        mimetype: 'video/mp4',
+        gifPlayback: true,
+        caption: mediaInfo.caption || ''
+      }, { quoted: quotedOriginal });
+    }
+
+    if (mediaInfo.type === 'audio') {
+      await sock.sendMessage(remoteJid, {
+        audio: buffer,
+        mimetype: mediaInfo.mimetype,
+        ptt: mediaInfo.ptt || false
+      }, { quoted: quotedOriginal });
+
+      if (mediaInfo.caption) {
+        return sock.sendMessage(remoteJid, {
+          text: mediaInfo.caption
+        }, { quoted: quotedOriginal });
+      }
+
+      return;
+    }
+
+  } finally {
+    for (const file of [tempInput, tempOutput]) {
+      try {
+        if (file && fs.existsSync(file)) {
+          fs.unlinkSync(file);
+        }
+      } catch {}
+    }
   }
 }
 
@@ -243,7 +334,7 @@ module.exports = {
             text:
 `❌ No tienes ningún uso pendiente de *.ver*.
 
-Para canjear 1 uso, responde a una imagen, video o audio y escribe:
+Para canjear 1 uso, responde a una imagen, video, audio o gif y escribe:
 *.ver*
 
 💰 Costo para usuarios normales: *${COSTO_VER} XP*
@@ -298,7 +389,7 @@ Usa más el bot, reclama recompensas, participa en eventos o sube de nivel para 
         if (owner || premium) {
           return sock.sendMessage(remoteJid, {
             text:
-`❌ Responde a una imagen, video o audio.
+`❌ Responde a una imagen, video, audio o gif.
 
 Ejemplo:
 Responde al archivo y escribe *.ver*
@@ -330,7 +421,7 @@ Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder can
 ⭐ Tu XP actual: *${xp} XP*
 
 Para canjearlo:
-1. Responde a una imagen, video o audio.
+1. Responde a una imagen, video, audio o gif.
 2. Escribe *.ver*
 3. Confirma con *.ver aceptar*`
         }, { quoted: msg });
@@ -340,7 +431,7 @@ Para canjearlo:
 
       if (!mediaInfo) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ El mensaje citado no es imagen, video ni audio.'
+          text: '❌ El mensaje citado no es imagen, video, audio ni gif.'
         }, { quoted: msg });
       }
 
