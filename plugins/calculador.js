@@ -75,7 +75,7 @@ const RESPONSES = {
 
 module.exports = {
   commands: [
-    'gay2',
+    'gay',
     'lesbiana',
     'pajero',
     'pajera',
