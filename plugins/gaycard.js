@@ -5,7 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 module.exports = {
-  commands: ['gay'],
+  commands: ['gay2'],
 
   async execute(ctx) {
     const { sock, remoteJid, msg } = ctx;
