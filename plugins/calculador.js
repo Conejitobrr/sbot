@@ -50,7 +50,7 @@ _Calculando porcentaje de ${command}_`;
 }
 
 const RESPONSES = {
-  gay2: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%* *QUE PUTAZOOO*_`,
+  gay: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%* *QUE PUTAZOOO*_`,
 
   lesbiana: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%* *DE ENERGÍA ARCOÍRIS, QUE LESBIANA*_`,
 
