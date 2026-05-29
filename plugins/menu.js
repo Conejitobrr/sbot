@@ -42,6 +42,23 @@ module.exports = {
 ➤ *${p}claim* → Recompensa diaria
 ➤ *${p}robar* → Robar XP
 ➤ *${p}dar* → Transferir XP
+➤ *${p}tienda* → Ver tienda
+➤ *${p}comprar* → Comprar objetos
+➤ *${p}inventario* → Ver tus objetos
+➤ *${p}usar* → Usar objetos comprados
+
+━━━━━━━━━━━━━━━━━━━
+🚔 *POLICÍA Y CÁRCEL*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}policia* → Atrapar ladrones recientes
+➤ *${p}denunciar* → Denunciar robo reciente
+➤ *${p}carcel* → Ver estado de cárcel
+➤ *${p}fama* → Ver fama criminal
+➤ *${p}sobornar* → Ver costo de soborno
+➤ *${p}sobornar pagar* → Intentar sobornar
+➤ *${p}fianza* → Ver costo de fianza
+➤ *${p}fianza pagar* → Pagar fianza
+➤ *${p}usar llave* → Usar llave de celda
 
 ━━━━━━━━━━━━━━━━━━━
 😂 *DIVERSIÓN*
@@ -52,7 +69,7 @@ module.exports = {
 ➤ *${p}formarpareja*
 ➤ *${p}formarparejas*
 ➤ *${p}love*
-➤ *${p}gay*
+➤ *${p}gay2*
 ➤ *${p}topgays*
 ➤ *${p}hornycard*
 ➤ *${p}tutti* añade los seg que desean
@@ -60,6 +77,23 @@ module.exports = {
 ➤ *${p}frase*
 ➤ *${p}historiaromantica*
 ➤ *${p}clon*
+➤ *${p}proponer*
+➤ *${p}follar*
+
+━━━━━━━━━━━━━━━━━━━
+🎲 *CALCULADOR*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}gay* → Calculador random
+➤ *${p}lesbiana* → Calculador random
+➤ *${p}pajero* → Calculador random
+➤ *${p}pajera* → Calculador random
+➤ *${p}puto* → Calculador random
+➤ *${p}puta* → Calculador random
+➤ *${p}manco* → Calculador random
+➤ *${p}manca* → Calculador random
+➤ *${p}rata* → Calculador random
+➤ *${p}prostituto* → Calculador random
+➤ *${p}prostituta* → Calculador random
 
 ━━━━━━━━━━━━━━━━━━━
 🎵 *DESCARGAS*
@@ -82,19 +116,37 @@ module.exports = {
 ➤ *${p}toanime* → Estilo anime
 ➤ *${p}tts* → Texto a voz
 ➤ *${p}attp* → Texto a sticker
+➤ *${p}ver* → Ver archivo de 1 sola vez(premium)
+➤ *${p}fakeig* → Crear comentario fake de IG
+➤ *${p}galaxia* → Crear HTML Galaxy of Love
+➤ *${p}perfil* → Ver perfil de usuario
 
 ━━━━━━━━━━━━━━━━━━━
-⚙️ *SISTEMA*
+🛡️ *ADMINS*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}enable welcome* → Activar bienvenida
+➤ *${p}disable welcome* → Desactivar bienvenida
+➤ *${p}enable bot* → Activar bot
+➤ *${p}disable bot* → Desactivar bot
+
+━━━━━━━━━━━━━━━━━━━
+🤖 *IA / BOT*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}bot* → Hablar con SiriusBot
+
+━━━━━━━━━━━━━━━━━━━
+⚙️ *PREMIUM*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}prem* → Estado premium
 ➤ *${p}notify* → Notificaciones
-➤ *${p}enable* → Activar función
-➤ *${p}disable* → Desactivar función
 
 ━━━━━━━━━━━━━━━━━━━
 👑 *OWNER*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}addxp* → Añadir XP
+➤ *${p}antidelete* → Activar/desactivar antidelete
+➤ *${p}banuser* → Banear usuario del bot
+➤ *${p}unbanuser* → Quitar ban del bot
 ➤ *${p}update* → Actualizar bot
 
 ━━━━━━━━━━━━━━━━━━━
