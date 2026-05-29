@@ -31,17 +31,17 @@ function upperText(text = '') {
 }
 
 const RESPONSES = {
-  gay2: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%*_`,
+  gay2: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%* *QUE PUTAZOOO*_`,
 
-  lesbiana: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%* *DE ENERGÍA ARCOÍRIS*_`,
+  lesbiana: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%* *DE ENERGÍA ARCOÍRIS, QUE LESBIANA*_`,
 
-  pajero: target => `_*${upperText(target)}* *ES 😏💦* *${getPercent()}%* *DE MODO SOSPECHOSO*_`,
+  pajero: target => `_*${upperText(target)}* *ES 😏💦* *${getPercent()}%* *PAJERO*_`,
 
-  pajera: target => `_*${upperText(target)}* *ES 😏💦* *${getPercent()}%* *DE MODO SOSPECHOSO*_`,
+  pajera: target => `_*${upperText(target)}* *ES 😏💦* *${getPercent()}%* *PAJERA*_`,
 
-  puto: target => `_*${upperText(target)}* *TIENE 🔥* *${getPercent()}%* *DE MODO CANDELA XD*_`,
+  puto: target => `_*${upperText(target)}* *ES 🔥* *${getPercent()}%* *MÁS INFORMACIÓN A SU PRIVADO 🔥🥵 XD*_`,
 
-  puta: target => `_*${upperText(target)}* *TIENE 🔥* *${getPercent()}%* *DE MODO CANDELA XD*_`,
+  puta: target => `_*${upperText(target)}* *ES 🔥* *${getPercent()}%* *MÁS INFORMACIÓN A SU PRIVADO 🔥🥵 XD*_`,
 
   manco: target => `_*${upperText(target)}* *ES* *${getPercent()}%* *MANCO 💩*_`,
 
@@ -49,9 +49,9 @@ const RESPONSES = {
 
   rata: target => `_*${upperText(target)}* *ES* *${getPercent()}%* *RATA 🐁 COME QUESO 🧀*_`,
 
-  prostituto: target => `_*${upperText(target)}* *TIENE 🫦* *${getPercent()}%* *DE MODO TRAVIESO XD*_`,
+  prostituto: target => `_*${upperText(target)}* *ES 🫦* *${getPercent()}%* *🫦👅, QUIEN QUIERE DE SUS SERVICIOS? XD*_`,
 
-  prostituta: target => `_*${upperText(target)}* *TIENE 🫦* *${getPercent()}%* *DE MODO TRAVIESO XD*_`
+  prostituta: target => `_*${upperText(target)}* *ES 🫦* *${getPercent()}%* *🫦👅, QUIEN QUIERE DE SUS SERVICIOS? XD*_`
 };
 
 module.exports = {
