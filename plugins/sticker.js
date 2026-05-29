@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
 const STICKER_PACK_NAME = 'SiriusBot';
-const STICKER_AUTHOR = 'SiriusBot';
+const STICKER_AUTHOR = '';
 
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
@@ -124,7 +124,7 @@ function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
   const json = {
     'sticker-pack-id': 'com.siriusbot.sticker',
     'sticker-pack-name': packName,
-    'sticker-pack-publisher': author,
+    'sticker-pack-publisher': '',
     emojis: ['🤖']
   };
 
