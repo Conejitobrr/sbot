@@ -11,6 +11,9 @@ const execFileAsync = promisify(execFile);
 
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
+const STICKER_PACK_NAME = 'SiriusBot';
+const STICKER_AUTHOR = 'SiriusBot';
+
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -117,6 +120,44 @@ async function makeSticker(input, output, isImage) {
   await execFileAsync('ffmpeg', args);
 }
 
+function createExif(packName = STICKER_PACK_NAME, author = STICKER_AUTHOR) {
+  const json = {
+    'sticker-pack-id': 'com.siriusbot.sticker',
+    'sticker-pack-name': packName,
+    'sticker-pack-publisher': author,
+    emojis: ['🤖']
+  };
+
+  const jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8');
+
+  const exifHeader = Buffer.from([
+    0x49, 0x49, 0x2A, 0x00,
+    0x08, 0x00, 0x00, 0x00,
+    0x01, 0x00,
+    0x41, 0x57,
+    0x07, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x16, 0x00, 0x00, 0x00
+  ]);
+
+  exifHeader.writeUIntLE(jsonBuffer.length, 14, 4);
+
+  return Buffer.concat([exifHeader, jsonBuffer]);
+}
+
+async function addStickerMetadata(inputWebp, outputWebp, exifPath) {
+  fs.writeFileSync(exifPath, createExif());
+
+  await execFileAsync('webpmux', [
+    '-set',
+    'exif',
+    exifPath,
+    inputWebp,
+    '-o',
+    outputWebp
+  ]);
+}
+
 module.exports = {
   commands: ['s', 'sticker', 'stiker'],
 
@@ -125,6 +166,8 @@ module.exports = {
 
     let input = null;
     let output = null;
+    let exif = null;
+    let finalOutput = null;
 
     try {
       ensureTemp();
@@ -157,12 +200,16 @@ module.exports = {
 
       input = path.join(TEMP_DIR, `sticker_input_${id}.${ext}`);
       output = path.join(TEMP_DIR, `sticker_output_${id}.webp`);
+      exif = path.join(TEMP_DIR, `sticker_exif_${id}.exif`);
+      finalOutput = path.join(TEMP_DIR, `sticker_final_${id}.webp`);
 
       fs.writeFileSync(input, buffer);
 
       await makeSticker(input, output, info.isImage);
 
-      const sticker = fs.readFileSync(output);
+      await addStickerMetadata(output, finalOutput, exif);
+
+      const sticker = fs.readFileSync(finalOutput);
 
       await sock.sendMessage(remoteJid, {
         sticker
@@ -174,11 +221,11 @@ module.exports = {
       console.log('❌ Error en sticker:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al crear sticker. Asegúrate de tener ffmpeg instalado.'
+        text: '❌ Error al crear sticker. Asegúrate de tener ffmpeg y webpmux instalado.'
       }, { quoted: msg });
 
     } finally {
-      for (const file of [input, output]) {
+      for (const file of [input, output, exif, finalOutput]) {
         try {
           if (file && fs.existsSync(file)) fs.unlinkSync(file);
         } catch {}
