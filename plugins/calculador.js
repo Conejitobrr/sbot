@@ -30,6 +30,25 @@ function upperText(text = '') {
   return String(text || '').toUpperCase();
 }
 
+// ✅ Animación de carga
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function barra(percent = 0) {
+  const total = 16;
+  const filled = Math.round((percent / 100) * total);
+  const empty = total - filled;
+
+  return `《${'█'.repeat(filled)}${'░'.repeat(empty)}》 ${percent}%`;
+}
+
+function loadingText(command, percent) {
+  return `${barra(percent)}
+
+_Calculando porcentaje de ${command}_`;
+}
+
 const RESPONSES = {
   gay2: target => `_*${upperText(target)}* *ES 🏳️‍🌈* *${getPercent()}%* *QUE PUTAZOOO*_`,
 
@@ -95,10 +114,38 @@ Ejemplo:
         }, { quoted: msg });
       }
 
-      return sock.sendMessage(remoteJid, {
-        text: response(target),
+      // ✅ Primer salto
+      const sent = await sock.sendMessage(remoteJid, {
+        text: loadingText(command, 25),
         mentions: mentioned
       }, { quoted: msg });
+
+      await sleep(1200);
+
+      // ✅ Segundo salto
+      await sock.sendMessage(remoteJid, {
+        text: loadingText(command, 50),
+        edit: sent.key,
+        mentions: mentioned
+      });
+
+      await sleep(1200);
+
+      // ✅ Tercer salto
+      await sock.sendMessage(remoteJid, {
+        text: loadingText(command, 75),
+        edit: sent.key,
+        mentions: mentioned
+      });
+
+      await sleep(1200);
+
+      // ✅ Resultado final, sin mostrar 100%
+      return sock.sendMessage(remoteJid, {
+        text: response(target),
+        edit: sent.key,
+        mentions: mentioned
+      });
 
     } catch (err) {
       console.log('❌ Error en bromas:', err?.message || err);
