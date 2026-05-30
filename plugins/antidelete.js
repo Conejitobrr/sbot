@@ -252,7 +252,6 @@ async function saveMessage(msg, remoteJid, sender, pushName) {
     const viewOnceType = getViewOnceType(originalMessage);
 
     console.log(`👁️ Antidelete ignoró archivo de 1 sola vez: ${viewOnceType}`);
-    return;
   }
 
   const media = getMediaInfo(message);
