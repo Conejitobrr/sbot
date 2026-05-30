@@ -217,6 +217,19 @@ function hasMediaMessage(message = {}) {
   );
 }
 
+function isOnlySenderKeyMessage(message = {}) {
+  const keys = Object.keys(message || {});
+
+  if (!keys.length) return false;
+
+  return keys.every(key =>
+    [
+      'senderKeyDistributionMessage',
+      'messageContextInfo'
+    ].includes(key)
+  );
+}
+
 function hasViewOnceDeep(node, depth = 0, seen = new Set()) {
   if (!isObject(node)) return false;
   if (depth > 12) return false;
@@ -306,13 +319,18 @@ function getMessageKeysPreview(message = {}) {
 
 function getReadableMessage(msg) {
   const message = msg.message || {};
+
+  // ✅ En grupos, algunos archivos de 1 sola vez pueden llegar solo como paquete cifrado
+  if (isOnlySenderKeyMessage(message)) {
+    return '[Posible archivo de 1 sola vez / mensaje cifrado de grupo]';
+  }
+
   const found = findMediaDeep(message);
   const hasOnce = hasViewOnceDeep(message);
 
   const m = found?.message || message;
   const once = found?.isOnce || hasOnce ? ' de 1 sola vez' : '';
 
-  // ✅ Primero detectar archivos de 1 sola vez, aunque tengan caption/texto
   if (found?.isOnce || hasOnce) {
     if (m.imageMessage) return `[Imagen${once}]`;
     if (m.videoMessage) return m.videoMessage.gifPlayback ? `[GIF${once}]` : `[Video${once}]`;
@@ -337,6 +355,16 @@ function getReadableMessage(msg) {
   if (m.contactMessage) return '[Contacto]';
   if (m.contactsArrayMessage) return '[Contactos]';
   if (m.reactionMessage) return '[Reacción]';
+
+  if (message.protocolMessage) {
+    const type = message.protocolMessage.type;
+
+    if (message.protocolMessage.key?.id) {
+      return `[Mensaje eliminado | protocolMessage type: ${type}]`;
+    }
+
+    return `[Mensaje interno de WhatsApp | protocolMessage type: ${type}]`;
+  }
 
   return `[Sin texto | keys: ${getMessageKeysPreview(message)}]`;
 }
