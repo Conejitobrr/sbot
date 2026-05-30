@@ -3,7 +3,11 @@
 const fs = require('fs');
 const path = require('path');
 const { once } = require('events');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+
+const execFileAsync = promisify(execFile);
 
 const deletedCache = new Map();
 
@@ -12,10 +16,11 @@ const CACHE_TIME = 2 * 60 * 60 * 1000; // 2 horas
 const MAX_MEDIA_SIZE = 100 * 1024 * 1024; // 100 MB
 
 const MEDIA_DIR = path.join(process.cwd(), 'temp', 'antidelete');
+const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-function ensureMediaDir() {
-  if (!fs.existsSync(MEDIA_DIR)) {
-    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 }
 
@@ -110,6 +115,16 @@ function unwrapMessage(message = {}) {
   return message;
 }
 
+function isViewOnce(message = {}) {
+  return (
+    message.viewOnceMessage ||
+    message.viewOnceMessageV2 ||
+    message.viewOnceMessageV2Extension ||
+    message.imageMessage?.viewOnce === true ||
+    message.videoMessage?.viewOnce === true
+  );
+}
+
 function getContextInfo(message = {}) {
   return (
     message.extendedTextMessage?.contextInfo ||
@@ -150,6 +165,7 @@ function getText(message = {}) {
   );
 }
 
+// ✅ DETECCIÓN TIPO .VER
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
@@ -163,14 +179,26 @@ function getMediaInfo(message = {}) {
   }
 
   if (message.videoMessage) {
+    if (message.videoMessage.gifPlayback) {
+      return {
+        type: 'gif',
+        mediaType: 'video',
+        media: message.videoMessage,
+        mimetype: message.videoMessage.mimetype || 'video/mp4',
+        caption: message.videoMessage.caption || '',
+        gifPlayback: true,
+        fileName: 'gif.mp4'
+      };
+    }
+
     return {
-      type: message.videoMessage.gifPlayback ? 'gif' : 'video',
+      type: 'video',
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
       caption: message.videoMessage.caption || '',
-      gifPlayback: message.videoMessage.gifPlayback || false,
-      fileName: message.videoMessage.gifPlayback ? 'gif.mp4' : 'video.mp4'
+      gifPlayback: false,
+      fileName: 'video.mp4'
     };
   }
 
@@ -213,6 +241,18 @@ function getMediaInfo(message = {}) {
     const mimetype = message.documentMessage.mimetype || 'application/octet-stream';
     const fileName = message.documentMessage.fileName || 'archivo';
     const caption = message.documentMessage.caption || '';
+    const lowerName = String(fileName).toLowerCase();
+
+    if (mimetype === 'image/gif' || lowerName.endsWith('.gif')) {
+      return {
+        type: 'gif_file',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption
+      };
+    }
 
     if (mimetype.startsWith('image/')) {
       return {
@@ -296,7 +336,7 @@ function getExtension(mediaInfo = {}) {
 }
 
 async function downloadMediaToFile(mediaInfo, msgId) {
-  ensureMediaDir();
+  ensureDir(MEDIA_DIR);
 
   const ext = getExtension(mediaInfo);
   const safeId = String(msgId || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '');
@@ -371,6 +411,17 @@ async function downloadMediaToFile(mediaInfo, msgId) {
   }
 }
 
+async function convertGifToMp4(inputPath, outputPath) {
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i', inputPath,
+    '-movflags', '+faststart',
+    '-pix_fmt', 'yuv420p',
+    '-vf', 'fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2',
+    outputPath
+  ]);
+}
+
 function deleteSaved(cacheKey, saved) {
   try {
     const keys = saved?.cacheKeys?.length ? saved.cacheKeys : [cacheKey];
@@ -424,7 +475,12 @@ async function saveMessage(ctx) {
   if (!id || !msg.message) return;
   if (isDeleteMessage(msg)) return;
 
-  const message = unwrapMessage(msg.message);
+  const originalMessage = msg.message;
+
+  // Se ignora 1 sola vez; aquí solo trabajamos mensajes normales
+  if (isViewOnce(originalMessage)) return;
+
+  const message = unwrapMessage(originalMessage);
   const media = getMediaInfo(message);
   const text = getText(message);
   const mentions = getMessageMentions(message);
@@ -495,79 +551,111 @@ async function sendSavedMedia(sock, remoteJid, saved, mentions) {
     return false;
   }
 
-  const buffer = fs.readFileSync(saved.filePath);
+  let tempOutput = null;
 
-  if (!buffer || !buffer.length) return false;
+  try {
+    const caption = buildCaption(
+      saved.sender,
+      media.caption || saved.text || ''
+    );
 
-  const caption = buildCaption(
-    saved.sender,
-    media.caption || saved.text || ''
-  );
+    if (media.type === 'gif_file') {
+      ensureDir(TEMP_DIR);
 
-  if (media.type === 'image') {
-    await sock.sendMessage(remoteJid, {
-      image: buffer,
-      mimetype: media.mimetype,
-      caption,
-      mentions
-    });
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+      tempOutput = path.join(TEMP_DIR, `antidelete_gif_${id}.mp4`);
 
-    return true;
+      await convertGifToMp4(saved.filePath, tempOutput);
+
+      const mp4Buffer = fs.readFileSync(tempOutput);
+
+      await sock.sendMessage(remoteJid, {
+        video: mp4Buffer,
+        mimetype: 'video/mp4',
+        gifPlayback: true,
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    const buffer = fs.readFileSync(saved.filePath);
+
+    if (!buffer || !buffer.length) return false;
+
+    if (media.type === 'image') {
+      await sock.sendMessage(remoteJid, {
+        image: buffer,
+        mimetype: media.mimetype,
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'video' || media.type === 'gif') {
+      await sock.sendMessage(remoteJid, {
+        video: buffer,
+        mimetype: media.mimetype || 'video/mp4',
+        gifPlayback: media.gifPlayback || false,
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'audio') {
+      await sock.sendMessage(remoteJid, {
+        audio: buffer,
+        mimetype: media.mimetype,
+        ptt: media.ptt || false
+      });
+
+      await sock.sendMessage(remoteJid, {
+        text: caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'sticker') {
+      await sock.sendMessage(remoteJid, {
+        sticker: buffer
+      });
+
+      await sock.sendMessage(remoteJid, {
+        text: caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'document') {
+      await sock.sendMessage(remoteJid, {
+        document: buffer,
+        mimetype: media.mimetype,
+        fileName: media.fileName || 'archivo',
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    return false;
+
+  } finally {
+    try {
+      if (tempOutput && fs.existsSync(tempOutput)) {
+        fs.unlinkSync(tempOutput);
+      }
+    } catch {}
   }
-
-  if (media.type === 'video' || media.type === 'gif') {
-    await sock.sendMessage(remoteJid, {
-      video: buffer,
-      mimetype: media.mimetype || 'video/mp4',
-      gifPlayback: media.gifPlayback || false,
-      caption,
-      mentions
-    });
-
-    return true;
-  }
-
-  if (media.type === 'audio') {
-    await sock.sendMessage(remoteJid, {
-      audio: buffer,
-      mimetype: media.mimetype,
-      ptt: media.ptt || false
-    });
-
-    await sock.sendMessage(remoteJid, {
-      text: caption,
-      mentions
-    });
-
-    return true;
-  }
-
-  if (media.type === 'sticker') {
-    await sock.sendMessage(remoteJid, {
-      sticker: buffer
-    });
-
-    await sock.sendMessage(remoteJid, {
-      text: caption,
-      mentions
-    });
-
-    return true;
-  }
-
-  if (media.type === 'document') {
-    await sock.sendMessage(remoteJid, {
-      document: buffer,
-      mimetype: media.mimetype,
-      fileName: media.fileName || 'archivo',
-      caption,
-      mentions
-    });
-
-    return true;
-  }
-
-  return false;
 }
 
 module.exports = {
@@ -589,6 +677,7 @@ module.exports = {
 
       const enabled = await isEnabled(db, remoteJid, fromGroup);
 
+      // Guarda mensajes y multimedia normales apenas llegan
       if (!isDeleteMessage(msg)) {
         if (enabled) {
           await saveMessage({
