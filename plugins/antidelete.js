@@ -47,18 +47,6 @@ function unwrapMessage(message = {}) {
     return unwrapMessage(message.documentWithCaptionMessage.message);
   }
 
-  if (message.viewOnceMessage?.message) {
-    return message;
-  }
-
-  if (message.viewOnceMessageV2?.message) {
-    return message;
-  }
-
-  if (message.viewOnceMessageV2Extension?.message) {
-    return message;
-  }
-
   return message;
 }
 
@@ -111,6 +99,7 @@ function isViewOnce(message = {}) {
   );
 }
 
+// ✅ Detecta parecido a tu ver.js, pero ampliado para antidelete
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
@@ -123,13 +112,24 @@ function getMediaInfo(message = {}) {
   }
 
   if (message.videoMessage) {
+    if (message.videoMessage.gifPlayback) {
+      return {
+        type: 'gif',
+        mediaType: 'video',
+        media: message.videoMessage,
+        mimetype: message.videoMessage.mimetype || 'video/mp4',
+        caption: message.videoMessage.caption || '',
+        gifPlayback: true
+      };
+    }
+
     return {
       type: 'video',
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
       caption: message.videoMessage.caption || '',
-      gifPlayback: message.videoMessage.gifPlayback || false
+      gifPlayback: false
     };
   }
 
@@ -155,13 +155,64 @@ function getMediaInfo(message = {}) {
   }
 
   if (message.documentMessage) {
+    const mimetype = message.documentMessage.mimetype || 'application/octet-stream';
+    const fileName = message.documentMessage.fileName || 'archivo';
+    const caption = message.documentMessage.caption || '';
+    const lowerName = String(fileName).toLowerCase();
+
+    if (mimetype === 'image/gif' || lowerName.endsWith('.gif')) {
+      return {
+        type: 'document',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption
+      };
+    }
+
+    if (mimetype.startsWith('image/')) {
+      return {
+        type: 'image',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption
+      };
+    }
+
+    if (mimetype.startsWith('video/')) {
+      return {
+        type: 'video',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption,
+        gifPlayback: false
+      };
+    }
+
+    if (mimetype.startsWith('audio/')) {
+      return {
+        type: 'audio',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        ptt: false,
+        caption
+      };
+    }
+
     return {
       type: 'document',
       mediaType: 'document',
       media: message.documentMessage,
-      mimetype: message.documentMessage.mimetype || 'application/octet-stream',
-      fileName: message.documentMessage.fileName || 'archivo',
-      caption: message.documentMessage.caption || ''
+      mimetype,
+      fileName,
+      caption
     };
   }
 
@@ -187,10 +238,7 @@ async function downloadMediaBuffer(mediaInfo) {
   const buffer = await streamToBuffer(stream);
 
   if (!buffer || !buffer.length) return null;
-
-  if (buffer.length > MAX_MEDIA_BUFFER) {
-    return null;
-  }
+  if (buffer.length > MAX_MEDIA_BUFFER) return null;
 
   return buffer;
 }
@@ -203,6 +251,7 @@ async function saveMessage(msg, remoteJid, sender, pushName) {
 
   const message = unwrapMessage(msg.message);
 
+  // No guardar ver una sola vez
   if (isViewOnce(message)) return;
 
   const media = getMediaInfo(message);
@@ -278,6 +327,7 @@ module.exports = {
     try {
       cleanOldCache();
 
+      // ✅ Guarda mensajes normales apenas llegan
       if (!isDeleteMessage(msg)) {
         await saveMessage(msg, remoteJid, sender, pushName);
         return;
@@ -355,16 +405,22 @@ ${text}`,
           caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
-      if (media.type === 'video') {
+      if (media.type === 'video' || media.type === 'gif') {
         await sock.sendMessage(remoteJid, {
           video: buffer,
-          mimetype: media.mimetype,
-          caption,
+          mimetype: media.mimetype || 'video/mp4',
           gifPlayback: media.gifPlayback || false,
+          caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'audio') {
@@ -378,6 +434,9 @@ ${text}`,
           text: caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'sticker') {
@@ -389,16 +448,22 @@ ${text}`,
           text: caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'document') {
         await sock.sendMessage(remoteJid, {
           document: buffer,
           mimetype: media.mimetype,
-          fileName: media.fileName,
+          fileName: media.fileName || 'archivo',
           caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       deletedCache.delete(cacheKey);
