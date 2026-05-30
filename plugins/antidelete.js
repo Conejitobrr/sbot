@@ -17,6 +17,18 @@ function number(jid = '') {
     .replace(/\D/g, '');
 }
 
+function cleanName(name = '') {
+  return String(name || '')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40);
+}
+
+function escapeRegExp(text = '') {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getMsgKey(remoteJid, id) {
   return `${remoteJid}:${id}`;
 }
@@ -47,6 +59,92 @@ function unwrapMessage(message = {}) {
   }
 
   return message;
+}
+
+function getContextInfo(message = {}) {
+  return (
+    message.extendedTextMessage?.contextInfo ||
+    message.imageMessage?.contextInfo ||
+    message.videoMessage?.contextInfo ||
+    message.audioMessage?.contextInfo ||
+    message.stickerMessage?.contextInfo ||
+    message.documentMessage?.contextInfo ||
+    null
+  );
+}
+
+function getMessageMentions(message = {}) {
+  const ctx = getContextInfo(message);
+
+  return Array.isArray(ctx?.mentionedJid)
+    ? ctx.mentionedJid.map(cleanJid).filter(Boolean)
+    : [];
+}
+
+function uniqueMentions(list = []) {
+  return [...new Set(
+    list
+      .map(cleanJid)
+      .filter(Boolean)
+  )];
+}
+
+function getDisplayName(jid, store, groupMetadata) {
+  const clean = cleanJid(jid);
+
+  const contact =
+    store?.contacts?.[clean] ||
+    store?.contacts?.[jid] ||
+    {};
+
+  const participant = groupMetadata?.participants?.find(p =>
+    cleanJid(p.id) === clean ||
+    cleanJid(p.jid) === clean ||
+    cleanJid(p.lid) === clean ||
+    cleanJid(p.participant) === clean
+  ) || {};
+
+  const name = cleanName(
+    contact.name ||
+    contact.notify ||
+    contact.verifiedName ||
+    contact.pushName ||
+    participant.name ||
+    participant.notify ||
+    participant.verifiedName ||
+    participant.pushName ||
+    ''
+  );
+
+  return name || number(clean);
+}
+
+function getMentionMap(message = {}, store, groupMetadata) {
+  const mentioned = getMessageMentions(message);
+  const map = {};
+
+  for (const jid of mentioned) {
+    const clean = cleanJid(jid);
+    map[clean] = getDisplayName(clean, store, groupMetadata);
+  }
+
+  return map;
+}
+
+function replaceMentionNumbers(text = '', mentionMap = {}) {
+  let output = String(text || '');
+
+  for (const [jid, name] of Object.entries(mentionMap)) {
+    const num = number(jid);
+    const display = cleanName(name);
+
+    if (!num || !display) continue;
+
+    const regex = new RegExp(`@${escapeRegExp(num)}(?=\\s|$|\\n|\\r|\\t|[.,!¡¿?;:])`, 'g');
+    output = output.replace(regex, `@${display}`);
+  }
+
+  return output;
 }
 
 function getText(message = {}) {
@@ -134,7 +232,7 @@ async function streamToBuffer(stream) {
   return buffer;
 }
 
-function saveMessage(msg, remoteJid, sender, pushName) {
+function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
   const id = msg.key?.id;
 
   if (!id || !msg.message) return;
@@ -144,6 +242,10 @@ function saveMessage(msg, remoteJid, sender, pushName) {
 
   if (isViewOnce(message)) return;
 
+  const mentionMap = getMentionMap(message, store, groupMetadata);
+  const mentions = getMessageMentions(message);
+  const text = replaceMentionNumbers(getText(message), mentionMap);
+
   const key = getMsgKey(remoteJid, id);
 
   deletedCache.set(key, {
@@ -151,6 +253,9 @@ function saveMessage(msg, remoteJid, sender, pushName) {
     sender: cleanJid(sender),
     pushName: pushName || 'Usuario',
     message,
+    mentions,
+    mentionMap,
+    text,
     time: Date.now()
   });
 
@@ -194,7 +299,9 @@ module.exports = {
       sender,
       pushName,
       fromGroup,
-      db
+      db,
+      store,
+      groupMetadata
     } = ctx;
 
     try {
@@ -202,7 +309,7 @@ module.exports = {
 
       // ✅ Ahora guarda mensajes tanto en grupos como en privado
       if (!isDeleteMessage(msg)) {
-        saveMessage(msg, remoteJid, sender, pushName);
+        saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata);
         return;
       }
 
@@ -220,8 +327,9 @@ module.exports = {
       if (!saved) return;
 
       const user = saved.sender;
-      const text = getText(saved.message);
+      const text = saved.text || replaceMentionNumbers(getText(saved.message), saved.mentionMap || {});
       const media = getMediaInfo(saved.message);
+      const mentions = uniqueMentions([user, ...(saved.mentions || [])]);
 
       if (!media) {
         if (!text) return;
@@ -234,7 +342,7 @@ module.exports = {
 
 💬 Mensaje:
 ${text}`,
-          mentions: [user]
+          mentions
         });
 
         deletedCache.delete(cacheKey);
@@ -250,17 +358,19 @@ ${text}`,
 
       if (!buffer || !buffer.length) return;
 
+      const fixedCaption = replaceMentionNumbers(media.caption || '', saved.mentionMap || {});
+
       const caption =
 `🕵️ *MENSAJE ELIMINADO*
 
-👤 Usuario: @${number(user)}${media.caption ? `\n\n💬 Caption:\n${media.caption}` : ''}`;
+👤 Usuario: @${number(user)}${fixedCaption ? `\n\n💬 Caption:\n${fixedCaption}` : ''}`;
 
       if (media.type === 'image') {
         await sock.sendMessage(remoteJid, {
           image: buffer,
           mimetype: media.mimetype,
           caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -269,7 +379,7 @@ ${text}`,
           video: buffer,
           mimetype: media.mimetype,
           caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -282,7 +392,7 @@ ${text}`,
 
         await sock.sendMessage(remoteJid, {
           text: caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -293,7 +403,7 @@ ${text}`,
 
         await sock.sendMessage(remoteJid, {
           text: caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -303,7 +413,7 @@ ${text}`,
           mimetype: media.mimetype,
           fileName: media.fileName,
           caption,
-          mentions: [user]
+          mentions
         });
       }
 
