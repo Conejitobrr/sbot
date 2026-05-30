@@ -101,55 +101,6 @@ function getText(message = {}) {
   );
 }
 
-// ═══════════════════════════════════════════════
-// 👁️ BLOQUE ESPECIAL ANTI 1 SOLA VEZ
-// Esta parte detecta archivos de 1 sola vez
-// y evita que el plugin los descargue o guarde.
-// Puedes copiar este bloque a otros plugins.
-// ═══════════════════════════════════════════════
-
-function isViewOnce(message = {}) {
-  if (!message || typeof message !== 'object') return false;
-
-  return (
-    !!message.viewOnceMessage ||
-    !!message.viewOnceMessageV2 ||
-    !!message.viewOnceMessageV2Extension ||
-    message.imageMessage?.viewOnce === true ||
-    message.videoMessage?.viewOnce === true ||
-    message.audioMessage?.viewOnce === true ||
-    message.documentMessage?.viewOnce === true ||
-    message.stickerMessage?.viewOnce === true
-  );
-}
-
-function getViewOnceType(message = {}) {
-  const inner =
-    message.viewOnceMessage?.message ||
-    message.viewOnceMessageV2?.message ||
-    message.viewOnceMessageV2Extension?.message ||
-    message.ephemeralMessage?.message?.viewOnceMessage?.message ||
-    message.ephemeralMessage?.message?.viewOnceMessageV2?.message ||
-    message.ephemeralMessage?.message?.viewOnceMessageV2Extension?.message ||
-    message;
-
-  if (inner.imageMessage) return 'imagen';
-  if (inner.videoMessage) return inner.videoMessage.gifPlayback ? 'gif/video' : 'video';
-  if (inner.audioMessage) return inner.audioMessage.ptt ? 'nota de voz' : 'audio';
-  if (inner.documentMessage) return 'documento';
-  if (inner.stickerMessage) return 'sticker';
-
-  return 'archivo';
-}
-
-function shouldIgnoreViewOnce(originalMessage = {}, unwrappedMessage = {}) {
-  return isViewOnce(originalMessage) || isViewOnce(unwrappedMessage);
-}
-
-// ═══════════════════════════════════════════════
-// FIN DEL BLOQUE ESPECIAL ANTI 1 SOLA VEZ
-// ═══════════════════════════════════════════════
-
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
