@@ -1,29 +1,13 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { once } = require('events');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
-
-const execFileAsync = promisify(execFile);
 
 const deletedCache = new Map();
 const handledDeletes = new Set();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000;
-const MAX_MEDIA_SIZE = 80 * 1024 * 1024; // 80 MB
-
-const MEDIA_DIR = path.join(process.cwd(), 'temp', 'antidelete');
-const TEMP_DIR = path.join(process.cwd(), 'temp');
-
-function ensureDir(dir) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; // 60 MB
 
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
@@ -35,85 +19,28 @@ function number(jid = '') {
     .replace(/\D/g, '');
 }
 
-function cleanName(name = '') {
-  return String(name || '')
-    .replace(/\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 40);
-}
-
-function escapeRegExp(text = '') {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function getMsgKey(remoteJid, id) {
-  return `${cleanJid(remoteJid)}:${id}`;
+  return `${remoteJid}:${id}`;
 }
 
 function getHandledKey(remoteJid, id) {
-  return `${cleanJid(remoteJid)}:${id}:handled`;
-}
-
-function uniqueList(list = []) {
-  return [...new Set(list.filter(Boolean).map(String))];
-}
-
-function getSaveKeys(remoteJid, id, sender = '') {
-  return uniqueList([
-    getMsgKey(remoteJid, id),
-    getMsgKey(sender, id),
-    String(id)
-  ]);
-}
-
-function getPossibleDeletedKeys(remoteJid, deletedKey = {}) {
-  const id = deletedKey?.id;
-  if (!id) return [];
-
-  return uniqueList([
-    getMsgKey(remoteJid, id),
-    getMsgKey(deletedKey.remoteJid, id),
-    getMsgKey(deletedKey.participant, id),
-    String(id)
-  ]);
-}
-
-function getProtocolMessage(msg) {
-  const m = msg.message || {};
-
-  return (
-    m.protocolMessage ||
-    m.ephemeralMessage?.message?.protocolMessage ||
-    null
-  );
+  return `${remoteJid}:${id}:handled`;
 }
 
 function isDeleteMessage(msg) {
-  const protocol = getProtocolMessage(msg);
+  const protocol = msg.message?.protocolMessage;
 
   if (!protocol) return false;
 
   return (
     protocol.type === 0 ||
     protocol.type === 'REVOKE' ||
-    !!protocol.key?.id
+    protocol.key?.id
   );
 }
 
 function getDeletedKey(msg) {
-  return getProtocolMessage(msg)?.key || null;
-}
-
-function findSavedMessage(remoteJid, deletedKey) {
-  const keys = getPossibleDeletedKeys(remoteJid, deletedKey);
-
-  for (const key of keys) {
-    const saved = deletedCache.get(key);
-    if (saved) return { key, saved };
-  }
-
-  return null;
+  return msg.message?.protocolMessage?.key || null;
 }
 
 function unwrapMessage(message = {}) {
@@ -149,65 +76,11 @@ function getMessageMentions(message = {}) {
 }
 
 function uniqueMentions(list = []) {
-  return [...new Set(list.map(cleanJid).filter(Boolean))];
-}
-
-function getDisplayName(jid, store, groupMetadata) {
-  const clean = cleanJid(jid);
-
-  const contact =
-    store?.contacts?.[clean] ||
-    store?.contacts?.[jid] ||
-    {};
-
-  const participant = groupMetadata?.participants?.find(p =>
-    cleanJid(p.id) === clean ||
-    cleanJid(p.jid) === clean ||
-    cleanJid(p.lid) === clean ||
-    cleanJid(p.participant) === clean
-  ) || {};
-
-  const name = cleanName(
-    contact.name ||
-    contact.notify ||
-    contact.verifiedName ||
-    contact.pushName ||
-    participant.name ||
-    participant.notify ||
-    participant.verifiedName ||
-    participant.pushName ||
-    ''
-  );
-
-  return name || number(clean);
-}
-
-function getMentionMap(message = {}, store, groupMetadata) {
-  const mentioned = getMessageMentions(message);
-  const map = {};
-
-  for (const jid of mentioned) {
-    const clean = cleanJid(jid);
-    map[clean] = getDisplayName(clean, store, groupMetadata);
-  }
-
-  return map;
-}
-
-function replaceMentionNumbers(text = '', mentionMap = {}) {
-  let output = String(text || '');
-
-  for (const [jid, name] of Object.entries(mentionMap)) {
-    const num = number(jid);
-    const display = cleanName(name);
-
-    if (!num || !display) continue;
-
-    const regex = new RegExp(`@${escapeRegExp(num)}(?=\\s|$|\\n|\\r|\\t|[.,!¡¿?;:])`, 'g');
-    output = output.replace(regex, `@${display}`);
-  }
-
-  return output;
+  return [...new Set(
+    list
+      .map(cleanJid)
+      .filter(Boolean)
+  )];
 }
 
 function getText(message = {}) {
@@ -228,32 +101,18 @@ function getMediaInfo(message = {}) {
       mediaType: 'image',
       media: message.imageMessage,
       mimetype: message.imageMessage.mimetype || 'image/jpeg',
-      caption: message.imageMessage.caption || '',
-      fileName: 'imagen.jpg'
+      caption: message.imageMessage.caption || ''
     };
   }
 
   if (message.videoMessage) {
-    if (message.videoMessage.gifPlayback) {
-      return {
-        type: 'gif',
-        mediaType: 'video',
-        media: message.videoMessage,
-        mimetype: message.videoMessage.mimetype || 'video/mp4',
-        caption: message.videoMessage.caption || '',
-        gifPlayback: true,
-        fileName: 'gif.mp4'
-      };
-    }
-
     return {
       type: 'video',
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
       caption: message.videoMessage.caption || '',
-      gifPlayback: false,
-      fileName: 'video.mp4'
+      gifPlayback: message.videoMessage.gifPlayback || false
     };
   }
 
@@ -264,8 +123,7 @@ function getMediaInfo(message = {}) {
       media: message.audioMessage,
       mimetype: message.audioMessage.mimetype || 'audio/mpeg',
       ptt: message.audioMessage.ptt || false,
-      caption: '',
-      fileName: message.audioMessage.ptt ? 'nota_voz.ogg' : 'audio.mp3'
+      caption: ''
     };
   }
 
@@ -275,227 +133,94 @@ function getMediaInfo(message = {}) {
       mediaType: 'sticker',
       media: message.stickerMessage,
       mimetype: message.stickerMessage.mimetype || 'image/webp',
-      caption: '',
-      fileName: 'sticker.webp'
+      caption: ''
     };
   }
 
   if (message.documentMessage) {
-    const mimetype = message.documentMessage.mimetype || 'application/octet-stream';
-    const fileName = message.documentMessage.fileName || 'archivo';
-    const caption = message.documentMessage.caption || '';
-    const lowerName = String(fileName).toLowerCase();
-
-    if (mimetype === 'image/gif' || lowerName.endsWith('.gif')) {
-      return {
-        type: 'gif_file',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        caption
-      };
-    }
-
-    if (mimetype.startsWith('image/')) {
-      return {
-        type: 'image',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        caption
-      };
-    }
-
-    if (mimetype.startsWith('video/')) {
-      return {
-        type: 'video',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        caption,
-        gifPlayback: false
-      };
-    }
-
-    if (mimetype.startsWith('audio/')) {
-      return {
-        type: 'audio',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        ptt: false,
-        caption
-      };
-    }
-
     return {
       type: 'document',
       mediaType: 'document',
       media: message.documentMessage,
-      mimetype,
-      fileName,
-      caption
+      mimetype: message.documentMessage.mimetype || 'application/octet-stream',
+      fileName: message.documentMessage.fileName || 'archivo',
+      caption: message.documentMessage.caption || ''
     };
   }
 
   return null;
 }
 
-function safeFileName(name = 'archivo') {
-  return String(name || 'archivo')
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-    .replace(/\s+/g, '_')
-    .slice(0, 80);
-}
+async function streamToBuffer(stream) {
+  let buffer = Buffer.from([]);
 
-function getExtension(mediaInfo = {}) {
-  const fileName = String(mediaInfo.fileName || '').toLowerCase();
-  const mimetype = String(mediaInfo.mimetype || '').toLowerCase();
-
-  if (fileName.includes('.') && !fileName.endsWith('.')) {
-    const ext = fileName.split('.').pop().replace(/[^a-z0-9]/g, '');
-    if (ext) return ext;
+  for await (const chunk of stream) {
+    buffer = Buffer.concat([buffer, chunk]);
   }
 
-  if (mimetype.includes('jpeg')) return 'jpg';
-  if (mimetype.includes('jpg')) return 'jpg';
-  if (mimetype.includes('png')) return 'png';
-  if (mimetype.includes('webp')) return 'webp';
-  if (mimetype.includes('gif')) return 'gif';
-  if (mimetype.includes('mp4')) return 'mp4';
-  if (mimetype.includes('webm')) return 'webm';
-  if (mimetype.includes('mpeg')) return 'mp3';
-  if (mimetype.includes('mp3')) return 'mp3';
-  if (mimetype.includes('ogg')) return 'ogg';
-  if (mimetype.includes('opus')) return 'ogg';
-  if (mimetype.includes('pdf')) return 'pdf';
-  if (mimetype.includes('zip')) return 'zip';
-
-  return 'bin';
+  return buffer;
 }
 
-async function downloadMediaToFile(mediaInfo, msgId) {
-  ensureDir(MEDIA_DIR);
-
-  const ext = getExtension(mediaInfo);
-  const safeId = String(msgId || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '');
-  const baseName = safeFileName(mediaInfo.fileName || `media.${ext}`);
-
-  let finalName = `anti_${Date.now()}_${safeId}_${baseName}`;
-
-  if (!finalName.toLowerCase().endsWith(`.${ext}`)) {
-    finalName += `.${ext}`;
-  }
-
-  const filePath = path.join(MEDIA_DIR, finalName);
-
+async function downloadMediaBuffer(mediaInfo) {
   const stream = await downloadContentFromMessage(
     mediaInfo.media,
     mediaInfo.mediaType
   );
 
-  const write = fs.createWriteStream(filePath);
-  let size = 0;
+  const buffer = await streamToBuffer(stream);
 
-  try {
-    for await (const chunk of stream) {
-      size += chunk.length;
+  if (!buffer || !buffer.length) return null;
 
-      if (size > MAX_MEDIA_SIZE) {
-        write.destroy();
-
-        try {
-          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        } catch {}
-
-        return {
-          filePath: null,
-          size,
-          tooLarge: true
-        };
-      }
-
-      if (!write.write(chunk)) {
-        await once(write, 'drain');
-      }
-    }
-
-    write.end();
-    await once(write, 'finish');
-
-    if (!fs.existsSync(filePath) || fs.statSync(filePath).size <= 0) {
-      return {
-        filePath: null,
-        size: 0,
-        tooLarge: false
-      };
-    }
-
-    return {
-      filePath,
-      size,
-      tooLarge: false
-    };
-
-  } catch (err) {
-    try {
-      write.destroy();
-    } catch {}
-
-    try {
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch {}
-
-    throw err;
+  if (buffer.length > MAX_MEDIA_BUFFER) {
+    return null;
   }
+
+  return buffer;
 }
 
-async function convertGifToMp4(inputPath, outputPath) {
-  await execFileAsync('ffmpeg', [
-    '-y',
-    '-i', inputPath,
-    '-movflags', '+faststart',
-    '-pix_fmt', 'yuv420p',
-    '-vf', 'fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-    outputPath
-  ]);
-}
+async function saveMessage(msg, remoteJid, sender, pushName) {
+  const id = msg.key?.id;
 
-function buildCaption(user, mediaCaption = '') {
-  return `🕵️ *MENSAJE ELIMINADO*
+  if (!id || !msg.message) return;
+  if (isDeleteMessage(msg)) return;
 
-👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Descripción:\n${mediaCaption}` : ''}`;
-}
+  const message = unwrapMessage(msg.message);
 
-function deleteSaved(cacheKey, saved) {
-  try {
-    const keys = saved?.cacheKeys?.length ? saved.cacheKeys : [cacheKey];
+  const media = getMediaInfo(message);
+  let mediaBuffer = null;
 
-    for (const key of keys) {
-      deletedCache.delete(key);
-    }
+  if (media) {
+    try {
+      mediaBuffer = await downloadMediaBuffer(media);
+    } catch {}
+  }
 
-    if (saved?.filePath && fs.existsSync(saved.filePath)) {
-      fs.unlinkSync(saved.filePath);
-    }
-  } catch {}
+  const key = getMsgKey(remoteJid, id);
+
+  deletedCache.set(key, {
+    remoteJid,
+    sender: cleanJid(sender),
+    pushName: pushName || 'Usuario',
+    message,
+    mentions: getMessageMentions(message),
+    media,
+    mediaBuffer,
+    text: getText(message),
+    time: Date.now()
+  });
+
+  if (deletedCache.size > MAX_CACHE) {
+    const first = deletedCache.keys().next().value;
+    deletedCache.delete(first);
+  }
 }
 
 function cleanOldCache() {
   const now = Date.now();
-  const seen = new Set();
 
   for (const [key, value] of deletedCache.entries()) {
-    if (!value || seen.has(value)) continue;
-
-    seen.add(value);
-
-    if (now - Number(value.time || 0) > CACHE_TIME) {
-      deleteSaved(key, value);
+    if (now - value.time > CACHE_TIME) {
+      deletedCache.delete(key);
     }
   }
 }
@@ -511,194 +236,10 @@ async function isEnabled(db, remoteJid, fromGroup) {
   }
 }
 
-async function saveMessage(ctx) {
-  const {
-    msg,
-    remoteJid,
-    sender,
-    pushName,
-    store,
-    groupMetadata
-  } = ctx;
+function buildCaption(user, mediaCaption = '') {
+  return `🕵️ *MENSAJE ELIMINADO*
 
-  const id = msg.key?.id;
-
-  if (!id || !msg.message) return;
-  if (isDeleteMessage(msg)) return;
-
-  const message = unwrapMessage(msg.message);
-  const media = getMediaInfo(message);
-  const mentionMap = getMentionMap(message, store, groupMetadata);
-  const mentions = getMessageMentions(message);
-  const text = replaceMentionNumbers(getText(message), mentionMap);
-
-  let filePath = null;
-  let savedSize = 0;
-  let tooLarge = false;
-
-  if (media) {
-    try {
-      const saved = await downloadMediaToFile(media, id);
-
-      filePath = saved.filePath;
-      savedSize = saved.size;
-      tooLarge = saved.tooLarge;
-
-      if (filePath) {
-        console.log(`🕵️ Antidelete guardó: ${media.type} | ${savedSize} bytes | ${path.basename(filePath)}`);
-      } else if (tooLarge) {
-        console.log(`⚠️ Antidelete ignoró archivo pesado: ${savedSize} bytes`);
-      } else {
-        console.log(`⚠️ Antidelete detectó ${media.type}, pero no pudo guardarlo.`);
-      }
-
-    } catch (err) {
-      console.log('⚠️ Antidelete no pudo descargar media:', err?.message || err);
-    }
-  }
-
-  const cacheKeys = getSaveKeys(remoteJid, id, sender);
-
-  const savedData = {
-    remoteJid,
-    sender: cleanJid(sender),
-    pushName: pushName || 'Usuario',
-    message,
-    text,
-    mentions,
-    mentionMap,
-    media,
-    filePath,
-    savedSize,
-    tooLarge,
-    cacheKeys,
-    time: Date.now()
-  };
-
-  for (const key of cacheKeys) {
-    deletedCache.set(key, savedData);
-  }
-
-  if (deletedCache.size > MAX_CACHE) {
-    const firstKey = deletedCache.keys().next().value;
-    const firstSaved = deletedCache.get(firstKey);
-    deleteSaved(firstKey, firstSaved);
-  }
-}
-
-async function sendSavedMedia(sock, remoteJid, saved, mentions) {
-  const media = saved.media;
-
-  if (!media || !saved.filePath || !fs.existsSync(saved.filePath)) {
-    return false;
-  }
-
-  let tempOutput = null;
-
-  try {
-    const mediaCaption = replaceMentionNumbers(
-      media.caption || saved.text || '',
-      saved.mentionMap || {}
-    );
-
-    const caption = buildCaption(saved.sender, mediaCaption);
-    const buffer = fs.readFileSync(saved.filePath);
-
-    if (!buffer || !buffer.length) return false;
-
-    if (media.type === 'gif_file') {
-      ensureDir(TEMP_DIR);
-
-      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-      tempOutput = path.join(TEMP_DIR, `antidelete_gif_${id}.mp4`);
-
-      await convertGifToMp4(saved.filePath, tempOutput);
-
-      const mp4Buffer = fs.readFileSync(tempOutput);
-
-      await sock.sendMessage(remoteJid, {
-        video: mp4Buffer,
-        mimetype: 'video/mp4',
-        gifPlayback: true,
-        caption,
-        mentions
-      });
-
-      return true;
-    }
-
-    if (media.type === 'image') {
-      await sock.sendMessage(remoteJid, {
-        image: buffer,
-        mimetype: media.mimetype,
-        caption,
-        mentions
-      });
-
-      return true;
-    }
-
-    if (media.type === 'video' || media.type === 'gif') {
-      await sock.sendMessage(remoteJid, {
-        video: buffer,
-        mimetype: media.mimetype || 'video/mp4',
-        gifPlayback: media.gifPlayback || false,
-        caption,
-        mentions
-      });
-
-      return true;
-    }
-
-    if (media.type === 'audio') {
-      await sock.sendMessage(remoteJid, {
-        audio: buffer,
-        mimetype: media.mimetype,
-        ptt: media.ptt || false
-      });
-
-      await sock.sendMessage(remoteJid, {
-        text: caption,
-        mentions
-      });
-
-      return true;
-    }
-
-    if (media.type === 'sticker') {
-      await sock.sendMessage(remoteJid, {
-        sticker: buffer
-      });
-
-      await sock.sendMessage(remoteJid, {
-        text: caption,
-        mentions
-      });
-
-      return true;
-    }
-
-    if (media.type === 'document') {
-      await sock.sendMessage(remoteJid, {
-        document: buffer,
-        mimetype: media.mimetype,
-        fileName: media.fileName || 'archivo',
-        caption,
-        mentions
-      });
-
-      return true;
-    }
-
-    return false;
-
-  } finally {
-    try {
-      if (tempOutput && fs.existsSync(tempOutput)) {
-        fs.unlinkSync(tempOutput);
-      }
-    } catch {}
-  }
+👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Descripción:\n${mediaCaption}` : ''}`;
 }
 
 module.exports = {
@@ -712,31 +253,18 @@ module.exports = {
       sender,
       pushName,
       fromGroup,
-      db,
-      store,
-      groupMetadata
+      db
     } = ctx;
 
     try {
       cleanOldCache();
 
-      const enabled = await isEnabled(db, remoteJid, fromGroup);
-
       if (!isDeleteMessage(msg)) {
-        if (enabled) {
-          await saveMessage({
-            msg,
-            remoteJid,
-            sender,
-            pushName,
-            store,
-            groupMetadata
-          });
-        }
-
+        await saveMessage(msg, remoteJid, sender, pushName);
         return;
       }
 
+      const enabled = await isEnabled(db, remoteJid, fromGroup);
       if (!enabled) return;
 
       const deletedKey = getDeletedKey(msg);
@@ -751,24 +279,23 @@ module.exports = {
       handledDeletes.add(handledKey);
       setTimeout(() => handledDeletes.delete(handledKey), 30 * 1000);
 
-      const found = findSavedMessage(remoteJid, deletedKey);
+      const cacheKey = getMsgKey(remoteJid, deletedId);
+      const saved = deletedCache.get(cacheKey);
 
-      if (!found) return;
-
-      const { key: cacheKey, saved } = found;
+      if (!saved) return;
 
       const user = saved.sender;
-      const text = saved.text || replaceMentionNumbers(getText(saved.message), saved.mentionMap || {});
+      const text = saved.text || getText(saved.message);
+      const media = saved.media || getMediaInfo(saved.message);
+
       const mentions = uniqueMentions([
         user,
         ...(saved.mentions || [])
       ]);
 
-      if (saved.media) {
-        const sent = await sendSavedMedia(sock, remoteJid, saved, mentions);
-
-        if (sent) {
-          deleteSaved(cacheKey, saved);
+      if (!media) {
+        if (!text) {
+          deletedCache.delete(cacheKey);
           return;
         }
 
@@ -778,31 +305,109 @@ module.exports = {
 
 👤 Usuario: @${number(user)}
 
-⚠️ El mensaje tenía un archivo, pero no se pudo reenviar desde la carpeta temporal.${text ? `\n\n💬 Texto:\n${text}` : ''}`,
+💬 Mensaje:
+${text}`,
           mentions
         });
 
-        deleteSaved(cacheKey, saved);
+        deletedCache.delete(cacheKey);
         return;
       }
 
-      if (!text) {
-        deleteSaved(cacheKey, saved);
-        return;
+      let buffer = saved.mediaBuffer;
+
+      if (!buffer || !buffer.length) {
+        try {
+          buffer = await downloadMediaBuffer(media);
+        } catch {}
       }
 
-      await sock.sendMessage(remoteJid, {
-        text:
+      if (!buffer || !buffer.length) {
+        await sock.sendMessage(remoteJid, {
+          text:
 `🕵️ *MENSAJE ELIMINADO*
 
 👤 Usuario: @${number(user)}
 
-💬 Mensaje:
-${text}`,
-        mentions
-      });
+⚠️ El mensaje tenía un archivo, pero no se pudo recuperar el contenido.${text ? `\n\n💬 Texto:\n${text}` : ''}`,
+          mentions
+        });
 
-      deleteSaved(cacheKey, saved);
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      const caption = buildCaption(user, media.caption || text || '');
+
+      if (media.type === 'image') {
+        await sock.sendMessage(remoteJid, {
+          image: buffer,
+          mimetype: media.mimetype,
+          caption,
+          mentions
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      if (media.type === 'video') {
+        await sock.sendMessage(remoteJid, {
+          video: buffer,
+          mimetype: media.mimetype,
+          caption,
+          gifPlayback: media.gifPlayback || false,
+          mentions
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      if (media.type === 'audio') {
+        await sock.sendMessage(remoteJid, {
+          audio: buffer,
+          mimetype: media.mimetype,
+          ptt: media.ptt || false
+        });
+
+        await sock.sendMessage(remoteJid, {
+          text: caption,
+          mentions
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      if (media.type === 'sticker') {
+        await sock.sendMessage(remoteJid, {
+          sticker: buffer
+        });
+
+        await sock.sendMessage(remoteJid, {
+          text: caption,
+          mentions
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      if (media.type === 'document') {
+        await sock.sendMessage(remoteJid, {
+          document: buffer,
+          mimetype: media.mimetype,
+          fileName: media.fileName || 'archivo',
+          caption,
+          mentions
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      deletedCache.delete(cacheKey);
       return;
 
     } catch (err) {
