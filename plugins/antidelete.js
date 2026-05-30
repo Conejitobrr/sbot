@@ -252,6 +252,7 @@ function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
     deletedCache.delete(first);
   }
 }
+
 function cleanOldCache() {
   const now = Date.now();
 
@@ -274,7 +275,6 @@ async function isEnabled(db, remoteJid, fromGroup) {
     return !fromGroup;
   }
 }
-
 module.exports = {
   commands: ['antidelete', 'antiborrar'],
 
@@ -472,18 +472,6 @@ Uso:
       return sock.sendMessage(remoteJid, {
         text: option === 'on'
           ? '✅ Antidelete activado en este grupo.'
-          : '✅ Antidelete desactivado en este grupo.'
-      }, { quoted: msg });
-
-    } catch (err) {
-      console.log('❌ Error comando antidelete:', err?.message || err);
-
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Error configurando antidelete.'
-      }, { quoted: msg });
-    }
-  }
-}; Antidelete activado en este grupo.'
           : '✅ Antidelete desactivado en este grupo.'
       }, { quoted: msg });
 
