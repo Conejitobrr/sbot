@@ -191,23 +191,65 @@ global.loadPlugins = loadPlugins;
 loadPlugins();
 
 function cleanNumber(jid = '') {
+function cleanNumber(jid = '') {
   return String(jid)
     .split('@')[0]
     .split(':')[0]
     .replace(/\D/g, '');
 }
 
+function unwrapPreviewMessage(message = {}) {
+  if (message.ephemeralMessage?.message) {
+    return unwrapPreviewMessage(message.ephemeralMessage.message);
+  }
+
+  if (message.documentWithCaptionMessage?.message) {
+    return unwrapPreviewMessage(message.documentWithCaptionMessage.message);
+  }
+
+  if (message.viewOnceMessage?.message) {
+    const inner = unwrapPreviewMessage(message.viewOnceMessage.message);
+
+    return {
+      ...inner,
+      __viewOnce: true
+    };
+  }
+
+  if (message.viewOnceMessageV2?.message) {
+    const inner = unwrapPreviewMessage(message.viewOnceMessageV2.message);
+
+    return {
+      ...inner,
+      __viewOnce: true
+    };
+  }
+
+  if (message.viewOnceMessageV2Extension?.message) {
+    const inner = unwrapPreviewMessage(message.viewOnceMessageV2Extension.message);
+
+    return {
+      ...inner,
+      __viewOnce: true
+    };
+  }
+
+  return message;
+}
+
 function getReadableMessage(msg) {
   const body = getBody(msg);
   if (body) return body;
 
-  const m = msg.message || {};
+  const m = unwrapPreviewMessage(msg.message || {});
+  const once = m.__viewOnce ? ' de 1 sola vez' : '';
 
-  if (m.imageMessage) return '[Imagen]';
-  if (m.videoMessage) return '[Video]';
-  if (m.stickerMessage) return '[Sticker]';
-  if (m.audioMessage) return m.audioMessage.ptt ? '[Nota de voz]' : '[Audio]';
-  if (m.documentMessage) return '[Documento]';
+  if (m.imageMessage) return `[Imagen${once}]`;
+  if (m.videoMessage) return m.videoMessage.gifPlayback ? `[GIF${once}]` : `[Video${once}]`;
+  if (m.ptvMessage) return `[Video circular${once}]`;
+  if (m.stickerMessage) return `[Sticker${once}]`;
+  if (m.audioMessage) return m.audioMessage.ptt ? `[Nota de voz${once}]` : `[Audio${once}]`;
+  if (m.documentMessage) return `[Documento${once}]`;
   if (m.locationMessage) return '[Ubicación]';
   if (m.contactMessage) return '[Contacto]';
   if (m.contactsArrayMessage) return '[Contactos]';
