@@ -488,6 +488,10 @@ const media = getMediaInfo(message);
 const text = getText(message);
 const mentions = getMessageMentions(message);
 
+if (!media && !text) {
+  return;
+}
+
 let filePath = null;
 let savedSize = 0;
 let tooLarge = false;
