@@ -3,6 +3,7 @@
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 const deletedCache = new Map();
+const handledDeletes = new Set();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000;
@@ -20,6 +21,10 @@ function number(jid = '') {
 
 function getMsgKey(remoteJid, id) {
   return `${remoteJid}:${id}`;
+}
+
+function getHandledKey(remoteJid, id) {
+  return `${remoteJid}:${id}:handled`;
 }
 
 function isDeleteMessage(msg) {
@@ -45,18 +50,6 @@ function unwrapMessage(message = {}) {
 
   if (message.documentWithCaptionMessage?.message) {
     return unwrapMessage(message.documentWithCaptionMessage.message);
-  }
-
-  if (message.viewOnceMessage?.message) {
-    return message;
-  }
-
-  if (message.viewOnceMessageV2?.message) {
-    return message;
-  }
-
-  if (message.viewOnceMessageV2Extension?.message) {
-    return message;
   }
 
   return message;
@@ -98,16 +91,6 @@ function getText(message = {}) {
     message.videoMessage?.caption ||
     message.documentMessage?.caption ||
     ''
-  );
-}
-
-function isViewOnce(message = {}) {
-  return (
-    message.viewOnceMessage ||
-    message.viewOnceMessageV2 ||
-    message.viewOnceMessageV2Extension ||
-    message.imageMessage?.viewOnce === true ||
-    message.videoMessage?.viewOnce === true
   );
 }
 
@@ -203,8 +186,6 @@ async function saveMessage(msg, remoteJid, sender, pushName) {
 
   const message = unwrapMessage(msg.message);
 
-  if (isViewOnce(message)) return;
-
   const media = getMediaInfo(message);
   let mediaBuffer = null;
 
@@ -291,6 +272,13 @@ module.exports = {
 
       if (!deletedId) return;
 
+      const handledKey = getHandledKey(remoteJid, deletedId);
+
+      if (handledDeletes.has(handledKey)) return;
+
+      handledDeletes.add(handledKey);
+      setTimeout(() => handledDeletes.delete(handledKey), 30 * 1000);
+
       const cacheKey = getMsgKey(remoteJid, deletedId);
       const saved = deletedCache.get(cacheKey);
 
@@ -306,7 +294,10 @@ module.exports = {
       ]);
 
       if (!media) {
-        if (!text) return;
+        if (!text) {
+          deletedCache.delete(cacheKey);
+          return;
+        }
 
         await sock.sendMessage(remoteJid, {
           text:
@@ -355,6 +346,9 @@ ${text}`,
           caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'video') {
@@ -365,6 +359,9 @@ ${text}`,
           gifPlayback: media.gifPlayback || false,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'audio') {
@@ -378,6 +375,9 @@ ${text}`,
           text: caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'sticker') {
@@ -389,19 +389,26 @@ ${text}`,
           text: caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'document') {
         await sock.sendMessage(remoteJid, {
           document: buffer,
           mimetype: media.mimetype,
-          fileName: media.fileName,
+          fileName: media.fileName || 'archivo',
           caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       deletedCache.delete(cacheKey);
+      return;
 
     } catch (err) {
       console.log('❌ Error en antidelete:', err?.message || err);
