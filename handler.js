@@ -191,13 +191,13 @@ global.loadPlugins = loadPlugins;
 loadPlugins();
 
 function cleanNumber(jid = '') {
-function cleanNumber(jid = '') {
   return String(jid)
     .split('@')[0]
     .split(':')[0]
     .replace(/\D/g, '');
 }
 
+// ✅ Detectar mensajes normales, efímeros y de 1 sola vez para la consola
 function unwrapPreviewMessage(message = {}) {
   if (message.ephemeralMessage?.message) {
     return unwrapPreviewMessage(message.ephemeralMessage.message);
