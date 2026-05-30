@@ -6,7 +6,6 @@ const deletedCache = new Map();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000;
-const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; // 60 MB
 
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
@@ -47,47 +46,7 @@ function unwrapMessage(message = {}) {
     return unwrapMessage(message.documentWithCaptionMessage.message);
   }
 
-  if (message.viewOnceMessage?.message) {
-    return message;
-  }
-
-  if (message.viewOnceMessageV2?.message) {
-    return message;
-  }
-
-  if (message.viewOnceMessageV2Extension?.message) {
-    return message;
-  }
-
   return message;
-}
-
-function getContextInfo(message = {}) {
-  return (
-    message.extendedTextMessage?.contextInfo ||
-    message.imageMessage?.contextInfo ||
-    message.videoMessage?.contextInfo ||
-    message.audioMessage?.contextInfo ||
-    message.stickerMessage?.contextInfo ||
-    message.documentMessage?.contextInfo ||
-    null
-  );
-}
-
-function getMessageMentions(message = {}) {
-  const ctx = getContextInfo(message);
-
-  return Array.isArray(ctx?.mentionedJid)
-    ? ctx.mentionedJid.map(cleanJid).filter(Boolean)
-    : [];
-}
-
-function uniqueMentions(list = []) {
-  return [...new Set(
-    list
-      .map(cleanJid)
-      .filter(Boolean)
-  )];
 }
 
 function getText(message = {}) {
@@ -98,6 +57,16 @@ function getText(message = {}) {
     message.videoMessage?.caption ||
     message.documentMessage?.caption ||
     ''
+  );
+}
+
+function isViewOnce(message = {}) {
+  return (
+    message.viewOnceMessage ||
+    message.viewOnceMessageV2 ||
+    message.viewOnceMessageV2Extension ||
+    message.imageMessage?.viewOnce === true ||
+    message.videoMessage?.viewOnce === true
   );
 }
 
@@ -118,8 +87,7 @@ function getMediaInfo(message = {}) {
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
-      caption: message.videoMessage.caption || '',
-      gifPlayback: message.videoMessage.gifPlayback || false
+      caption: message.videoMessage.caption || ''
     };
   }
 
@@ -129,8 +97,7 @@ function getMediaInfo(message = {}) {
       mediaType: 'audio',
       media: message.audioMessage,
       mimetype: message.audioMessage.mimetype || 'audio/mpeg',
-      ptt: message.audioMessage.ptt || false,
-      caption: ''
+      ptt: message.audioMessage.ptt || false
     };
   }
 
@@ -139,8 +106,7 @@ function getMediaInfo(message = {}) {
       type: 'sticker',
       mediaType: 'sticker',
       media: message.stickerMessage,
-      mimetype: message.stickerMessage.mimetype || 'image/webp',
-      caption: ''
+      mimetype: message.stickerMessage.mimetype || 'image/webp'
     };
   }
 
@@ -168,51 +134,15 @@ async function streamToBuffer(stream) {
   return buffer;
 }
 
-async function downloadMediaBuffer(mediaInfo) {
-  const stream = await downloadContentFromMessage(
-    mediaInfo.media,
-    mediaInfo.mediaType
-  );
-
-  const buffer = await streamToBuffer(stream);
-
-  if (!buffer || !buffer.length) return null;
-
-  if (buffer.length > MAX_MEDIA_BUFFER) {
-    return null;
-  }
-
-  return buffer;
-}
-
-async function saveMessage(msg, remoteJid, sender, pushName) {
+function saveMessage(msg, remoteJid, sender, pushName) {
   const id = msg.key?.id;
 
   if (!id || !msg.message) return;
   if (isDeleteMessage(msg)) return;
 
-  const originalMessage = msg.message;
-  const message = unwrapMessage(originalMessage);
+  const message = unwrapMessage(msg.message);
 
-  // ═══════════════════════════════════════════════
-  // 👁️ USO DEL BLOQUE ANTI 1 SOLA VEZ
-  // Esta parte es la que realmente evita que se guarde.
-  // Si detecta 1 sola vez, hace return y no descarga nada.
-  // ═══════════════════════════════════════════════
-  if (shouldIgnoreViewOnce(originalMessage, message)) {
-    const viewOnceType = getViewOnceType(originalMessage);
-
-    console.log(`👁️ Antidelete ignoró archivo de 1 sola vez: ${viewOnceType}`);
-  }
-
-  const media = getMediaInfo(message);
-  let mediaBuffer = null;
-
-  if (media) {
-    try {
-      mediaBuffer = await downloadMediaBuffer(media);
-    } catch {}
-  }
+  if (isViewOnce(message)) return;
 
   const key = getMsgKey(remoteJid, id);
 
@@ -221,10 +151,6 @@ async function saveMessage(msg, remoteJid, sender, pushName) {
     sender: cleanJid(sender),
     pushName: pushName || 'Usuario',
     message,
-    mentions: getMessageMentions(message),
-    media,
-    mediaBuffer,
-    text: getText(message),
     time: Date.now()
   });
 
@@ -246,19 +172,15 @@ function cleanOldCache() {
 
 async function isEnabled(db, remoteJid, fromGroup) {
   try {
+    // ✅ En privado siempre activo
     if (!fromGroup) return true;
 
+    // ✅ En grupos depende de configuración
     const value = await db.getGroupSetting(remoteJid, 'antidelete');
     return value === true;
   } catch {
     return !fromGroup;
   }
-}
-
-function buildCaption(user, mediaCaption = '') {
-  return `🕵️ *MENSAJE ELIMINADO*
-
-👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Descripción:\n${mediaCaption}` : ''}`;
 }
 
 module.exports = {
@@ -278,8 +200,9 @@ module.exports = {
     try {
       cleanOldCache();
 
+      // ✅ Ahora guarda mensajes tanto en grupos como en privado
       if (!isDeleteMessage(msg)) {
-        await saveMessage(msg, remoteJid, sender, pushName);
+        saveMessage(msg, remoteJid, sender, pushName);
         return;
       }
 
@@ -297,13 +220,8 @@ module.exports = {
       if (!saved) return;
 
       const user = saved.sender;
-      const text = saved.text || getText(saved.message);
-      const media = saved.media || getMediaInfo(saved.message);
-
-      const mentions = uniqueMentions([
-        user,
-        ...(saved.mentions || [])
-      ]);
+      const text = getText(saved.message);
+      const media = getMediaInfo(saved.message);
 
       if (!media) {
         if (!text) return;
@@ -316,44 +234,33 @@ module.exports = {
 
 💬 Mensaje:
 ${text}`,
-          mentions
+          mentions: [user]
         });
 
         deletedCache.delete(cacheKey);
         return;
       }
 
-      let buffer = saved.mediaBuffer;
+      const stream = await downloadContentFromMessage(
+        media.media,
+        media.mediaType
+      );
 
-      if (!buffer || !buffer.length) {
-        try {
-          buffer = await downloadMediaBuffer(media);
-        } catch {}
-      }
+      const buffer = await streamToBuffer(stream);
 
-      if (!buffer || !buffer.length) {
-        await sock.sendMessage(remoteJid, {
-          text:
+      if (!buffer || !buffer.length) return;
+
+      const caption =
 `🕵️ *MENSAJE ELIMINADO*
 
-👤 Usuario: @${number(user)}
-
-⚠️ El mensaje tenía un archivo, pero no se pudo recuperar el contenido.${text ? `\n\n💬 Texto:\n${text}` : ''}`,
-          mentions
-        });
-
-        deletedCache.delete(cacheKey);
-        return;
-      }
-
-      const caption = buildCaption(user, media.caption || text || '');
+👤 Usuario: @${number(user)}${media.caption ? `\n\n💬 Caption:\n${media.caption}` : ''}`;
 
       if (media.type === 'image') {
         await sock.sendMessage(remoteJid, {
           image: buffer,
           mimetype: media.mimetype,
           caption,
-          mentions
+          mentions: [user]
         });
       }
 
@@ -362,8 +269,7 @@ ${text}`,
           video: buffer,
           mimetype: media.mimetype,
           caption,
-          gifPlayback: media.gifPlayback || false,
-          mentions
+          mentions: [user]
         });
       }
 
@@ -376,7 +282,7 @@ ${text}`,
 
         await sock.sendMessage(remoteJid, {
           text: caption,
-          mentions
+          mentions: [user]
         });
       }
 
@@ -387,7 +293,7 @@ ${text}`,
 
         await sock.sendMessage(remoteJid, {
           text: caption,
-          mentions
+          mentions: [user]
         });
       }
 
@@ -397,7 +303,7 @@ ${text}`,
           mimetype: media.mimetype,
           fileName: media.fileName,
           caption,
-          mentions
+          mentions: [user]
         });
       }
 
@@ -421,6 +327,7 @@ ${text}`,
     } = ctx;
 
     try {
+      // ✅ En privado siempre activo
       if (!fromGroup) {
         return sock.sendMessage(remoteJid, {
           text: '✅ En chats privados, *antidelete* siempre está activo.'
