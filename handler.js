@@ -197,7 +197,7 @@ function cleanNumber(jid = '') {
     .replace(/\D/g, '');
 }
 
-// ✅ NUEVO: detectar mensajes normales, efímeros, multimedia y archivos de 1 sola vez
+// ✅ DETECCIÓN MEJORADA PARA CONSOLA
 function isObject(value) {
   return value && typeof value === 'object';
 }
@@ -217,9 +217,42 @@ function hasMediaMessage(message = {}) {
   );
 }
 
+function hasViewOnceDeep(node, depth = 0, seen = new Set()) {
+  if (!isObject(node)) return false;
+  if (depth > 12) return false;
+  if (seen.has(node)) return false;
+
+  seen.add(node);
+
+  const keys = Object.keys(node);
+
+  if (keys.some(k => String(k).toLowerCase().includes('viewonce'))) {
+    return true;
+  }
+
+  if (
+    node.imageMessage?.viewOnce === true ||
+    node.videoMessage?.viewOnce === true ||
+    node.audioMessage?.viewOnce === true ||
+    node.ptvMessage?.viewOnce === true
+  ) {
+    return true;
+  }
+
+  for (const key of keys) {
+    const value = node[key];
+
+    if (isObject(value)) {
+      if (hasViewOnceDeep(value, depth + 1, seen)) return true;
+    }
+  }
+
+  return false;
+}
+
 function findMediaDeep(node, isOnce = false, depth = 0, seen = new Set()) {
   if (!isObject(node)) return null;
-  if (depth > 10) return null;
+  if (depth > 12) return null;
   if (seen.has(node)) return null;
 
   seen.add(node);
@@ -241,67 +274,54 @@ function findMediaDeep(node, isOnce = false, depth = 0, seen = new Set()) {
     };
   }
 
-  const priorityWrappers = [
-    'ephemeralMessage',
-    'viewOnceMessage',
-    'viewOnceMessageV2',
-    'viewOnceMessageV2Extension',
-    'documentWithCaptionMessage'
-  ];
-
-  for (const key of priorityWrappers) {
-    if (node[key]?.message) {
-      const found = findMediaDeep(
-        node[key].message,
-        nowOnce || key.toLowerCase().includes('viewonce'),
-        depth + 1,
-        seen
-      );
-
-      if (found) return found;
-    }
-  }
-
   for (const key of keys) {
-    if (
-      key === 'contextInfo' ||
-      key === 'quotedMessage' ||
-      key === 'quotedAd' ||
-      key === 'externalAdReply'
-    ) {
-      continue;
-    }
-
     const value = node[key];
 
-    if (isObject(value)) {
-      const found = findMediaDeep(
-        value,
-        nowOnce || key.toLowerCase().includes('viewonce'),
-        depth + 1,
-        seen
-      );
+    if (!isObject(value)) continue;
 
-      if (found) return found;
-    }
+    const found = findMediaDeep(
+      value,
+      nowOnce || key.toLowerCase().includes('viewonce'),
+      depth + 1,
+      seen
+    );
+
+    if (found) return found;
   }
 
   return null;
 }
 
-function getReadableMessage(msg) {
-  const found = findMediaDeep(msg.message || {});
-  const m = found?.message || msg.message || {};
-  const once = found?.isOnce ? ' de 1 sola vez' : '';
+function getMessageKeysPreview(message = {}) {
+  try {
+    const keys = Object.keys(message || {});
 
-  // ✅ Si es multimedia de 1 sola vez, mostrar eso primero aunque tenga caption/texto
-  if (found?.isOnce) {
+    if (!keys.length) return 'sin keys';
+
+    return keys.slice(0, 8).join(', ');
+  } catch {
+    return 'error leyendo keys';
+  }
+}
+
+function getReadableMessage(msg) {
+  const message = msg.message || {};
+  const found = findMediaDeep(message);
+  const hasOnce = hasViewOnceDeep(message);
+
+  const m = found?.message || message;
+  const once = found?.isOnce || hasOnce ? ' de 1 sola vez' : '';
+
+  // ✅ Primero detectar archivos de 1 sola vez, aunque tengan caption/texto
+  if (found?.isOnce || hasOnce) {
     if (m.imageMessage) return `[Imagen${once}]`;
     if (m.videoMessage) return m.videoMessage.gifPlayback ? `[GIF${once}]` : `[Video${once}]`;
     if (m.ptvMessage) return `[Video circular${once}]`;
     if (m.stickerMessage) return `[Sticker${once}]`;
     if (m.audioMessage) return m.audioMessage.ptt ? `[Nota de voz${once}]` : `[Audio${once}]`;
     if (m.documentMessage) return `[Documento${once}]`;
+
+    return '[Archivo de 1 sola vez]';
   }
 
   const body = getBody(msg);
@@ -318,7 +338,7 @@ function getReadableMessage(msg) {
   if (m.contactsArrayMessage) return '[Contactos]';
   if (m.reactionMessage) return '[Reacción]';
 
-  return '[Sin texto]';
+  return `[Sin texto | keys: ${getMessageKeysPreview(message)}]`;
 }
 
 async function safeGroupMetadata(sock, jid) {
