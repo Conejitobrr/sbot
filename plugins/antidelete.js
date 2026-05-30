@@ -475,11 +475,6 @@ async function saveMessage(ctx) {
   if (!id || !msg.message) return;
   if (isDeleteMessage(msg)) return;
 
-  const originalMessage = msg.message;
-
-  // Se ignora 1 sola vez; aquí solo trabajamos mensajes normales
-  if (isViewOnce(originalMessage)) return;
-
   const message = unwrapMessage(originalMessage);
   const media = getMediaInfo(message);
   const text = getText(message);
