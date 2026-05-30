@@ -142,7 +142,42 @@ const FILTERS = {
 
   grave: {
     name: 'Voz grave',
-    filter: 'asetrate=44100*0.75,aresample=44100,atempo=1.15'
+    filter: 'asetrate=44100*0.78,aresample=44100,atempo=1.10,bass=g=5:f=120'
+  },
+
+  supergrave: {
+    name: 'Voz súper grave',
+    filter: 'asetrate=44100*0.62,aresample=44100,atempo=1.18,bass=g=8:f=100'
+  },
+
+  ultragrave: {
+    name: 'Voz ultra grave',
+    filter: 'asetrate=44100*0.55,aresample=44100,atempo=1.25,bass=g=10:f=90'
+  },
+
+  lentograve: {
+    name: 'Lento y grave',
+    filter: 'asetrate=44100*0.72,aresample=44100,atempo=0.85,bass=g=7:f=100'
+  },
+
+  monstruo: {
+    name: 'Monstruo',
+    filter: 'asetrate=44100*0.60,aresample=44100,atempo=0.95,bass=g=12:f=80,acompressor=threshold=-18dB:ratio=4'
+  },
+
+  oscuro: {
+    name: 'Voz oscura',
+    filter: 'asetrate=44100*0.68,aresample=44100,atempo=1.05,lowpass=f=2800,bass=g=9:f=100'
+  },
+
+  demonio: {
+    name: 'Demonio',
+    filter: 'asetrate=44100*0.66,aresample=44100,atempo=1.08,bass=g=10:f=90,acompressor=threshold=-20dB:ratio=4'
+  },
+
+  demonioeco: {
+    name: 'Demonio con eco',
+    filter: 'asetrate=44100*0.66,aresample=44100,atempo=1.08,bass=g=10:f=90,aecho=0.7:0.7:650:0.25'
   },
 
   agudo: {
@@ -155,9 +190,9 @@ const FILTERS = {
     filter: 'asetrate=44100*1.60,aresample=44100,atempo=0.85'
   },
 
-  demonio: {
-    name: 'Demonio',
-    filter: 'asetrate=44100*0.65,aresample=44100,atempo=1.05,aecho=0.8:0.9:900:0.35'
+  bebe: {
+    name: 'Voz de bebé',
+    filter: 'asetrate=44100*1.75,aresample=44100,atempo=0.95'
   },
 
   robot: {
@@ -165,14 +200,24 @@ const FILTERS = {
     filter: 'tremolo=f=35:d=0.8,aresample=16000'
   },
 
+  alien: {
+    name: 'Alien',
+    filter: 'asetrate=44100*1.20,aresample=44100,atempo=0.95,tremolo=f=18:d=0.7'
+  },
+
+  vibrato: {
+    name: 'Vibrato',
+    filter: 'vibrato=f=7:d=0.8'
+  },
+
   eco: {
     name: 'Eco',
-    filter: 'aecho=0.8:0.9:1000:0.35'
+    filter: 'aecho=0.8:0.9:900:0.30'
   },
 
   cueva: {
     name: 'Cueva',
-    filter: 'aecho=0.8:0.88:60|120|240:0.4|0.3|0.2'
+    filter: 'aecho=0.8:0.88:80|160|320:0.35|0.25|0.18'
   },
 
   radio: {
@@ -183,6 +228,11 @@ const FILTERS = {
   telefono: {
     name: 'Teléfono',
     filter: 'highpass=f=500,lowpass=f=2500,volume=1.4'
+  },
+
+  megafono: {
+    name: 'Megáfono',
+    filter: 'highpass=f=350,lowpass=f=4500,acompressor=threshold=-20dB:ratio=5,volume=1.8'
   },
 
   bajo: {
@@ -200,6 +250,11 @@ const FILTERS = {
     filter: 'atempo=0.75'
   },
 
+  muylento: {
+    name: 'Muy lento',
+    filter: 'atempo=0.60'
+  },
+
   reverse: {
     name: 'Reversa',
     filter: 'areverse'
@@ -209,15 +264,35 @@ const FILTERS = {
 const ALIASES = {
   chipmunk: 'ardilla',
   diablo: 'demonio',
+  demon: 'demonio',
   gravecito: 'grave',
+  masgrave: 'supergrave',
+  másgrave: 'supergrave',
+  super_grave: 'supergrave',
+  ultra: 'ultragrave',
+  ultra_grave: 'ultragrave',
+  lento_grave: 'lentograve',
+  lentoygrave: 'lentograve',
+  lento_y_grave: 'lentograve',
+  monstruoso: 'monstruo',
+  oscuroo: 'oscuro',
   aguda: 'agudo',
+  baby: 'bebe',
+  bebé: 'bebe',
   robotico: 'robot',
+  robótico: 'robot',
+  extraterrestre: 'alien',
+  vibrar: 'vibrato',
   teléfono: 'telefono',
   phone: 'telefono',
+  mega: 'megafono',
+  megáfono: 'megafono',
   bass: 'bajo',
   reversa: 'reverse',
   reves: 'reverse',
-  rápido: 'rapido'
+  revés: 'reverse',
+  rápido: 'rapido',
+  muy_lento: 'muylento'
 };
 
 function getFilterKey(input = '') {
@@ -232,21 +307,34 @@ Responde a un audio, nota de voz o archivo de audio y usa:
 
 ${prefix}filtro normal
 ${prefix}filtro grave
+${prefix}filtro supergrave
+${prefix}filtro ultragrave
+${prefix}filtro lentograve
+${prefix}filtro monstruo
+${prefix}filtro oscuro
+${prefix}filtro demonio
+${prefix}filtro demonioeco
 ${prefix}filtro agudo
 ${prefix}filtro ardilla
-${prefix}filtro demonio
+${prefix}filtro bebe
 ${prefix}filtro robot
+${prefix}filtro alien
+${prefix}filtro vibrato
 ${prefix}filtro eco
 ${prefix}filtro cueva
 ${prefix}filtro radio
 ${prefix}filtro telefono
+${prefix}filtro megafono
 ${prefix}filtro bajo
 ${prefix}filtro rapido
 ${prefix}filtro lento
+${prefix}filtro muylento
 ${prefix}filtro reverse
 
 📌 Ejemplo:
+${prefix}filtro lentograve
 ${prefix}filtro demonio
+${prefix}filtro monstruo
 
 ✅ El resultado siempre se enviará como *nota de voz*.`;
 }
