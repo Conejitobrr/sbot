@@ -873,4 +873,9 @@ Uso:
     } catch (err) {
       console.log('❌ Error comando antidelete:', err?.message || err);
 
-      return sock.sendMessag
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Error configurando antidelete.'
+      }, { quoted: msg });
+    }
+  }
+};
