@@ -197,59 +197,122 @@ function cleanNumber(jid = '') {
     .replace(/\D/g, '');
 }
 
-// ✅ Detectar mensajes normales, efímeros y de 1 sola vez para la consola
-function unwrapPreviewMessage(message = {}) {
-  if (message.ephemeralMessage?.message) {
-    return unwrapPreviewMessage(message.ephemeralMessage.message);
-  }
+// ✅ NUEVO: detectar mensajes normales, efímeros, multimedia y archivos de 1 sola vez
+function isObject(value) {
+  return value && typeof value === 'object';
+}
 
-  if (message.documentWithCaptionMessage?.message) {
-    return unwrapPreviewMessage(message.documentWithCaptionMessage.message);
-  }
+function hasMediaMessage(message = {}) {
+  return (
+    message.imageMessage ||
+    message.videoMessage ||
+    message.audioMessage ||
+    message.ptvMessage ||
+    message.stickerMessage ||
+    message.documentMessage ||
+    message.locationMessage ||
+    message.contactMessage ||
+    message.contactsArrayMessage ||
+    message.reactionMessage
+  );
+}
 
-  if (message.viewOnceMessage?.message) {
-    const inner = unwrapPreviewMessage(message.viewOnceMessage.message);
+function findMediaDeep(node, isOnce = false, depth = 0, seen = new Set()) {
+  if (!isObject(node)) return null;
+  if (depth > 10) return null;
+  if (seen.has(node)) return null;
 
+  seen.add(node);
+
+  const keys = Object.keys(node);
+
+  const nowOnce =
+    isOnce ||
+    keys.some(k => String(k).toLowerCase().includes('viewonce')) ||
+    node.imageMessage?.viewOnce === true ||
+    node.videoMessage?.viewOnce === true ||
+    node.audioMessage?.viewOnce === true ||
+    node.ptvMessage?.viewOnce === true;
+
+  if (hasMediaMessage(node)) {
     return {
-      ...inner,
-      __viewOnce: true
+      message: node,
+      isOnce: nowOnce
     };
   }
 
-  if (message.viewOnceMessageV2?.message) {
-    const inner = unwrapPreviewMessage(message.viewOnceMessageV2.message);
+  const priorityWrappers = [
+    'ephemeralMessage',
+    'viewOnceMessage',
+    'viewOnceMessageV2',
+    'viewOnceMessageV2Extension',
+    'documentWithCaptionMessage'
+  ];
 
-    return {
-      ...inner,
-      __viewOnce: true
-    };
+  for (const key of priorityWrappers) {
+    if (node[key]?.message) {
+      const found = findMediaDeep(
+        node[key].message,
+        nowOnce || key.toLowerCase().includes('viewonce'),
+        depth + 1,
+        seen
+      );
+
+      if (found) return found;
+    }
   }
 
-  if (message.viewOnceMessageV2Extension?.message) {
-    const inner = unwrapPreviewMessage(message.viewOnceMessageV2Extension.message);
+  for (const key of keys) {
+    if (
+      key === 'contextInfo' ||
+      key === 'quotedMessage' ||
+      key === 'quotedAd' ||
+      key === 'externalAdReply'
+    ) {
+      continue;
+    }
 
-    return {
-      ...inner,
-      __viewOnce: true
-    };
+    const value = node[key];
+
+    if (isObject(value)) {
+      const found = findMediaDeep(
+        value,
+        nowOnce || key.toLowerCase().includes('viewonce'),
+        depth + 1,
+        seen
+      );
+
+      if (found) return found;
+    }
   }
 
-  return message;
+  return null;
 }
 
 function getReadableMessage(msg) {
+  const found = findMediaDeep(msg.message || {});
+  const m = found?.message || msg.message || {};
+  const once = found?.isOnce ? ' de 1 sola vez' : '';
+
+  // ✅ Si es multimedia de 1 sola vez, mostrar eso primero aunque tenga caption/texto
+  if (found?.isOnce) {
+    if (m.imageMessage) return `[Imagen${once}]`;
+    if (m.videoMessage) return m.videoMessage.gifPlayback ? `[GIF${once}]` : `[Video${once}]`;
+    if (m.ptvMessage) return `[Video circular${once}]`;
+    if (m.stickerMessage) return `[Sticker${once}]`;
+    if (m.audioMessage) return m.audioMessage.ptt ? `[Nota de voz${once}]` : `[Audio${once}]`;
+    if (m.documentMessage) return `[Documento${once}]`;
+  }
+
   const body = getBody(msg);
   if (body) return body;
 
-  const m = unwrapPreviewMessage(msg.message || {});
-  const once = m.__viewOnce ? ' de 1 sola vez' : '';
-
-  if (m.imageMessage) return `[Imagen${once}]`;
-  if (m.videoMessage) return m.videoMessage.gifPlayback ? `[GIF${once}]` : `[Video${once}]`;
-  if (m.ptvMessage) return `[Video circular${once}]`;
-  if (m.stickerMessage) return `[Sticker${once}]`;
-  if (m.audioMessage) return m.audioMessage.ptt ? `[Nota de voz${once}]` : `[Audio${once}]`;
-  if (m.documentMessage) return `[Documento${once}]`;
+  if (m.imageMessage) return '[Imagen]';
+  if (m.videoMessage) return m.videoMessage.gifPlayback ? '[GIF]' : '[Video]';
+  if (m.ptvMessage) return '[Video circular]';
+  if (m.stickerMessage) return '[Sticker]';
+  if (m.audioMessage) return m.audioMessage.ptt ? '[Nota de voz]' : '[Audio]';
+  if (m.documentMessage) return '[Documento]';
   if (m.locationMessage) return '[Ubicación]';
   if (m.contactMessage) return '[Contacto]';
   if (m.contactsArrayMessage) return '[Contactos]';
