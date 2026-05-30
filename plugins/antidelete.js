@@ -49,6 +49,34 @@ function unwrapMessage(message = {}) {
   return message;
 }
 
+function getContextInfo(message = {}) {
+  return (
+    message.extendedTextMessage?.contextInfo ||
+    message.imageMessage?.contextInfo ||
+    message.videoMessage?.contextInfo ||
+    message.audioMessage?.contextInfo ||
+    message.stickerMessage?.contextInfo ||
+    message.documentMessage?.contextInfo ||
+    null
+  );
+}
+
+function getMessageMentions(message = {}) {
+  const ctx = getContextInfo(message);
+
+  return Array.isArray(ctx?.mentionedJid)
+    ? ctx.mentionedJid.map(cleanJid).filter(Boolean)
+    : [];
+}
+
+function uniqueMentions(list = []) {
+  return [...new Set(
+    list
+      .map(cleanJid)
+      .filter(Boolean)
+  )];
+}
+
 function getText(message = {}) {
   return (
     message.conversation ||
@@ -151,6 +179,7 @@ function saveMessage(msg, remoteJid, sender, pushName) {
     sender: cleanJid(sender),
     pushName: pushName || 'Usuario',
     message,
+    mentions: getMessageMentions(message),
     time: Date.now()
   });
 
@@ -223,6 +252,12 @@ module.exports = {
       const text = getText(saved.message);
       const media = getMediaInfo(saved.message);
 
+      // ✅ Usuario que borró + menciones reales del mensaje eliminado
+      const mentions = uniqueMentions([
+        user,
+        ...(saved.mentions || [])
+      ]);
+
       if (!media) {
         if (!text) return;
 
@@ -234,7 +269,7 @@ module.exports = {
 
 💬 Mensaje:
 ${text}`,
-          mentions: [user]
+          mentions
         });
 
         deletedCache.delete(cacheKey);
@@ -260,7 +295,7 @@ ${text}`,
           image: buffer,
           mimetype: media.mimetype,
           caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -269,7 +304,7 @@ ${text}`,
           video: buffer,
           mimetype: media.mimetype,
           caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -282,7 +317,7 @@ ${text}`,
 
         await sock.sendMessage(remoteJid, {
           text: caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -293,7 +328,7 @@ ${text}`,
 
         await sock.sendMessage(remoteJid, {
           text: caption,
-          mentions: [user]
+          mentions
         });
       }
 
@@ -303,7 +338,7 @@ ${text}`,
           mimetype: media.mimetype,
           fileName: media.fileName,
           caption,
-          mentions: [user]
+          mentions
         });
       }
 
