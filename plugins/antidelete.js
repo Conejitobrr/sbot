@@ -1,11 +1,24 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+
+const execFileAsync = promisify(execFile);
 
 const deletedCache = new Map();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000;
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+
+function ensureTemp() {
+  if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+  }
+}
 
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
@@ -158,6 +171,7 @@ function getText(message = {}) {
   );
 }
 
+// ✅ Detector adaptado de tu plugin .ver
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
@@ -170,12 +184,24 @@ function getMediaInfo(message = {}) {
   }
 
   if (message.videoMessage) {
+    if (message.videoMessage.gifPlayback) {
+      return {
+        type: 'gif',
+        mediaType: 'video',
+        media: message.videoMessage,
+        mimetype: message.videoMessage.mimetype || 'video/mp4',
+        caption: message.videoMessage.caption || '',
+        gifPlayback: true
+      };
+    }
+
     return {
       type: 'video',
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
-      caption: message.videoMessage.caption || ''
+      caption: message.videoMessage.caption || '',
+      gifPlayback: false
     };
   }
 
@@ -185,7 +211,8 @@ function getMediaInfo(message = {}) {
       mediaType: 'audio',
       media: message.audioMessage,
       mimetype: message.audioMessage.mimetype || 'audio/mpeg',
-      ptt: message.audioMessage.ptt || false
+      ptt: message.audioMessage.ptt || false,
+      caption: ''
     };
   }
 
@@ -194,18 +221,70 @@ function getMediaInfo(message = {}) {
       type: 'sticker',
       mediaType: 'sticker',
       media: message.stickerMessage,
-      mimetype: message.stickerMessage.mimetype || 'image/webp'
+      mimetype: message.stickerMessage.mimetype || 'image/webp',
+      caption: ''
     };
   }
 
   if (message.documentMessage) {
+    const mimetype = message.documentMessage.mimetype || 'application/octet-stream';
+    const fileName = message.documentMessage.fileName || 'archivo';
+    const caption = message.documentMessage.caption || '';
+    const lowerName = String(fileName).toLowerCase();
+
+    if (mimetype === 'image/gif' || lowerName.endsWith('.gif')) {
+      return {
+        type: 'gif_file',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption
+      };
+    }
+
+    if (mimetype.startsWith('image/')) {
+      return {
+        type: 'image',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption
+      };
+    }
+
+    if (mimetype.startsWith('video/')) {
+      return {
+        type: 'video',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        caption,
+        gifPlayback: false
+      };
+    }
+
+    if (mimetype.startsWith('audio/')) {
+      return {
+        type: 'audio',
+        mediaType: 'document',
+        media: message.documentMessage,
+        mimetype,
+        fileName,
+        ptt: false,
+        caption
+      };
+    }
+
     return {
       type: 'document',
       mediaType: 'document',
       media: message.documentMessage,
-      mimetype: message.documentMessage.mimetype || 'application/octet-stream',
-      fileName: message.documentMessage.fileName || 'archivo',
-      caption: message.documentMessage.caption || ''
+      mimetype,
+      fileName,
+      caption
     };
   }
 
@@ -220,6 +299,17 @@ async function streamToBuffer(stream) {
   }
 
   return buffer;
+}
+
+async function convertGifToMp4(inputPath, outputPath) {
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i', inputPath,
+    '-movflags', '+faststart',
+    '-pix_fmt', 'yuv420p',
+    '-vf', 'fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2',
+    outputPath
+  ]);
 }
 
 function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
@@ -275,6 +365,13 @@ async function isEnabled(db, remoteJid, fromGroup) {
     return !fromGroup;
   }
 }
+
+function buildCaption(user, mediaCaption = '') {
+  return `🕵️ *MENSAJE ELIMINADO*
+
+👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Caption:\n${mediaCaption}` : ''}`;
+}
+
 module.exports = {
   commands: ['antidelete', 'antiborrar'],
 
@@ -319,7 +416,10 @@ module.exports = {
       const mentions = uniqueMentions([user, ...(saved.mentions || [])]);
 
       if (!media) {
-        if (!text) return;
+        if (!text) {
+          deletedCache.delete(cacheKey);
+          return;
+        }
 
         await sock.sendMessage(remoteJid, {
           text:
@@ -343,17 +443,17 @@ ${text}`,
 
       const buffer = await streamToBuffer(stream);
 
-      if (!buffer || !buffer.length) return;
+      if (!buffer || !buffer.length) {
+        deletedCache.delete(cacheKey);
+        return;
+      }
 
       const fixedCaption = replaceMentionNumbers(
-        media.caption || '',
+        media.caption || text || '',
         saved.mentionMap || {}
       );
 
-      const caption =
-`🕵️ *MENSAJE ELIMINADO*
-
-👤 Usuario: @${number(user)}${fixedCaption ? `\n\n💬 Caption:\n${fixedCaption}` : ''}`;
+      const caption = buildCaption(user, fixedCaption);
 
       if (media.type === 'image') {
         await sock.sendMessage(remoteJid, {
@@ -362,15 +462,74 @@ ${text}`,
           caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'video') {
         await sock.sendMessage(remoteJid, {
           video: buffer,
-          mimetype: media.mimetype,
+          mimetype: media.mimetype || 'video/mp4',
+          caption,
+          gifPlayback: media.gifPlayback || false,
+          mentions
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      if (media.type === 'gif') {
+        await sock.sendMessage(remoteJid, {
+          video: buffer,
+          mimetype: 'video/mp4',
+          gifPlayback: true,
           caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      if (media.type === 'gif_file') {
+        let tempInput = null;
+        let tempOutput = null;
+
+        try {
+          ensureTemp();
+
+          const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+          tempInput = path.join(TEMP_DIR, `antidelete_gif_${id}.gif`);
+          tempOutput = path.join(TEMP_DIR, `antidelete_gif_${id}.mp4`);
+
+          fs.writeFileSync(tempInput, buffer);
+
+          await convertGifToMp4(tempInput, tempOutput);
+
+          const mp4Buffer = fs.readFileSync(tempOutput);
+
+          await sock.sendMessage(remoteJid, {
+            video: mp4Buffer,
+            mimetype: 'video/mp4',
+            gifPlayback: true,
+            caption,
+            mentions
+          });
+
+        } finally {
+          for (const file of [tempInput, tempOutput]) {
+            try {
+              if (file && fs.existsSync(file)) {
+                fs.unlinkSync(file);
+              }
+            } catch {}
+          }
+        }
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'audio') {
@@ -384,6 +543,9 @@ ${text}`,
           text: caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'sticker') {
@@ -395,19 +557,26 @@ ${text}`,
           text: caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       if (media.type === 'document') {
         await sock.sendMessage(remoteJid, {
           document: buffer,
           mimetype: media.mimetype,
-          fileName: media.fileName,
+          fileName: media.fileName || 'archivo',
           caption,
           mentions
         });
+
+        deletedCache.delete(cacheKey);
+        return;
       }
 
       deletedCache.delete(cacheKey);
+      return;
 
     } catch (err) {
       console.log('❌ Error en antidelete:', err?.message || err);
