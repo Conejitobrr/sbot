@@ -496,7 +496,3 @@ Uso:
     }
   }
 };
-      console.log('❌ Error en antidelete:', err?.message || err);
-    }
-  },
-  
