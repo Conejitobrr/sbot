@@ -231,9 +231,9 @@ const FILTERS = {
   },
 
   megafono: {
-    name: 'Megáfono',
-    filter: 'highpass=f=350,lowpass=f=4500,acompressor=threshold=-20dB:ratio=5,volume=1.8'
-  },
+  name: 'Megáfono',
+  filter: 'highpass=f=650,lowpass=f=3300,equalizer=f=1200:t=q:w=1:g=10,equalizer=f=2500:t=q:w=1:g=7,acompressor=threshold=-24dB:ratio=10:attack=3:release=80,volume=2.4,acrusher=bits=8:mix=0.35:mode=log,alimiter=limit=0.88'
+},
 
   bajo: {
     name: 'Bajos fuertes',
