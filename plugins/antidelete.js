@@ -158,16 +158,6 @@ function getText(message = {}) {
   );
 }
 
-function isViewOnce(message = {}) {
-  return (
-    message.viewOnceMessage ||
-    message.viewOnceMessageV2 ||
-    message.viewOnceMessageV2Extension ||
-    message.imageMessage?.viewOnce === true ||
-    message.videoMessage?.viewOnce === true
-  );
-}
-
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
@@ -240,7 +230,6 @@ function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
 
   const message = unwrapMessage(msg.message);
 
-  if (isViewOnce(message)) return;
 
   const mentionMap = getMentionMap(message, store, groupMetadata);
   const mentions = getMessageMentions(message);
