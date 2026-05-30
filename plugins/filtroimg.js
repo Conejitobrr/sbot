@@ -1,15 +1,89 @@
 'use strict';
 
-const Jimp = require('jimp');
+const fs = require('fs');
+const path = require('path');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
-const fontCache = new Map();
+const JimpModule = require('jimp');
+const Jimp = JimpModule.Jimp || JimpModule;
 
-async function getFont(name) {
-  if (!fontCache.has(name)) {
-    fontCache.set(name, await Jimp.loadFont(name));
+const loadFont = JimpModule.loadFont || Jimp.loadFont;
+const measureText = JimpModule.measureText || Jimp.measureText;
+const measureTextHeight = JimpModule.measureTextHeight || Jimp.measureTextHeight;
+
+const ASSETS_DIR = path.join(process.cwd(), 'assets');
+
+const CMDS = [
+  'wanted',
+  'jail',
+  'triggered',
+  'lgbt',
+  'glitch',
+  'distorsion',
+  'basura',
+  'payaso',
+  'bonito'
+];
+
+function rgba(r, g, b, a = 255) {
+  return Jimp.rgbaToInt(r, g, b, a);
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function assetPath(name) {
+  return path.join(ASSETS_DIR, name);
+}
+
+function assetExists(name) {
+  return fs.existsSync(assetPath(name));
+}
+
+async function loadAsset(name) {
+  if (!assetExists(name)) return null;
+  return await Jimp.read(assetPath(name));
+}
+
+async function loadBestFont(type = 'black', size = '32') {
+  const names = [
+    `FONT_SANS_${size}_${type.toUpperCase()}`,
+    `FONT_SANS_${size}_BLACK`,
+    `FONT_SANS_${size}_WHITE`,
+    'FONT_SANS_32_BLACK',
+    'FONT_SANS_32_WHITE'
+  ];
+
+  for (const name of names) {
+    const key = Jimp[name] || JimpModule[name];
+    if (!key) continue;
+
+    try {
+      return await loadFont(key);
+    } catch {}
   }
-  return fontCache.get(name);
+
+  return null;
+}
+
+async function streamToBuffer(stream) {
+  let buffer = Buffer.from([]);
+  for await (const chunk of stream) {
+    buffer = Buffer.concat([buffer, chunk]);
+  }
+  return buffer;
+}
+
+function getQuotedContext(msg) {
+  return (
+    msg.message?.extendedTextMessage?.contextInfo ||
+    msg.message?.imageMessage?.contextInfo ||
+    msg.message?.videoMessage?.contextInfo ||
+    msg.message?.documentMessage?.contextInfo ||
+    msg.message?.stickerMessage?.contextInfo ||
+    null
+  );
 }
 
 function unwrapMessage(message = {}) {
@@ -24,16 +98,6 @@ function unwrapMessage(message = {}) {
   return message;
 }
 
-function getQuotedContext(msg) {
-  return (
-    msg.message?.extendedTextMessage?.contextInfo ||
-    msg.message?.imageMessage?.contextInfo ||
-    msg.message?.videoMessage?.contextInfo ||
-    msg.message?.documentMessage?.contextInfo ||
-    null
-  );
-}
-
 function getQuotedMessage(msg) {
   const ctx = getQuotedContext(msg);
   const quoted = ctx?.quotedMessage || null;
@@ -43,19 +107,30 @@ function getQuotedMessage(msg) {
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
+      kind: 'image',
       mediaType: 'image',
       media: message.imageMessage,
       mimetype: message.imageMessage.mimetype || 'image/jpeg'
     };
   }
 
+  if (message.stickerMessage) {
+    return {
+      kind: 'sticker',
+      mediaType: 'sticker',
+      media: message.stickerMessage,
+      mimetype: message.stickerMessage.mimetype || 'image/webp'
+    };
+  }
+
   if (message.documentMessage) {
-    const mimetype = message.documentMessage.mimetype || '';
-    if (mimetype.startsWith('image/')) {
+    const mime = message.documentMessage.mimetype || '';
+    if (mime.startsWith('image/')) {
       return {
+        kind: 'document',
         mediaType: 'document',
         media: message.documentMessage,
-        mimetype
+        mimetype: mime
       };
     }
   }
@@ -63,309 +138,522 @@ function getMediaInfo(message = {}) {
   return null;
 }
 
-async function streamToBuffer(stream) {
-  let buffer = Buffer.from([]);
+async function readInputImage(msg) {
+  const quoted = getQuotedMessage(msg);
+  const target = quoted || unwrapMessage(msg.message || {});
+  const mediaInfo = getMediaInfo(target);
 
-  for await (const chunk of stream) {
-    buffer = Buffer.concat([buffer, chunk]);
-  }
+  if (!mediaInfo) return null;
 
-  return buffer;
-}
-
-async function downloadMediaBuffer(mediaInfo) {
   const stream = await downloadContentFromMessage(
     mediaInfo.media,
     mediaInfo.mediaType
   );
 
-  return await streamToBuffer(stream);
+  const buffer = await streamToBuffer(stream);
+  if (!buffer || !buffer.length) return null;
+
+  return await Jimp.read(buffer);
 }
 
-function drawCircle(image, cx, cy, radius, color) {
-  for (let y = -radius; y <= radius; y++) {
-    for (let x = -radius; x <= radius; x++) {
-      if ((x * x) + (y * y) <= (radius * radius)) {
-        const px = cx + x;
-        const py = cy + y;
+function cover(img, w, h) {
+  return img.clone().cover(w, h);
+}
 
-        if (
-          px >= 0 &&
-          py >= 0 &&
-          px < image.bitmap.width &&
-          py < image.bitmap.height
-        ) {
-          image.setPixelColor(color, px, py);
-        }
-      }
+function contain(img, w, h) {
+  return img.clone().contain(w, h);
+}
+
+function drawRect(base, x, y, w, h, color, opacity = 1) {
+  const rect = new Jimp(w, h, color);
+  rect.opacity(opacity);
+  base.composite(rect, x, y);
+}
+
+function applyNoise(base, amount = 10) {
+  base.scan(0, 0, base.bitmap.width, base.bitmap.height, function (x, y, idx) {
+    const delta = Math.floor((Math.random() - 0.5) * amount);
+
+    this.bitmap.data[idx + 0] = clamp(this.bitmap.data[idx + 0] + delta, 0, 255);
+    this.bitmap.data[idx + 1] = clamp(this.bitmap.data[idx + 1] + delta, 0, 255);
+    this.bitmap.data[idx + 2] = clamp(this.bitmap.data[idx + 2] + delta, 0, 255);
+  });
+}
+
+function applyVignette(base, strength = 0.55) {
+  const w = base.bitmap.width;
+  const h = base.bitmap.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const maxDist = Math.sqrt(cx * cx + cy * cy);
+
+  base.scan(0, 0, w, h, function (x, y, idx) {
+    const dx = x - cx;
+    const dy = y - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const ratio = dist / maxDist;
+    const darken = 1 - Math.pow(ratio, 1.7) * strength;
+
+    this.bitmap.data[idx + 0] = clamp(Math.round(this.bitmap.data[idx + 0] * darken), 0, 255);
+    this.bitmap.data[idx + 1] = clamp(Math.round(this.bitmap.data[idx + 1] * darken), 0, 255);
+    this.bitmap.data[idx + 2] = clamp(Math.round(this.bitmap.data[idx + 2] * darken), 0, 255);
+  });
+}
+
+function addSoftLight(base, opacity = 0.18) {
+  const glow = base.clone().blur(18).brightness(0.08).opacity(opacity);
+  base.composite(glow, 0, 0);
+}
+
+function drawCircle(base, cx, cy, radius, color, opacity = 1) {
+  const circle = new Jimp(radius * 2, radius * 2, 0x00000000);
+
+  circle.scan(0, 0, circle.bitmap.width, circle.bitmap.height, function (x, y, idx) {
+    const dx = x - radius;
+    const dy = y - radius;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist <= radius) {
+      this.bitmap.data[idx + 0] = (color >> 24) & 255;
+      this.bitmap.data[idx + 1] = (color >> 16) & 255;
+      this.bitmap.data[idx + 2] = (color >> 8) & 255;
+      this.bitmap.data[idx + 3] = Math.round(((color & 255) || 255) * opacity);
+    }
+  });
+
+  base.composite(circle, cx - radius, cy - radius);
+}
+
+function isolateChannel(img, mode = 'red') {
+  const out = img.clone();
+
+  out.scan(0, 0, out.bitmap.width, out.bitmap.height, function (x, y, idx) {
+    const r = this.bitmap.data[idx + 0];
+    const g = this.bitmap.data[idx + 1];
+    const b = this.bitmap.data[idx + 2];
+
+    if (mode === 'red') {
+      this.bitmap.data[idx + 0] = r;
+      this.bitmap.data[idx + 1] = 0;
+      this.bitmap.data[idx + 2] = 0;
+    } else if (mode === 'cyan') {
+      this.bitmap.data[idx + 0] = 0;
+      this.bitmap.data[idx + 1] = g;
+      this.bitmap.data[idx + 2] = b;
+    }
+  });
+
+  return out;
+}
+
+async function renderText(base, text, x, y, maxWidth, align = 'center', color = 'black', size = '32') {
+  const font = await loadBestFont(color, size);
+  if (!font) return;
+
+  const alignmentX =
+    align === 'left' ? Jimp.HORIZONTAL_ALIGN_LEFT :
+    align === 'right' ? Jimp.HORIZONTAL_ALIGN_RIGHT :
+    Jimp.HORIZONTAL_ALIGN_CENTER;
+
+  const height = measureTextHeight(font, text, maxWidth);
+
+  base.print(
+    font,
+    x,
+    y,
+    {
+      text,
+      alignmentX,
+      alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+    },
+    maxWidth,
+    height + 20
+  );
+}
+
+/* ===========================
+   FILTROS
+=========================== */
+
+async function makeWanted(input) {
+  const W = 1000;
+  const H = 1400;
+
+  const base = new Jimp(W, H, rgba(214, 191, 142, 255));
+  applyNoise(base, 18);
+  applyVignette(base, 0.22);
+
+  const photoShadow = new Jimp(660, 760, rgba(0, 0, 0, 160)).blur(18);
+  base.composite(photoShadow, 170, 230);
+
+  const photo = cover(input, 620, 720)
+    .greyscale()
+    .sepia()
+    .contrast(0.25)
+    .brightness(0.02);
+
+  base.composite(photo, 190, 250);
+
+  drawRect(base, 185, 245, 630, 730, rgba(77, 49, 18, 255), 0.18);
+  drawRect(base, 180, 240, 640, 740, rgba(92, 62, 28, 255), 0.2);
+
+  const frame = await loadAsset('wanted_frame.png');
+  if (frame) {
+    frame.resize(W, H);
+    base.composite(frame, 0, 0);
+  }
+
+  await renderText(base, 'WANTED', 40, 40, 920, 'center', 'black', '64');
+  await renderText(base, 'DEAD OR ALIVE', 40, 135, 920, 'center', 'black', '32');
+  await renderText(base, '$100,000 REWARD', 70, 1030, 860, 'center', 'black', '32');
+  await renderText(base, 'MOST WANTED OUTLAW', 70, 1115, 860, 'center', 'black', '32');
+
+  applyVignette(base, 0.26);
+
+  return base.quality(92);
+}
+
+async function makeJail(input) {
+  const W = 1000;
+  const H = 1300;
+
+  const base = cover(input, W, H)
+    .contrast(0.22)
+    .brightness(-0.08);
+
+  base.color([
+    { apply: 'desaturate', params: [10] },
+    { apply: 'blue', params: [12] }
+  ]);
+
+  drawRect(base, 0, 0, W, H, rgba(15, 25, 40, 255), 0.20);
+  addSoftLight(base, 0.14);
+  applyVignette(base, 0.45);
+
+  const light = new Jimp(W, H, 0x00000000);
+  light.scan(0, 0, W, H, function (x, y, idx) {
+    const dx = x - W / 2;
+    const dy = y - H / 2;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const max = Math.sqrt((W / 2) ** 2 + (H / 2) ** 2);
+    const alpha = clamp(130 - Math.floor((dist / max) * 180), 0, 90);
+
+    this.bitmap.data[idx + 0] = 200;
+    this.bitmap.data[idx + 1] = 220;
+    this.bitmap.data[idx + 2] = 255;
+    this.bitmap.data[idx + 3] = alpha;
+  });
+
+  base.composite(light, 0, 0);
+
+  const bars = await loadAsset('jail_bars.png');
+  if (bars) {
+    bars.resize(W, H);
+    bars.opacity(0.97);
+    base.composite(bars, 0, 0);
+  } else {
+    for (let x = 70; x < W; x += 115) {
+      const bar = new Jimp(22, H, rgba(30, 30, 35, 255));
+      base.composite(bar, x, 0);
+      const shine = new Jimp(6, H, rgba(210, 210, 220, 100));
+      base.composite(shine, x + 4, 0);
     }
   }
+
+  drawRect(base, 0, 0, W, 130, rgba(0, 0, 0, 170), 1);
+  await renderText(base, 'ARRESTED', 30, 28, 940, 'center', 'white', '64');
+
+  return base.quality(92);
 }
 
-function coverSquare(image, size = 700) {
-  return image.clone().cover(size, size);
-}
+async function makeTriggered(input) {
+  const W = 900;
+  const H = 900;
 
-async function effectWanted(source) {
-  const fontTitle = await getFont(Jimp.FONT_SANS_64_BLACK);
-  const fontSmall = await getFont(Jimp.FONT_SANS_32_BLACK);
+  const face = cover(input, W, 760)
+    .contrast(0.35)
+    .brightness(0.02);
 
-  const photo = source
-    .clone()
-    .cover(680, 760)
-    .sepia()
-    .contrast(0.2)
-    .posterize(28);
+  face.color([
+    { apply: 'red', params: [25] },
+    { apply: 'saturate', params: [30] }
+  ]);
 
-  const poster = new Jimp(760, 980, 0xf1dfb7ff);
-  const frame = new Jimp(700, 780, 0x2d1c0eff);
+  const base = new Jimp(W, H, rgba(30, 10, 10, 255));
+  base.composite(face, 0, 0);
 
-  poster.composite(frame, 30, 120);
-  poster.composite(photo, 40, 130);
+  const red = isolateChannel(face, 'red').opacity(0.35);
+  const cyan = isolateChannel(face, 'cyan').opacity(0.35);
 
-  poster.print(
-    fontTitle,
-    20,
-    25,
-    {
-      text: 'WANTED',
-      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER
-    },
-    720,
-    70
-  );
+  base.composite(red, -8, 0);
+  base.composite(cyan, 8, 0);
 
-  poster.print(
-    fontSmall,
-    40,
-    915,
-    {
-      text: 'SE BUSCA',
-      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER
-    },
-    680,
-    40
-  );
-
-  return poster;
-}
-
-async function effectJail(source) {
-  const img = coverSquare(source, 700)
-    .contrast(0.15)
-    .color([{ apply: 'desaturate', params: [20] }]);
-
-  const dark = new Jimp(700, 700, 0x00000035);
-  img.composite(dark, 0, 0);
-
-  const barColor = 0x1d1d1de0;
-  const shineColor = 0xffffff40;
-
-  for (let x = 45; x < 700; x += 95) {
-    const bar = new Jimp(26, 700, barColor);
-    const shine = new Jimp(4, 700, shineColor);
-
-    img.composite(bar, x, 0);
-    img.composite(shine, x + 4, 0);
+  for (let i = 0; i < 14; i++) {
+    const y = Math.floor(Math.random() * 650);
+    const h = Math.floor(Math.random() * 28) + 10;
+    const slice = base.clone().crop(0, y, W, h);
+    const offset = Math.floor(Math.random() * 40) - 20;
+    base.composite(slice, offset, y);
   }
 
-  const topBar = new Jimp(700, 25, 0x1d1d1de0);
-  const bottomBar = new Jimp(700, 25, 0x1d1d1de0);
+  drawRect(base, 0, 0, W, 760, rgba(255, 0, 0, 255), 0.08);
+  applyNoise(base, 22);
+  applyVignette(base, 0.22);
 
-  img.composite(topBar, 0, 0);
-  img.composite(bottomBar, 0, 675);
+  const trig = await loadAsset('triggered_bar.png');
+  if (trig) {
+    trig.resize(W, 140);
+    base.composite(trig, 0, H - 140);
+  } else {
+    drawRect(base, 0, H - 140, W, 140, rgba(184, 0, 0, 255), 1);
+    await renderText(base, 'TRIGGERED', 20, H - 110, W - 40, 'center', 'white', '64');
+  }
 
-  return img;
+  return base.quality(90);
 }
 
-async function effectTriggered(source) {
-  const font = await getFont(Jimp.FONT_SANS_64_WHITE);
+async function makeLGBT(input) {
+  const W = 1000;
+  const H = 1200;
 
-  const img = coverSquare(source, 700)
-    .contrast(0.35)
-    .color([
-      { apply: 'red', params: [60] },
-      { apply: 'saturate', params: [30] }
-    ])
-    .posterize(18);
+  const base = cover(input, W, H).contrast(0.1);
 
-  const canvas = new Jimp(700, 820, 0x000000ff);
-  const banner = new Jimp(700, 120, 0xd41414ff);
-
-  canvas.composite(img, 0, 0);
-  canvas.composite(banner, 0, 700);
-
-  canvas.print(
-    font,
-    20,
-    725,
-    {
-      text: 'TRIGGERED',
-      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER
-    },
-    660,
-    70
-  );
-
-  return canvas;
-}
-
-async function effectLgbt(source) {
-  const img = coverSquare(source, 700);
-
+  const rainbow = new Jimp(W, H, 0x00000000);
   const colors = [
-    0xe40303ff,
-    0xff8c00ff,
-    0xffed00ff,
-    0x008026ff,
-    0x004dffff,
-    0x750787ff
+    rgba(228, 3, 3, 255),
+    rgba(255, 140, 0, 255),
+    rgba(255, 237, 0, 255),
+    rgba(0, 128, 38, 255),
+    rgba(0, 77, 255, 255),
+    rgba(117, 7, 135, 255)
   ];
 
-  const stripeHeight = Math.ceil(img.bitmap.height / colors.length);
+  const band = Math.ceil(H / colors.length);
 
-  for (let i = 0; i < colors.length; i++) {
-    const stripe = new Jimp(img.bitmap.width, stripeHeight, colors[i]);
-    stripe.opacity(0.28);
-    img.composite(stripe, 0, i * stripeHeight);
+  colors.forEach((color, i) => {
+    drawRect(rainbow, 0, i * band, W, band, color, 0.22);
+  });
+
+  base.composite(rainbow, 0, 0);
+  addSoftLight(base, 0.18);
+  applyVignette(base, 0.28);
+
+  return base.quality(92);
+}
+
+async function makeGlitch(input) {
+  const W = 1000;
+  const H = 1000;
+
+  const base = cover(input, W, H).contrast(0.2);
+
+  const red = isolateChannel(base, 'red').opacity(0.28);
+  const cyan = isolateChannel(base, 'cyan').opacity(0.28);
+
+  base.composite(red, -10, 0);
+  base.composite(cyan, 10, 0);
+
+  for (let i = 0; i < 22; i++) {
+    const y = Math.floor(Math.random() * H);
+    const h = Math.floor(Math.random() * 40) + 8;
+    const offset = Math.floor(Math.random() * 60) - 30;
+    const slice = base.clone().crop(0, y, W, h);
+    base.composite(slice, offset, y);
+
+    if (Math.random() > 0.55) {
+      drawRect(base, 0, y, W, Math.max(2, Math.floor(h / 5)), rgba(
+        Math.random() > 0.5 ? 0 : 255,
+        Math.random() > 0.5 ? 255 : 0,
+        255,
+        255
+      ), 0.28);
+    }
   }
 
-  return img;
+  applyNoise(base, 14);
+  applyVignette(base, 0.18);
+
+  return base.quality(90);
 }
 
-async function effectGlitch(source) {
-  const base = coverSquare(source, 700)
-    .contrast(0.25)
-    .color([{ apply: 'saturate', params: [20] }]);
+async function makeDistorsion(input) {
+  const W = 900;
+  const H = 900;
 
-  const result = base.clone();
+  const src = cover(input, W, H);
+  const out = new Jimp(W, H, rgba(0, 0, 0, 255));
 
-  for (let i = 0; i < 18; i++) {
-    const y = Math.floor(Math.random() * 650);
-    const h = 10 + Math.floor(Math.random() * 40);
-    const shift = Math.floor(Math.random() * 60) - 30;
-    const piece = base.clone().crop(0, y, 700, Math.min(h, 700 - y));
+  out.scan(0, 0, W, H, function (x, y) {
+    const dx = Math.sin(y / 26) * 18 + Math.sin(y / 8) * 4;
+    const dy = Math.cos(x / 30) * 12 + Math.sin(x / 18) * 3;
 
-    result.composite(piece, shift, y);
-  }
+    const sx = clamp(Math.round(x + dx), 0, W - 1);
+    const sy = clamp(Math.round(y + dy), 0, H - 1);
 
-  const red = base.clone().color([{ apply: 'red', params: [80] }]).opacity(0.18);
-  const blue = base.clone().color([{ apply: 'blue', params: [80] }]).opacity(0.18);
+    const color = src.getPixelColor(sx, sy);
+    out.setPixelColor(color, x, y);
+  });
 
-  result.composite(red, -8, 0);
-  result.composite(blue, 8, 0);
+  const red = isolateChannel(out, 'red').opacity(0.15);
+  const cyan = isolateChannel(out, 'cyan').opacity(0.15);
 
-  return result;
+  out.composite(red, -6, 0);
+  out.composite(cyan, 6, 0);
+
+  out.contrast(0.18);
+  applyVignette(out, 0.18);
+
+  return out.quality(90);
 }
 
-async function effectDistorsion(source) {
-  const base = coverSquare(source, 700);
-  const result = new Jimp(700, 700, 0x000000ff);
+async function makePayaso(input) {
+  const W = 1000;
+  const H = 1200;
 
-  for (let y = 0; y < 700; y += 12) {
-    const h = 12;
-    const wave = Math.round(Math.sin(y / 35) * 18);
-    const strip = base.clone().crop(0, y, 700, Math.min(h, 700 - y));
-
-    result.composite(strip, wave, y);
-  }
-
-  result.blur(1).contrast(0.1);
-  return result;
-}
-
-async function effectPayaso(source) {
-  const img = coverSquare(source, 700);
-
-  const w = img.bitmap.width;
-  const h = img.bitmap.height;
-
-  drawCircle(img, Math.floor(w / 2), Math.floor(h / 2) + 20, 45, 0xe11d2eff);
-  drawCircle(img, Math.floor(w / 2) - 110, Math.floor(h / 2) + 35, 28, 0xff7aa2cc);
-  drawCircle(img, Math.floor(w / 2) + 110, Math.floor(h / 2) + 35, 28, 0xff7aa2cc);
-  drawCircle(img, Math.floor(w / 2) + 15, Math.floor(h / 2), 10, 0xffffffff);
-
-  return img;
-}
-
-async function effectBasura(source) {
-  const font = await getFont(Jimp.FONT_SANS_64_WHITE);
-
-  const img = coverSquare(source, 700)
-    .greyscale()
-    .contrast(0.25)
-    .brightness(-0.1);
-
-  const overlay = new Jimp(700, 700, 0x2b2b2b66);
-  img.composite(overlay, 0, 0);
-
-  const top = new Jimp(700, 100, 0x111111dd);
-  img.composite(top, 0, 0);
-
-  img.print(
-    font,
-    20,
-    18,
-    {
-      text: 'BASURA',
-      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER
-    },
-    660,
-    70
-  );
-
-  return img;
-}
-
-async function effectBonito(source) {
-  const img = coverSquare(source, 700)
-    .blur(1)
-    .brightness(0.08)
+  const base = cover(input, W, H)
     .contrast(0.08)
-    .color([
-      { apply: 'saturate', params: [12] },
-      { apply: 'orange', params: [10] }
-    ]);
+    .brightness(0.03);
 
-  const glow = img.clone().blur(8).opacity(0.15);
-  img.composite(glow, 0, 0);
+  base.color([
+    { apply: 'saturate', params: [18] }
+  ]);
 
-  return img;
+  addSoftLight(base, 0.14);
+
+  const nose = await loadAsset('clown_nose.png');
+  if (nose) {
+    const size = 180;
+    nose.resize(size, Jimp.AUTO);
+    nose.opacity(0.96);
+    base.composite(nose, Math.floor(W / 2 - nose.bitmap.width / 2), Math.floor(H / 2 - 10));
+  }
+
+  drawCircle(base, Math.floor(W / 2 - 145), Math.floor(H / 2 + 35), 34, rgba(255, 80, 120, 255), 0.42);
+  drawCircle(base, Math.floor(W / 2 + 145), Math.floor(H / 2 + 35), 34, rgba(255, 80, 120, 255), 0.42);
+
+  drawRect(base, Math.floor(W / 2 - 170), Math.floor(H / 2 - 165), 110, 10, rgba(30, 30, 30, 255), 0.75);
+  drawRect(base, Math.floor(W / 2 + 60), Math.floor(H / 2 - 165), 110, 10, rgba(30, 30, 30, 255), 0.75);
+
+  applyVignette(base, 0.18);
+
+  return base.quality(92);
 }
 
-const handlers = {
-  wanted: effectWanted,
-  jail: effectJail,
-  triggered: effectTriggered,
-  lgbt: effectLgbt,
-  glitch: effectGlitch,
-  distorsion: effectDistorsion,
-  payaso: effectPayaso,
-  basura: effectBasura,
-  bonito: effectBonito
-};
+async function makeBasura(input) {
+  const W = 1000;
+  const H = 1300;
+
+  const base = new Jimp(W, H, rgba(32, 32, 32, 255));
+
+  drawRect(base, 0, 0, W, H, rgba(48, 48, 48, 255), 1);
+  drawRect(base, 0, 0, W, 220, rgba(70, 70, 70, 255), 0.25);
+
+  const shadow = new Jimp(640, 720, rgba(0, 0, 0, 170)).blur(30);
+  base.composite(shadow, 210, 390);
+
+  drawRect(base, 220, 330, 560, 650, rgba(88, 88, 92, 255), 1);
+  drawRect(base, 245, 295, 510, 55, rgba(120, 120, 125, 255), 1);
+
+  for (let i = 0; i < 6; i++) {
+    drawRect(base, 290 + i * 70, 360, 24, 570, rgba(130, 130, 138, 255), 0.42);
+  }
+
+  const photo = contain(input, 430, 430)
+    .rotate(-18, false)
+    .brightness(-0.02)
+    .contrast(0.1);
+
+  const picShadow = new Jimp(photo.bitmap.width + 24, photo.bitmap.height + 24, rgba(0, 0, 0, 150)).blur(18);
+
+  base.composite(picShadow, 320, 500);
+  base.composite(photo, 335, 510);
+
+  applyNoise(base, 10);
+  applyVignette(base, 0.30);
+
+  await renderText(base, 'TRASH', 0, 70, W, 'center', 'white', '64');
+
+  return base.quality(92);
+}
+
+async function makeBonito(input) {
+  const W = 1000;
+  const H = 1300;
+
+  const base = cover(input, W, H);
+
+  const soft = base.clone().blur(5).opacity(0.24);
+  base.composite(soft, 0, 0);
+
+  base.color([
+    { apply: 'brighten', params: [8] },
+    { apply: 'saturate', params: [10] },
+    { apply: 'red', params: [8] }
+  ]);
+
+  base.contrast(0.08);
+
+  try {
+    base.convolute([
+      [0, -1, 0],
+      [-1, 5, -1],
+      [0, -1, 0]
+    ]);
+  } catch {}
+
+  addSoftLight(base, 0.20);
+  applyVignette(base, 0.14);
+
+  drawRect(base, 0, H - 120, W, 120, rgba(255, 255, 255, 255), 0.08);
+
+  return base.quality(93);
+}
+
+async function applyFilter(command, image) {
+  switch (command) {
+    case 'wanted':
+      return await makeWanted(image);
+
+    case 'jail':
+      return await makeJail(image);
+
+    case 'triggered':
+      return await makeTriggered(image);
+
+    case 'lgbt':
+      return await makeLGBT(image);
+
+    case 'glitch':
+      return await makeGlitch(image);
+
+    case 'distorsion':
+      return await makeDistorsion(image);
+
+    case 'basura':
+      return await makeBasura(image);
+
+    case 'payaso':
+      return await makePayaso(image);
+
+    case 'bonito':
+      return await makeBonito(image);
+
+    default:
+      return null;
+  }
+}
 
 module.exports = {
-  commands: [
-    'wanted',
-    'jail',
-    'triggered',
-    'lgbt',
-    'glitch',
-    'distorsion',
-    'payaso',
-    'basura',
-    'bonito'
-  ],
+  commands: CMDS,
 
   async execute({ sock, msg, remoteJid, command }) {
     try {
-      const quoted = getQuotedMessage(msg);
+      const image = await readInputImage(msg);
 
-      if (!quoted) {
+      if (!image) {
         return sock.sendMessage(remoteJid, {
           text:
-`❌ Responde a una imagen para usar este comando.
+`❌ Responde a una *imagen*, *sticker* o *documento de imagen*.
 
 Comandos disponibles:
 .wanted
@@ -374,42 +662,24 @@ Comandos disponibles:
 .lgbt
 .glitch
 .distorsion
-.payaso
 .basura
+.payaso
 .bonito`
         }, { quoted: msg });
       }
 
-      const mediaInfo = getMediaInfo(quoted);
+      const result = await applyFilter(command, image);
 
-      if (!mediaInfo) {
+      if (!result) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ El mensaje citado no contiene una imagen válida.'
+          text: '❌ No se pudo aplicar el filtro.'
         }, { quoted: msg });
       }
 
-      const buffer = await downloadMediaBuffer(mediaInfo);
-
-      if (!buffer || !buffer.length) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ No se pudo descargar la imagen.'
-        }, { quoted: msg });
-      }
-
-      const image = await Jimp.read(buffer);
-      const effect = handlers[String(command).toLowerCase()];
-
-      if (!effect) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ Filtro no válido.'
-        }, { quoted: msg });
-      }
-
-      const result = await effect(image);
-      const output = await result.quality(95).getBufferAsync(Jimp.MIME_JPEG);
+      const buffer = await result.getBufferAsync(Jimp.MIME_JPEG);
 
       await sock.sendMessage(remoteJid, {
-        image: output,
+        image: buffer,
         caption: `✅ Filtro aplicado: *${command}*`
       }, { quoted: msg });
 
