@@ -8,8 +8,12 @@ const JimpModule = require('jimp');
 const Jimp = JimpModule.Jimp || JimpModule;
 
 const loadFont = JimpModule.loadFont || Jimp.loadFont;
-const measureText = JimpModule.measureText || Jimp.measureText;
-const measureTextHeight = JimpModule.measureTextHeight || Jimp.measureTextHeight;
+const measureTextHeight =
+  JimpModule.measureTextHeight ||
+  Jimp.measureTextHeight ||
+  function () {
+    return 40;
+  };
 
 const ASSETS_DIR = path.join(process.cwd(), 'assets');
 
@@ -26,7 +30,15 @@ const CMDS = [
 ];
 
 function rgba(r, g, b, a = 255) {
-  return Jimp.rgbaToInt(r, g, b, a);
+  if (typeof Jimp.rgbaToInt === 'function') {
+    return Jimp.rgbaToInt(r, g, b, a);
+  }
+
+  if (typeof JimpModule.rgbaToInt === 'function') {
+    return JimpModule.rgbaToInt(r, g, b, a);
+  }
+
+  return ((r & 255) << 24) | ((g & 255) << 16) | ((b & 255) << 8) | (a & 255);
 }
 
 function clamp(n, min, max) {
@@ -42,8 +54,18 @@ function assetExists(name) {
 }
 
 async function loadAsset(name) {
-  if (!assetExists(name)) return null;
-  return await Jimp.read(assetPath(name));
+  try {
+    if (!assetExists(name)) {
+      console.log(`⚠️ Asset no encontrado: ${name}`);
+      return null;
+    }
+
+    return await Jimp.read(assetPath(name));
+
+  } catch (err) {
+    console.log(`⚠️ No se pudo cargar asset ${name}:`, err?.message || err);
+    return null;
+  }
 }
 
 async function loadBestFont(type = 'black', size = '32') {
@@ -69,9 +91,11 @@ async function loadBestFont(type = 'black', size = '32') {
 
 async function streamToBuffer(stream) {
   let buffer = Buffer.from([]);
+
   for await (const chunk of stream) {
     buffer = Buffer.concat([buffer, chunk]);
   }
+
   return buffer;
 }
 
@@ -101,6 +125,7 @@ function unwrapMessage(message = {}) {
 function getQuotedMessage(msg) {
   const ctx = getQuotedContext(msg);
   const quoted = ctx?.quotedMessage || null;
+
   return quoted ? unwrapMessage(quoted) : null;
 }
 
@@ -125,6 +150,7 @@ function getMediaInfo(message = {}) {
 
   if (message.documentMessage) {
     const mime = message.documentMessage.mimetype || '';
+
     if (mime.startsWith('image/')) {
       return {
         kind: 'document',
@@ -151,9 +177,15 @@ async function readInputImage(msg) {
   );
 
   const buffer = await streamToBuffer(stream);
+
   if (!buffer || !buffer.length) return null;
 
-  return await Jimp.read(buffer);
+  try {
+    return await Jimp.read(buffer);
+  } catch (err) {
+    console.log('⚠️ No se pudo leer la imagen enviada:', err?.message || err);
+    return null;
+  }
 }
 
 function cover(img, w, h) {
@@ -298,6 +330,7 @@ async function makeWanted(input) {
   drawRect(base, 180, 240, 640, 740, rgba(92, 62, 28, 255), 0.2);
 
   const frame = await loadAsset('wanted_frame.png');
+
   if (frame) {
     frame.resize(W, H);
     base.composite(frame, 0, 0);
@@ -331,6 +364,7 @@ async function makeJail(input) {
   applyVignette(base, 0.45);
 
   const light = new Jimp(W, H, 0x00000000);
+
   light.scan(0, 0, W, H, function (x, y, idx) {
     const dx = x - W / 2;
     const dy = y - H / 2;
@@ -347,6 +381,7 @@ async function makeJail(input) {
   base.composite(light, 0, 0);
 
   const bars = await loadAsset('jail_bars.png');
+
   if (bars) {
     bars.resize(W, H);
     bars.opacity(0.97);
@@ -354,8 +389,9 @@ async function makeJail(input) {
   } else {
     for (let x = 70; x < W; x += 115) {
       const bar = new Jimp(22, H, rgba(30, 30, 35, 255));
-      base.composite(bar, x, 0);
       const shine = new Jimp(6, H, rgba(210, 210, 220, 100));
+
+      base.composite(bar, x, 0);
       base.composite(shine, x + 4, 0);
     }
   }
@@ -393,6 +429,7 @@ async function makeTriggered(input) {
     const h = Math.floor(Math.random() * 28) + 10;
     const slice = base.clone().crop(0, y, W, h);
     const offset = Math.floor(Math.random() * 40) - 20;
+
     base.composite(slice, offset, y);
   }
 
@@ -401,6 +438,7 @@ async function makeTriggered(input) {
   applyVignette(base, 0.22);
 
   const trig = await loadAsset('triggered_bar.png');
+
   if (trig) {
     trig.resize(W, 140);
     base.composite(trig, 0, H - 140);
@@ -418,7 +456,6 @@ async function makeLGBT(input) {
 
   const base = cover(input, W, H).contrast(0.1);
 
-  const rainbow = new Jimp(W, H, 0x00000000);
   const colors = [
     rgba(228, 3, 3, 255),
     rgba(255, 140, 0, 255),
@@ -431,10 +468,9 @@ async function makeLGBT(input) {
   const band = Math.ceil(H / colors.length);
 
   colors.forEach((color, i) => {
-    drawRect(rainbow, 0, i * band, W, band, color, 0.22);
+    drawRect(base, 0, i * band, W, band, color, 0.22);
   });
 
-  base.composite(rainbow, 0, 0);
   addSoftLight(base, 0.18);
   applyVignette(base, 0.28);
 
@@ -458,15 +494,24 @@ async function makeGlitch(input) {
     const h = Math.floor(Math.random() * 40) + 8;
     const offset = Math.floor(Math.random() * 60) - 30;
     const slice = base.clone().crop(0, y, W, h);
+
     base.composite(slice, offset, y);
 
     if (Math.random() > 0.55) {
-      drawRect(base, 0, y, W, Math.max(2, Math.floor(h / 5)), rgba(
-        Math.random() > 0.5 ? 0 : 255,
-        Math.random() > 0.5 ? 255 : 0,
-        255,
-        255
-      ), 0.28);
+      drawRect(
+        base,
+        0,
+        y,
+        W,
+        Math.max(2, Math.floor(h / 5)),
+        rgba(
+          Math.random() > 0.5 ? 0 : 255,
+          Math.random() > 0.5 ? 255 : 0,
+          255,
+          255
+        ),
+        0.28
+      );
     }
   }
 
@@ -521,11 +566,20 @@ async function makePayaso(input) {
   addSoftLight(base, 0.14);
 
   const nose = await loadAsset('clown_nose.png');
+
   if (nose) {
     const size = 180;
+
     nose.resize(size, Jimp.AUTO);
     nose.opacity(0.96);
-    base.composite(nose, Math.floor(W / 2 - nose.bitmap.width / 2), Math.floor(H / 2 - 10));
+
+    base.composite(
+      nose,
+      Math.floor(W / 2 - nose.bitmap.width / 2),
+      Math.floor(H / 2 - 10)
+    );
+  } else {
+    drawCircle(base, Math.floor(W / 2), Math.floor(H / 2 + 30), 70, rgba(230, 20, 35, 255), 0.95);
   }
 
   drawCircle(base, Math.floor(W / 2 - 145), Math.floor(H / 2 + 35), 34, rgba(255, 80, 120, 255), 0.42);
@@ -668,7 +722,7 @@ Comandos disponibles:
         }, { quoted: msg });
       }
 
-      const result = await applyFilter(command, image);
+      const result = await applyFilter(String(command).toLowerCase(), image);
 
       if (!result) {
         return sock.sendMessage(remoteJid, {
