@@ -409,7 +409,12 @@ ${text}`,
 
       deletedCache.delete(cacheKey);
 
-    } catch (err) {async execute(ctx) {
+    } catch (err) {
+      console.log('❌ Error en antidelete:', err?.message || err);
+    }
+  },
+
+  async execute(ctx) {
     const {
       sock,
       msg,
@@ -467,6 +472,18 @@ Uso:
       return sock.sendMessage(remoteJid, {
         text: option === 'on'
           ? '✅ Antidelete activado en este grupo.'
+          : '✅ Antidelete desactivado en este grupo.'
+      }, { quoted: msg });
+
+    } catch (err) {
+      console.log('❌ Error comando antidelete:', err?.message || err);
+
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Error configurando antidelete.'
+      }, { quoted: msg });
+    }
+  }
+}; Antidelete activado en este grupo.'
           : '✅ Antidelete desactivado en este grupo.'
       }, { quoted: msg });
 
