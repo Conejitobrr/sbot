@@ -341,14 +341,13 @@ ensureDir(MEDIA_DIR);
 
 const ext = getExtension(mediaInfo);
 const safeId = String(msgId || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '');
-const baseName = safeFileName(mediaInfo.fileName || media.${ext});
+const baseName = safeFileName(mediaInfo.fileName || `media.${ext}`);
 
-let finalName = anti_${Date.now()}_${safeId}_${baseName};
+let finalName = `anti_${Date.now()}_${safeId}_${baseName}`;
 
-if (!finalName.toLowerCase().endsWith(.${ext})) {
-finalName += .${ext};
+if (!finalName.toLowerCase().endsWith(`.${ext}`)) {
+  finalName += `.${ext}`;
 }
-
 const filePath = path.join(MEDIA_DIR, finalName);
 
 const stream = await downloadContentFromMessage(
