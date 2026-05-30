@@ -1,24 +1,12 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
-
-const execFileAsync = promisify(execFile);
 
 const deletedCache = new Map();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000;
-const TEMP_DIR = path.join(process.cwd(), 'temp');
-
-function ensureTemp() {
-  if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
-  }
-}
+const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; // 60 MB
 
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
@@ -28,18 +16,6 @@ function number(jid = '') {
   return cleanJid(jid)
     .split('@')[0]
     .replace(/\D/g, '');
-}
-
-function cleanName(name = '') {
-  return String(name || '')
-    .replace(/\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 40);
-}
-
-function escapeRegExp(text = '') {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function getMsgKey(remoteJid, id) {
@@ -69,6 +45,18 @@ function unwrapMessage(message = {}) {
 
   if (message.documentWithCaptionMessage?.message) {
     return unwrapMessage(message.documentWithCaptionMessage.message);
+  }
+
+  if (message.viewOnceMessage?.message) {
+    return message;
+  }
+
+  if (message.viewOnceMessageV2?.message) {
+    return message;
+  }
+
+  if (message.viewOnceMessageV2Extension?.message) {
+    return message;
   }
 
   return message;
@@ -102,64 +90,6 @@ function uniqueMentions(list = []) {
   )];
 }
 
-function getDisplayName(jid, store, groupMetadata) {
-  const clean = cleanJid(jid);
-
-  const contact =
-    store?.contacts?.[clean] ||
-    store?.contacts?.[jid] ||
-    {};
-
-  const participant = groupMetadata?.participants?.find(p =>
-    cleanJid(p.id) === clean ||
-    cleanJid(p.jid) === clean ||
-    cleanJid(p.lid) === clean ||
-    cleanJid(p.participant) === clean
-  ) || {};
-
-  const name = cleanName(
-    contact.name ||
-    contact.notify ||
-    contact.verifiedName ||
-    contact.pushName ||
-    participant.name ||
-    participant.notify ||
-    participant.verifiedName ||
-    participant.pushName ||
-    ''
-  );
-
-  return name || number(clean);
-}
-
-function getMentionMap(message = {}, store, groupMetadata) {
-  const mentioned = getMessageMentions(message);
-  const map = {};
-
-  for (const jid of mentioned) {
-    const clean = cleanJid(jid);
-    map[clean] = getDisplayName(clean, store, groupMetadata);
-  }
-
-  return map;
-}
-
-function replaceMentionNumbers(text = '', mentionMap = {}) {
-  let output = String(text || '');
-
-  for (const [jid, name] of Object.entries(mentionMap)) {
-    const num = number(jid);
-    const display = cleanName(name);
-
-    if (!num || !display) continue;
-
-    const regex = new RegExp(`@${escapeRegExp(num)}(?=\\s|$|\\n|\\r|\\t|[.,!¡¿?;:])`, 'g');
-    output = output.replace(regex, `@${display}`);
-  }
-
-  return output;
-}
-
 function getText(message = {}) {
   return (
     message.conversation ||
@@ -171,7 +101,16 @@ function getText(message = {}) {
   );
 }
 
-// ✅ Detector adaptado de tu plugin .ver
+function isViewOnce(message = {}) {
+  return (
+    message.viewOnceMessage ||
+    message.viewOnceMessageV2 ||
+    message.viewOnceMessageV2Extension ||
+    message.imageMessage?.viewOnce === true ||
+    message.videoMessage?.viewOnce === true
+  );
+}
+
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
@@ -184,24 +123,13 @@ function getMediaInfo(message = {}) {
   }
 
   if (message.videoMessage) {
-    if (message.videoMessage.gifPlayback) {
-      return {
-        type: 'gif',
-        mediaType: 'video',
-        media: message.videoMessage,
-        mimetype: message.videoMessage.mimetype || 'video/mp4',
-        caption: message.videoMessage.caption || '',
-        gifPlayback: true
-      };
-    }
-
     return {
       type: 'video',
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
       caption: message.videoMessage.caption || '',
-      gifPlayback: false
+      gifPlayback: message.videoMessage.gifPlayback || false
     };
   }
 
@@ -227,64 +155,13 @@ function getMediaInfo(message = {}) {
   }
 
   if (message.documentMessage) {
-    const mimetype = message.documentMessage.mimetype || 'application/octet-stream';
-    const fileName = message.documentMessage.fileName || 'archivo';
-    const caption = message.documentMessage.caption || '';
-    const lowerName = String(fileName).toLowerCase();
-
-    if (mimetype === 'image/gif' || lowerName.endsWith('.gif')) {
-      return {
-        type: 'gif_file',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        caption
-      };
-    }
-
-    if (mimetype.startsWith('image/')) {
-      return {
-        type: 'image',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        caption
-      };
-    }
-
-    if (mimetype.startsWith('video/')) {
-      return {
-        type: 'video',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        caption,
-        gifPlayback: false
-      };
-    }
-
-    if (mimetype.startsWith('audio/')) {
-      return {
-        type: 'audio',
-        mediaType: 'document',
-        media: message.documentMessage,
-        mimetype,
-        fileName,
-        ptt: false,
-        caption
-      };
-    }
-
     return {
       type: 'document',
       mediaType: 'document',
       media: message.documentMessage,
-      mimetype,
-      fileName,
-      caption
+      mimetype: message.documentMessage.mimetype || 'application/octet-stream',
+      fileName: message.documentMessage.fileName || 'archivo',
+      caption: message.documentMessage.caption || ''
     };
   }
 
@@ -301,18 +178,24 @@ async function streamToBuffer(stream) {
   return buffer;
 }
 
-async function convertGifToMp4(inputPath, outputPath) {
-  await execFileAsync('ffmpeg', [
-    '-y',
-    '-i', inputPath,
-    '-movflags', '+faststart',
-    '-pix_fmt', 'yuv420p',
-    '-vf', 'fps=15,scale=trunc(iw/2)*2:trunc(ih/2)*2',
-    outputPath
-  ]);
+async function downloadMediaBuffer(mediaInfo) {
+  const stream = await downloadContentFromMessage(
+    mediaInfo.media,
+    mediaInfo.mediaType
+  );
+
+  const buffer = await streamToBuffer(stream);
+
+  if (!buffer || !buffer.length) return null;
+
+  if (buffer.length > MAX_MEDIA_BUFFER) {
+    return null;
+  }
+
+  return buffer;
 }
 
-function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
+async function saveMessage(msg, remoteJid, sender, pushName) {
   const id = msg.key?.id;
 
   if (!id || !msg.message) return;
@@ -320,9 +203,16 @@ function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
 
   const message = unwrapMessage(msg.message);
 
-  const mentionMap = getMentionMap(message, store, groupMetadata);
-  const mentions = getMessageMentions(message);
-  const text = replaceMentionNumbers(getText(message), mentionMap);
+  if (isViewOnce(message)) return;
+
+  const media = getMediaInfo(message);
+  let mediaBuffer = null;
+
+  if (media) {
+    try {
+      mediaBuffer = await downloadMediaBuffer(media);
+    } catch {}
+  }
 
   const key = getMsgKey(remoteJid, id);
 
@@ -331,9 +221,10 @@ function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
     sender: cleanJid(sender),
     pushName: pushName || 'Usuario',
     message,
-    mentions,
-    mentionMap,
-    text,
+    mentions: getMessageMentions(message),
+    media,
+    mediaBuffer,
+    text: getText(message),
     time: Date.now()
   });
 
@@ -355,10 +246,8 @@ function cleanOldCache() {
 
 async function isEnabled(db, remoteJid, fromGroup) {
   try {
-    // ✅ En privado siempre activo
     if (!fromGroup) return true;
 
-    // ✅ En grupos depende de configuración
     const value = await db.getGroupSetting(remoteJid, 'antidelete');
     return value === true;
   } catch {
@@ -369,7 +258,7 @@ async function isEnabled(db, remoteJid, fromGroup) {
 function buildCaption(user, mediaCaption = '') {
   return `🕵️ *MENSAJE ELIMINADO*
 
-👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Caption:\n${mediaCaption}` : ''}`;
+👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Descripción:\n${mediaCaption}` : ''}`;
 }
 
 module.exports = {
@@ -383,17 +272,14 @@ module.exports = {
       sender,
       pushName,
       fromGroup,
-      db,
-      store,
-      groupMetadata
+      db
     } = ctx;
 
     try {
       cleanOldCache();
 
-      // ✅ Guarda mensajes tanto en grupos como en privado
       if (!isDeleteMessage(msg)) {
-        saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata);
+        await saveMessage(msg, remoteJid, sender, pushName);
         return;
       }
 
@@ -411,15 +297,16 @@ module.exports = {
       if (!saved) return;
 
       const user = saved.sender;
-      const text = saved.text || replaceMentionNumbers(getText(saved.message), saved.mentionMap || {});
-      const media = getMediaInfo(saved.message);
-      const mentions = uniqueMentions([user, ...(saved.mentions || [])]);
+      const text = saved.text || getText(saved.message);
+      const media = saved.media || getMediaInfo(saved.message);
+
+      const mentions = uniqueMentions([
+        user,
+        ...(saved.mentions || [])
+      ]);
 
       if (!media) {
-        if (!text) {
-          deletedCache.delete(cacheKey);
-          return;
-        }
+        if (!text) return;
 
         await sock.sendMessage(remoteJid, {
           text:
@@ -436,24 +323,30 @@ ${text}`,
         return;
       }
 
-      const stream = await downloadContentFromMessage(
-        media.media,
-        media.mediaType
-      );
-
-      const buffer = await streamToBuffer(stream);
+      let buffer = saved.mediaBuffer;
 
       if (!buffer || !buffer.length) {
+        try {
+          buffer = await downloadMediaBuffer(media);
+        } catch {}
+      }
+
+      if (!buffer || !buffer.length) {
+        await sock.sendMessage(remoteJid, {
+          text:
+`🕵️ *MENSAJE ELIMINADO*
+
+👤 Usuario: @${number(user)}
+
+⚠️ El mensaje tenía un archivo, pero no se pudo recuperar el contenido.${text ? `\n\n💬 Texto:\n${text}` : ''}`,
+          mentions
+        });
+
         deletedCache.delete(cacheKey);
         return;
       }
 
-      const fixedCaption = replaceMentionNumbers(
-        media.caption || text || '',
-        saved.mentionMap || {}
-      );
-
-      const caption = buildCaption(user, fixedCaption);
+      const caption = buildCaption(user, media.caption || text || '');
 
       if (media.type === 'image') {
         await sock.sendMessage(remoteJid, {
@@ -462,74 +355,16 @@ ${text}`,
           caption,
           mentions
         });
-
-        deletedCache.delete(cacheKey);
-        return;
       }
 
       if (media.type === 'video') {
         await sock.sendMessage(remoteJid, {
           video: buffer,
-          mimetype: media.mimetype || 'video/mp4',
+          mimetype: media.mimetype,
           caption,
           gifPlayback: media.gifPlayback || false,
           mentions
         });
-
-        deletedCache.delete(cacheKey);
-        return;
-      }
-
-      if (media.type === 'gif') {
-        await sock.sendMessage(remoteJid, {
-          video: buffer,
-          mimetype: 'video/mp4',
-          gifPlayback: true,
-          caption,
-          mentions
-        });
-
-        deletedCache.delete(cacheKey);
-        return;
-      }
-
-      if (media.type === 'gif_file') {
-        let tempInput = null;
-        let tempOutput = null;
-
-        try {
-          ensureTemp();
-
-          const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-          tempInput = path.join(TEMP_DIR, `antidelete_gif_${id}.gif`);
-          tempOutput = path.join(TEMP_DIR, `antidelete_gif_${id}.mp4`);
-
-          fs.writeFileSync(tempInput, buffer);
-
-          await convertGifToMp4(tempInput, tempOutput);
-
-          const mp4Buffer = fs.readFileSync(tempOutput);
-
-          await sock.sendMessage(remoteJid, {
-            video: mp4Buffer,
-            mimetype: 'video/mp4',
-            gifPlayback: true,
-            caption,
-            mentions
-          });
-
-        } finally {
-          for (const file of [tempInput, tempOutput]) {
-            try {
-              if (file && fs.existsSync(file)) {
-                fs.unlinkSync(file);
-              }
-            } catch {}
-          }
-        }
-
-        deletedCache.delete(cacheKey);
-        return;
       }
 
       if (media.type === 'audio') {
@@ -543,9 +378,6 @@ ${text}`,
           text: caption,
           mentions
         });
-
-        deletedCache.delete(cacheKey);
-        return;
       }
 
       if (media.type === 'sticker') {
@@ -557,26 +389,19 @@ ${text}`,
           text: caption,
           mentions
         });
-
-        deletedCache.delete(cacheKey);
-        return;
       }
 
       if (media.type === 'document') {
         await sock.sendMessage(remoteJid, {
           document: buffer,
           mimetype: media.mimetype,
-          fileName: media.fileName || 'archivo',
+          fileName: media.fileName,
           caption,
           mentions
         });
-
-        deletedCache.delete(cacheKey);
-        return;
       }
 
       deletedCache.delete(cacheKey);
-      return;
 
     } catch (err) {
       console.log('❌ Error en antidelete:', err?.message || err);
@@ -596,7 +421,6 @@ ${text}`,
     } = ctx;
 
     try {
-      // ✅ En privado siempre activo
       if (!fromGroup) {
         return sock.sendMessage(remoteJid, {
           text: '✅ En chats privados, *antidelete* siempre está activo.'
