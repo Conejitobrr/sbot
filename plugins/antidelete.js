@@ -481,8 +481,6 @@ const id = msg.key?.id;
 if (!id || !msg.message) return;
 if (isDeleteMessage(msg)) return;
 
-const originalMessage = msg.message;
-
 const message = unwrapMessage(originalMessage);
 const media = getMediaInfo(message);
 const text = getText(message);
