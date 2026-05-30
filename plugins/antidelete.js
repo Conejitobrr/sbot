@@ -230,7 +230,6 @@ function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
 
   const message = unwrapMessage(msg.message);
 
-
   const mentionMap = getMentionMap(message, store, groupMetadata);
   const mentions = getMessageMentions(message);
   const text = replaceMentionNumbers(getText(message), mentionMap);
@@ -253,7 +252,6 @@ function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
     deletedCache.delete(first);
   }
 }
-
 function cleanOldCache() {
   const now = Date.now();
 
@@ -296,7 +294,7 @@ module.exports = {
     try {
       cleanOldCache();
 
-      // ✅ Ahora guarda mensajes tanto en grupos como en privado
+      // ✅ Guarda mensajes tanto en grupos como en privado
       if (!isDeleteMessage(msg)) {
         saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata);
         return;
@@ -347,7 +345,10 @@ ${text}`,
 
       if (!buffer || !buffer.length) return;
 
-      const fixedCaption = replaceMentionNumbers(media.caption || '', saved.mentionMap || {});
+      const fixedCaption = replaceMentionNumbers(
+        media.caption || '',
+        saved.mentionMap || {}
+      );
 
       const caption =
 `🕵️ *MENSAJE ELIMINADO*
@@ -408,12 +409,7 @@ ${text}`,
 
       deletedCache.delete(cacheKey);
 
-    } catch (err) {
-      console.log('❌ Error en antidelete:', err?.message || err);
-    }
-  },
-
-  async execute(ctx) {
+    } catch (err) {async execute(ctx) {
     const {
       sock,
       msg,
@@ -483,3 +479,7 @@ Uso:
     }
   }
 };
+      console.log('❌ Error en antidelete:', err?.message || err);
+    }
+  },
+  
