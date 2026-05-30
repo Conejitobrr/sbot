@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { once } = require('events');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
@@ -9,14 +10,18 @@ const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const execFileAsync = promisify(execFile);
 
 const deletedCache = new Map();
+const handledDeletes = new Set();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000;
+const MAX_MEDIA_SIZE = 80 * 1024 * 1024; // 80 MB
+
+const MEDIA_DIR = path.join(process.cwd(), 'temp', 'antidelete');
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-function ensureTemp() {
-  if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 }
 
@@ -43,23 +48,72 @@ function escapeRegExp(text = '') {
 }
 
 function getMsgKey(remoteJid, id) {
-  return `${remoteJid}:${id}`;
+  return `${cleanJid(remoteJid)}:${id}`;
+}
+
+function getHandledKey(remoteJid, id) {
+  return `${cleanJid(remoteJid)}:${id}:handled`;
+}
+
+function uniqueList(list = []) {
+  return [...new Set(list.filter(Boolean).map(String))];
+}
+
+function getSaveKeys(remoteJid, id, sender = '') {
+  return uniqueList([
+    getMsgKey(remoteJid, id),
+    getMsgKey(sender, id),
+    String(id)
+  ]);
+}
+
+function getPossibleDeletedKeys(remoteJid, deletedKey = {}) {
+  const id = deletedKey?.id;
+  if (!id) return [];
+
+  return uniqueList([
+    getMsgKey(remoteJid, id),
+    getMsgKey(deletedKey.remoteJid, id),
+    getMsgKey(deletedKey.participant, id),
+    String(id)
+  ]);
+}
+
+function getProtocolMessage(msg) {
+  const m = msg.message || {};
+
+  return (
+    m.protocolMessage ||
+    m.ephemeralMessage?.message?.protocolMessage ||
+    null
+  );
 }
 
 function isDeleteMessage(msg) {
-  const protocol = msg.message?.protocolMessage;
+  const protocol = getProtocolMessage(msg);
 
   if (!protocol) return false;
 
   return (
     protocol.type === 0 ||
     protocol.type === 'REVOKE' ||
-    protocol.key?.id
+    !!protocol.key?.id
   );
 }
 
 function getDeletedKey(msg) {
-  return msg.message?.protocolMessage?.key || null;
+  return getProtocolMessage(msg)?.key || null;
+}
+
+function findSavedMessage(remoteJid, deletedKey) {
+  const keys = getPossibleDeletedKeys(remoteJid, deletedKey);
+
+  for (const key of keys) {
+    const saved = deletedCache.get(key);
+    if (saved) return { key, saved };
+  }
+
+  return null;
 }
 
 function unwrapMessage(message = {}) {
@@ -95,11 +149,7 @@ function getMessageMentions(message = {}) {
 }
 
 function uniqueMentions(list = []) {
-  return [...new Set(
-    list
-      .map(cleanJid)
-      .filter(Boolean)
-  )];
+  return [...new Set(list.map(cleanJid).filter(Boolean))];
 }
 
 function getDisplayName(jid, store, groupMetadata) {
@@ -171,7 +221,6 @@ function getText(message = {}) {
   );
 }
 
-// ✅ Detector adaptado desde tu plugin ver.js
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
@@ -179,7 +228,8 @@ function getMediaInfo(message = {}) {
       mediaType: 'image',
       media: message.imageMessage,
       mimetype: message.imageMessage.mimetype || 'image/jpeg',
-      caption: message.imageMessage.caption || ''
+      caption: message.imageMessage.caption || '',
+      fileName: 'imagen.jpg'
     };
   }
 
@@ -191,7 +241,8 @@ function getMediaInfo(message = {}) {
         media: message.videoMessage,
         mimetype: message.videoMessage.mimetype || 'video/mp4',
         caption: message.videoMessage.caption || '',
-        gifPlayback: true
+        gifPlayback: true,
+        fileName: 'gif.mp4'
       };
     }
 
@@ -201,7 +252,8 @@ function getMediaInfo(message = {}) {
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
       caption: message.videoMessage.caption || '',
-      gifPlayback: false
+      gifPlayback: false,
+      fileName: 'video.mp4'
     };
   }
 
@@ -212,7 +264,8 @@ function getMediaInfo(message = {}) {
       media: message.audioMessage,
       mimetype: message.audioMessage.mimetype || 'audio/mpeg',
       ptt: message.audioMessage.ptt || false,
-      caption: ''
+      caption: '',
+      fileName: message.audioMessage.ptt ? 'nota_voz.ogg' : 'audio.mp3'
     };
   }
 
@@ -222,7 +275,8 @@ function getMediaInfo(message = {}) {
       mediaType: 'sticker',
       media: message.stickerMessage,
       mimetype: message.stickerMessage.mimetype || 'image/webp',
-      caption: ''
+      caption: '',
+      fileName: 'sticker.webp'
     };
   }
 
@@ -291,14 +345,113 @@ function getMediaInfo(message = {}) {
   return null;
 }
 
-async function streamToBuffer(stream) {
-  let buffer = Buffer.from([]);
+function safeFileName(name = 'archivo') {
+  return String(name || 'archivo')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 80);
+}
 
-  for await (const chunk of stream) {
-    buffer = Buffer.concat([buffer, chunk]);
+function getExtension(mediaInfo = {}) {
+  const fileName = String(mediaInfo.fileName || '').toLowerCase();
+  const mimetype = String(mediaInfo.mimetype || '').toLowerCase();
+
+  if (fileName.includes('.') && !fileName.endsWith('.')) {
+    const ext = fileName.split('.').pop().replace(/[^a-z0-9]/g, '');
+    if (ext) return ext;
   }
 
-  return buffer;
+  if (mimetype.includes('jpeg')) return 'jpg';
+  if (mimetype.includes('jpg')) return 'jpg';
+  if (mimetype.includes('png')) return 'png';
+  if (mimetype.includes('webp')) return 'webp';
+  if (mimetype.includes('gif')) return 'gif';
+  if (mimetype.includes('mp4')) return 'mp4';
+  if (mimetype.includes('webm')) return 'webm';
+  if (mimetype.includes('mpeg')) return 'mp3';
+  if (mimetype.includes('mp3')) return 'mp3';
+  if (mimetype.includes('ogg')) return 'ogg';
+  if (mimetype.includes('opus')) return 'ogg';
+  if (mimetype.includes('pdf')) return 'pdf';
+  if (mimetype.includes('zip')) return 'zip';
+
+  return 'bin';
+}
+
+async function downloadMediaToFile(mediaInfo, msgId) {
+  ensureDir(MEDIA_DIR);
+
+  const ext = getExtension(mediaInfo);
+  const safeId = String(msgId || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '');
+  const baseName = safeFileName(mediaInfo.fileName || `media.${ext}`);
+
+  let finalName = `anti_${Date.now()}_${safeId}_${baseName}`;
+
+  if (!finalName.toLowerCase().endsWith(`.${ext}`)) {
+    finalName += `.${ext}`;
+  }
+
+  const filePath = path.join(MEDIA_DIR, finalName);
+
+  const stream = await downloadContentFromMessage(
+    mediaInfo.media,
+    mediaInfo.mediaType
+  );
+
+  const write = fs.createWriteStream(filePath);
+  let size = 0;
+
+  try {
+    for await (const chunk of stream) {
+      size += chunk.length;
+
+      if (size > MAX_MEDIA_SIZE) {
+        write.destroy();
+
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch {}
+
+        return {
+          filePath: null,
+          size,
+          tooLarge: true
+        };
+      }
+
+      if (!write.write(chunk)) {
+        await once(write, 'drain');
+      }
+    }
+
+    write.end();
+    await once(write, 'finish');
+
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).size <= 0) {
+      return {
+        filePath: null,
+        size: 0,
+        tooLarge: false
+      };
+    }
+
+    return {
+      filePath,
+      size,
+      tooLarge: false
+    };
+
+  } catch (err) {
+    try {
+      write.destroy();
+    } catch {}
+
+    try {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch {}
+
+    throw err;
+  }
 }
 
 async function convertGifToMp4(inputPath, outputPath) {
@@ -312,63 +465,240 @@ async function convertGifToMp4(inputPath, outputPath) {
   ]);
 }
 
-function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
-  const id = msg.key?.id;
+function buildCaption(user, mediaCaption = '') {
+  return `🕵️ *MENSAJE ELIMINADO*
 
-  if (!id || !msg.message) return;
-  if (isDeleteMessage(msg)) return;
+👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Descripción:\n${mediaCaption}` : ''}`;
+}
 
-  const message = unwrapMessage(msg.message);
+function deleteSaved(cacheKey, saved) {
+  try {
+    const keys = saved?.cacheKeys?.length ? saved.cacheKeys : [cacheKey];
 
-  const mentionMap = getMentionMap(message, store, groupMetadata);
-  const mentions = getMessageMentions(message);
-  const text = replaceMentionNumbers(getText(message), mentionMap);
+    for (const key of keys) {
+      deletedCache.delete(key);
+    }
 
-  const key = getMsgKey(remoteJid, id);
-
-  deletedCache.set(key, {
-    remoteJid,
-    sender: cleanJid(sender),
-    pushName: pushName || 'Usuario',
-    message,
-    mentions,
-    mentionMap,
-    text,
-    time: Date.now()
-  });
-
-  if (deletedCache.size > MAX_CACHE) {
-    const first = deletedCache.keys().next().value;
-    deletedCache.delete(first);
-  }
+    if (saved?.filePath && fs.existsSync(saved.filePath)) {
+      fs.unlinkSync(saved.filePath);
+    }
+  } catch {}
 }
 
 function cleanOldCache() {
   const now = Date.now();
+  const seen = new Set();
 
   for (const [key, value] of deletedCache.entries()) {
-    if (now - value.time > CACHE_TIME) {
-      deletedCache.delete(key);
+    if (!value || seen.has(value)) continue;
+
+    seen.add(value);
+
+    if (now - Number(value.time || 0) > CACHE_TIME) {
+      deleteSaved(key, value);
     }
   }
 }
 
 async function isEnabled(db, remoteJid, fromGroup) {
   try {
-    // ✅ En privado siempre activo
     if (!fromGroup) return true;
 
-    // ✅ En grupos depende de configuración
     const value = await db.getGroupSetting(remoteJid, 'antidelete');
     return value === true;
   } catch {
     return !fromGroup;
   }
-  }
-function buildCaption(user, mediaCaption = '') {
-  return `🕵️ *MENSAJE ELIMINADO*
+}
 
-👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Caption:\n${mediaCaption}` : ''}`;
+async function saveMessage(ctx) {
+  const {
+    msg,
+    remoteJid,
+    sender,
+    pushName,
+    store,
+    groupMetadata
+  } = ctx;
+
+  const id = msg.key?.id;
+
+  if (!id || !msg.message) return;
+  if (isDeleteMessage(msg)) return;
+
+  const message = unwrapMessage(msg.message);
+  const media = getMediaInfo(message);
+  const mentionMap = getMentionMap(message, store, groupMetadata);
+  const mentions = getMessageMentions(message);
+  const text = replaceMentionNumbers(getText(message), mentionMap);
+
+  let filePath = null;
+  let savedSize = 0;
+  let tooLarge = false;
+
+  if (media) {
+    try {
+      const saved = await downloadMediaToFile(media, id);
+
+      filePath = saved.filePath;
+      savedSize = saved.size;
+      tooLarge = saved.tooLarge;
+
+      if (filePath) {
+        console.log(`🕵️ Antidelete guardó: ${media.type} | ${savedSize} bytes | ${path.basename(filePath)}`);
+      } else if (tooLarge) {
+        console.log(`⚠️ Antidelete ignoró archivo pesado: ${savedSize} bytes`);
+      } else {
+        console.log(`⚠️ Antidelete detectó ${media.type}, pero no pudo guardarlo.`);
+      }
+
+    } catch (err) {
+      console.log('⚠️ Antidelete no pudo descargar media:', err?.message || err);
+    }
+  }
+
+  const cacheKeys = getSaveKeys(remoteJid, id, sender);
+
+  const savedData = {
+    remoteJid,
+    sender: cleanJid(sender),
+    pushName: pushName || 'Usuario',
+    message,
+    text,
+    mentions,
+    mentionMap,
+    media,
+    filePath,
+    savedSize,
+    tooLarge,
+    cacheKeys,
+    time: Date.now()
+  };
+
+  for (const key of cacheKeys) {
+    deletedCache.set(key, savedData);
+  }
+
+  if (deletedCache.size > MAX_CACHE) {
+    const firstKey = deletedCache.keys().next().value;
+    const firstSaved = deletedCache.get(firstKey);
+    deleteSaved(firstKey, firstSaved);
+  }
+}
+
+async function sendSavedMedia(sock, remoteJid, saved, mentions) {
+  const media = saved.media;
+
+  if (!media || !saved.filePath || !fs.existsSync(saved.filePath)) {
+    return false;
+  }
+
+  let tempOutput = null;
+
+  try {
+    const mediaCaption = replaceMentionNumbers(
+      media.caption || saved.text || '',
+      saved.mentionMap || {}
+    );
+
+    const caption = buildCaption(saved.sender, mediaCaption);
+    const buffer = fs.readFileSync(saved.filePath);
+
+    if (!buffer || !buffer.length) return false;
+
+    if (media.type === 'gif_file') {
+      ensureDir(TEMP_DIR);
+
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+      tempOutput = path.join(TEMP_DIR, `antidelete_gif_${id}.mp4`);
+
+      await convertGifToMp4(saved.filePath, tempOutput);
+
+      const mp4Buffer = fs.readFileSync(tempOutput);
+
+      await sock.sendMessage(remoteJid, {
+        video: mp4Buffer,
+        mimetype: 'video/mp4',
+        gifPlayback: true,
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'image') {
+      await sock.sendMessage(remoteJid, {
+        image: buffer,
+        mimetype: media.mimetype,
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'video' || media.type === 'gif') {
+      await sock.sendMessage(remoteJid, {
+        video: buffer,
+        mimetype: media.mimetype || 'video/mp4',
+        gifPlayback: media.gifPlayback || false,
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'audio') {
+      await sock.sendMessage(remoteJid, {
+        audio: buffer,
+        mimetype: media.mimetype,
+        ptt: media.ptt || false
+      });
+
+      await sock.sendMessage(remoteJid, {
+        text: caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'sticker') {
+      await sock.sendMessage(remoteJid, {
+        sticker: buffer
+      });
+
+      await sock.sendMessage(remoteJid, {
+        text: caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    if (media.type === 'document') {
+      await sock.sendMessage(remoteJid, {
+        document: buffer,
+        mimetype: media.mimetype,
+        fileName: media.fileName || 'archivo',
+        caption,
+        mentions
+      });
+
+      return true;
+    }
+
+    return false;
+
+  } finally {
+    try {
+      if (tempOutput && fs.existsSync(tempOutput)) {
+        fs.unlinkSync(tempOutput);
+      }
+    } catch {}
+  }
 }
 
 module.exports = {
@@ -390,13 +720,23 @@ module.exports = {
     try {
       cleanOldCache();
 
-      // ✅ Guarda mensajes tanto en grupos como en privado
+      const enabled = await isEnabled(db, remoteJid, fromGroup);
+
       if (!isDeleteMessage(msg)) {
-        saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata);
+        if (enabled) {
+          await saveMessage({
+            msg,
+            remoteJid,
+            sender,
+            pushName,
+            store,
+            groupMetadata
+          });
+        }
+
         return;
       }
 
-      const enabled = await isEnabled(db, remoteJid, fromGroup);
       if (!enabled) return;
 
       const deletedKey = getDeletedKey(msg);
@@ -404,18 +744,33 @@ module.exports = {
 
       if (!deletedId) return;
 
-      const cacheKey = getMsgKey(remoteJid, deletedId);
-      const saved = deletedCache.get(cacheKey);
+      const handledKey = getHandledKey(remoteJid, deletedId);
 
-      if (!saved) return;
+      if (handledDeletes.has(handledKey)) return;
+
+      handledDeletes.add(handledKey);
+      setTimeout(() => handledDeletes.delete(handledKey), 30 * 1000);
+
+      const found = findSavedMessage(remoteJid, deletedKey);
+
+      if (!found) return;
+
+      const { key: cacheKey, saved } = found;
 
       const user = saved.sender;
       const text = saved.text || replaceMentionNumbers(getText(saved.message), saved.mentionMap || {});
-      const media = getMediaInfo(saved.message);
-      const mentions = uniqueMentions([user, ...(saved.mentions || [])]);
+      const mentions = uniqueMentions([
+        user,
+        ...(saved.mentions || [])
+      ]);
 
-      if (!media) {
-        if (!text) return;
+      if (saved.media) {
+        const sent = await sendSavedMedia(sock, remoteJid, saved, mentions);
+
+        if (sent) {
+          deleteSaved(cacheKey, saved);
+          return;
+        }
 
         await sock.sendMessage(remoteJid, {
           text:
@@ -423,134 +778,32 @@ module.exports = {
 
 👤 Usuario: @${number(user)}
 
+⚠️ El mensaje tenía un archivo, pero no se pudo reenviar desde la carpeta temporal.${text ? `\n\n💬 Texto:\n${text}` : ''}`,
+          mentions
+        });
+
+        deleteSaved(cacheKey, saved);
+        return;
+      }
+
+      if (!text) {
+        deleteSaved(cacheKey, saved);
+        return;
+      }
+
+      await sock.sendMessage(remoteJid, {
+        text:
+`🕵️ *MENSAJE ELIMINADO*
+
+👤 Usuario: @${number(user)}
+
 💬 Mensaje:
 ${text}`,
-          mentions
-        });
+        mentions
+      });
 
-        deletedCache.delete(cacheKey);
-        return;
-      }
-
-      const stream = await downloadContentFromMessage(
-        media.media,
-        media.mediaType
-      );
-
-      const buffer = await streamToBuffer(stream);
-
-      if (!buffer || !buffer.length) {
-        deletedCache.delete(cacheKey);
-        return;
-      }
-
-      const fixedCaption = replaceMentionNumbers(
-        media.caption || '',
-        saved.mentionMap || {}
-      );
-
-      const caption = buildCaption(user, fixedCaption);
-
-      if (media.type === 'image') {
-        await sock.sendMessage(remoteJid, {
-          image: buffer,
-          mimetype: media.mimetype,
-          caption,
-          mentions
-        });
-      }
-
-      if (media.type === 'video') {
-        await sock.sendMessage(remoteJid, {
-          video: buffer,
-          mimetype: media.mimetype,
-          caption,
-          gifPlayback: media.gifPlayback || false,
-          mentions
-        });
-      }
-
-      if (media.type === 'gif') {
-        await sock.sendMessage(remoteJid, {
-          video: buffer,
-          mimetype: 'video/mp4',
-          gifPlayback: true,
-          caption,
-          mentions
-        });
-      }
-
-      if (media.type === 'gif_file') {
-        let tempInput = null;
-        let tempOutput = null;
-
-        try {
-          ensureTemp();
-
-          const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-          tempInput = path.join(TEMP_DIR, `antidelete_gif_${id}.gif`);
-          tempOutput = path.join(TEMP_DIR, `antidelete_gif_${id}.mp4`);
-
-          fs.writeFileSync(tempInput, buffer);
-
-          await convertGifToMp4(tempInput, tempOutput);
-
-          const mp4Buffer = fs.readFileSync(tempOutput);
-
-          await sock.sendMessage(remoteJid, {
-            video: mp4Buffer,
-            mimetype: 'video/mp4',
-            gifPlayback: true,
-            caption,
-            mentions
-          });
-
-        } finally {
-          for (const file of [tempInput, tempOutput]) {
-            try {
-              if (file && fs.existsSync(file)) {
-                fs.unlinkSync(file);
-              }
-            } catch {}
-          }
-        }
-      }
-
-      if (media.type === 'audio') {
-        await sock.sendMessage(remoteJid, {
-          audio: buffer,
-          mimetype: media.mimetype,
-          ptt: media.ptt || false
-        });
-
-        await sock.sendMessage(remoteJid, {
-          text: caption,
-          mentions
-        });
-      }
-
-      if (media.type === 'sticker') {
-        await sock.sendMessage(remoteJid, {
-          sticker: buffer
-        });
-
-        await sock.sendMessage(remoteJid, {
-          text: caption,
-          mentions
-        });
-      }
-
-      if (media.type === 'document') {
-        await sock.sendMessage(remoteJid, {
-          document: buffer,
-          mimetype: media.mimetype,
-          fileName: media.fileName || 'archivo',
-          caption,
-          mentions
-        });
-      }
-
-      deletedCache.delete(cacheKey);
+      deleteSaved(cacheKey, saved);
+      return;
 
     } catch (err) {
       console.log('❌ Error en antidelete:', err?.message || err);
@@ -570,7 +823,6 @@ ${text}`,
     } = ctx;
 
     try {
-      // ✅ En privado siempre activo
       if (!fromGroup) {
         return sock.sendMessage(remoteJid, {
           text: '✅ En chats privados, *antidelete* siempre está activo.'
@@ -621,9 +873,4 @@ Uso:
     } catch (err) {
       console.log('❌ Error comando antidelete:', err?.message || err);
 
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Error configurando antidelete.'
-      }, { quoted: msg });
-    }
-  }
-};
+      return sock.sendMessag
