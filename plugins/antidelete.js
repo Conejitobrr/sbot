@@ -6,6 +6,7 @@ const deletedCache = new Map();
 
 const MAX_CACHE = 1000;
 const CACHE_TIME = 2 * 60 * 60 * 1000;
+const MAX_MEDIA_BUFFER = 60 * 1024 * 1024; // 60 MB
 
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
@@ -44,6 +45,18 @@ function unwrapMessage(message = {}) {
 
   if (message.documentWithCaptionMessage?.message) {
     return unwrapMessage(message.documentWithCaptionMessage.message);
+  }
+
+  if (message.viewOnceMessage?.message) {
+    return message;
+  }
+
+  if (message.viewOnceMessageV2?.message) {
+    return message;
+  }
+
+  if (message.viewOnceMessageV2Extension?.message) {
+    return message;
   }
 
   return message;
@@ -115,7 +128,8 @@ function getMediaInfo(message = {}) {
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
-      caption: message.videoMessage.caption || ''
+      caption: message.videoMessage.caption || '',
+      gifPlayback: message.videoMessage.gifPlayback || false
     };
   }
 
@@ -125,7 +139,8 @@ function getMediaInfo(message = {}) {
       mediaType: 'audio',
       media: message.audioMessage,
       mimetype: message.audioMessage.mimetype || 'audio/mpeg',
-      ptt: message.audioMessage.ptt || false
+      ptt: message.audioMessage.ptt || false,
+      caption: ''
     };
   }
 
@@ -134,7 +149,8 @@ function getMediaInfo(message = {}) {
       type: 'sticker',
       mediaType: 'sticker',
       media: message.stickerMessage,
-      mimetype: message.stickerMessage.mimetype || 'image/webp'
+      mimetype: message.stickerMessage.mimetype || 'image/webp',
+      caption: ''
     };
   }
 
@@ -162,7 +178,24 @@ async function streamToBuffer(stream) {
   return buffer;
 }
 
-function saveMessage(msg, remoteJid, sender, pushName) {
+async function downloadMediaBuffer(mediaInfo) {
+  const stream = await downloadContentFromMessage(
+    mediaInfo.media,
+    mediaInfo.mediaType
+  );
+
+  const buffer = await streamToBuffer(stream);
+
+  if (!buffer || !buffer.length) return null;
+
+  if (buffer.length > MAX_MEDIA_BUFFER) {
+    return null;
+  }
+
+  return buffer;
+}
+
+async function saveMessage(msg, remoteJid, sender, pushName) {
   const id = msg.key?.id;
 
   if (!id || !msg.message) return;
@@ -172,6 +205,15 @@ function saveMessage(msg, remoteJid, sender, pushName) {
 
   if (isViewOnce(message)) return;
 
+  const media = getMediaInfo(message);
+  let mediaBuffer = null;
+
+  if (media) {
+    try {
+      mediaBuffer = await downloadMediaBuffer(media);
+    } catch {}
+  }
+
   const key = getMsgKey(remoteJid, id);
 
   deletedCache.set(key, {
@@ -180,6 +222,9 @@ function saveMessage(msg, remoteJid, sender, pushName) {
     pushName: pushName || 'Usuario',
     message,
     mentions: getMessageMentions(message),
+    media,
+    mediaBuffer,
+    text: getText(message),
     time: Date.now()
   });
 
@@ -201,15 +246,19 @@ function cleanOldCache() {
 
 async function isEnabled(db, remoteJid, fromGroup) {
   try {
-    // ✅ En privado siempre activo
     if (!fromGroup) return true;
 
-    // ✅ En grupos depende de configuración
     const value = await db.getGroupSetting(remoteJid, 'antidelete');
     return value === true;
   } catch {
     return !fromGroup;
   }
+}
+
+function buildCaption(user, mediaCaption = '') {
+  return `🕵️ *MENSAJE ELIMINADO*
+
+👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Descripción:\n${mediaCaption}` : ''}`;
 }
 
 module.exports = {
@@ -229,9 +278,8 @@ module.exports = {
     try {
       cleanOldCache();
 
-      // ✅ Ahora guarda mensajes tanto en grupos como en privado
       if (!isDeleteMessage(msg)) {
-        saveMessage(msg, remoteJid, sender, pushName);
+        await saveMessage(msg, remoteJid, sender, pushName);
         return;
       }
 
@@ -249,10 +297,9 @@ module.exports = {
       if (!saved) return;
 
       const user = saved.sender;
-      const text = getText(saved.message);
-      const media = getMediaInfo(saved.message);
+      const text = saved.text || getText(saved.message);
+      const media = saved.media || getMediaInfo(saved.message);
 
-      // ✅ Usuario que borró + menciones reales del mensaje eliminado
       const mentions = uniqueMentions([
         user,
         ...(saved.mentions || [])
@@ -276,19 +323,30 @@ ${text}`,
         return;
       }
 
-      const stream = await downloadContentFromMessage(
-        media.media,
-        media.mediaType
-      );
+      let buffer = saved.mediaBuffer;
 
-      const buffer = await streamToBuffer(stream);
+      if (!buffer || !buffer.length) {
+        try {
+          buffer = await downloadMediaBuffer(media);
+        } catch {}
+      }
 
-      if (!buffer || !buffer.length) return;
-
-      const caption =
+      if (!buffer || !buffer.length) {
+        await sock.sendMessage(remoteJid, {
+          text:
 `🕵️ *MENSAJE ELIMINADO*
 
-👤 Usuario: @${number(user)}${media.caption ? `\n\n💬 Caption:\n${media.caption}` : ''}`;
+👤 Usuario: @${number(user)}
+
+⚠️ El mensaje tenía un archivo, pero no se pudo recuperar el contenido.${text ? `\n\n💬 Texto:\n${text}` : ''}`,
+          mentions
+        });
+
+        deletedCache.delete(cacheKey);
+        return;
+      }
+
+      const caption = buildCaption(user, media.caption || text || '');
 
       if (media.type === 'image') {
         await sock.sendMessage(remoteJid, {
@@ -304,6 +362,7 @@ ${text}`,
           video: buffer,
           mimetype: media.mimetype,
           caption,
+          gifPlayback: media.gifPlayback || false,
           mentions
         });
       }
@@ -362,7 +421,6 @@ ${text}`,
     } = ctx;
 
     try {
-      // ✅ En privado siempre activo
       if (!fromGroup) {
         return sock.sendMessage(remoteJid, {
           text: '✅ En chats privados, *antidelete* siempre está activo.'
