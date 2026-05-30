@@ -6,13 +6,16 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
+const config = require('../config');
+const shop = require('../lib/shop');
+
 const execFileAsync = promisify(execFile);
 
-const deletedCache = new Map();
-
-const MAX_CACHE = 1000;
-const CACHE_TIME = 2 * 60 * 60 * 1000;
+const COSTO_VER = 10000;
+const PENDING_TIME = 60 * 1000;
 const TEMP_DIR = path.join(process.cwd(), 'temp');
+
+const pendingVer = new Map();
 
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
@@ -20,46 +23,42 @@ function ensureTemp() {
   }
 }
 
+async function streamToBuffer(stream) {
+  let buffer = Buffer.from([]);
+
+  for await (const chunk of stream) {
+    buffer = Buffer.concat([buffer, chunk]);
+  }
+
+  return buffer;
+}
+
 function cleanJid(jid = '') {
   return String(jid).split(':')[0];
 }
 
-function number(jid = '') {
+function cleanNumber(jid = '') {
   return cleanJid(jid)
     .split('@')[0]
     .replace(/\D/g, '');
 }
 
-function cleanName(name = '') {
-  return String(name || '')
-    .replace(/\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 40);
+function isOwnerUser(jid = '') {
+  const number = cleanNumber(jid);
+
+  const owners = Array.isArray(config.owner)
+    ? config.owner.map(n => String(n).replace(/\D/g, ''))
+    : [];
+
+  return owners.includes(number);
 }
 
-function escapeRegExp(text = '') {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function getMsgKey(remoteJid, id) {
-  return `${remoteJid}:${id}`;
-}
-
-function isDeleteMessage(msg) {
-  const protocol = msg.message?.protocolMessage;
-
-  if (!protocol) return false;
-
+function isPremiumUser(user = {}) {
   return (
-    protocol.type === 0 ||
-    protocol.type === 'REVOKE' ||
-    protocol.key?.id
+    user?.premium === true ||
+    user?.isPremium === true ||
+    Number(user?.premiumUntil || 0) > Date.now()
   );
-}
-
-function getDeletedKey(msg) {
-  return msg.message?.protocolMessage?.key || null;
 }
 
 function unwrapMessage(message = {}) {
@@ -74,104 +73,40 @@ function unwrapMessage(message = {}) {
   return message;
 }
 
-function getContextInfo(message = {}) {
+function getQuotedContext(msg) {
   return (
-    message.extendedTextMessage?.contextInfo ||
-    message.imageMessage?.contextInfo ||
-    message.videoMessage?.contextInfo ||
-    message.audioMessage?.contextInfo ||
-    message.stickerMessage?.contextInfo ||
-    message.documentMessage?.contextInfo ||
+    msg.message?.extendedTextMessage?.contextInfo ||
+    msg.message?.imageMessage?.contextInfo ||
+    msg.message?.videoMessage?.contextInfo ||
+    msg.message?.audioMessage?.contextInfo ||
+    msg.message?.documentMessage?.contextInfo ||
     null
   );
 }
 
-function getMessageMentions(message = {}) {
-  const ctx = getContextInfo(message);
+function getQuotedMessage(msg) {
+  const ctx = getQuotedContext(msg);
+  const quoted = ctx?.quotedMessage || null;
 
-  return Array.isArray(ctx?.mentionedJid)
-    ? ctx.mentionedJid.map(cleanJid).filter(Boolean)
-    : [];
+  return quoted ? unwrapMessage(quoted) : null;
 }
 
-function uniqueMentions(list = []) {
-  return [...new Set(
-    list
-      .map(cleanJid)
-      .filter(Boolean)
-  )];
+function getQuotedWAMessage(msg, remoteJid) {
+  const ctx = getQuotedContext(msg);
+
+  if (!ctx?.quotedMessage || !ctx?.stanzaId) return msg;
+
+  return {
+    key: {
+      remoteJid,
+      id: ctx.stanzaId,
+      participant: ctx.participant,
+      fromMe: false
+    },
+    message: ctx.quotedMessage
+  };
 }
 
-function getDisplayName(jid, store, groupMetadata) {
-  const clean = cleanJid(jid);
-
-  const contact =
-    store?.contacts?.[clean] ||
-    store?.contacts?.[jid] ||
-    {};
-
-  const participant = groupMetadata?.participants?.find(p =>
-    cleanJid(p.id) === clean ||
-    cleanJid(p.jid) === clean ||
-    cleanJid(p.lid) === clean ||
-    cleanJid(p.participant) === clean
-  ) || {};
-
-  const name = cleanName(
-    contact.name ||
-    contact.notify ||
-    contact.verifiedName ||
-    contact.pushName ||
-    participant.name ||
-    participant.notify ||
-    participant.verifiedName ||
-    participant.pushName ||
-    ''
-  );
-
-  return name || number(clean);
-}
-
-function getMentionMap(message = {}, store, groupMetadata) {
-  const mentioned = getMessageMentions(message);
-  const map = {};
-
-  for (const jid of mentioned) {
-    const clean = cleanJid(jid);
-    map[clean] = getDisplayName(clean, store, groupMetadata);
-  }
-
-  return map;
-}
-
-function replaceMentionNumbers(text = '', mentionMap = {}) {
-  let output = String(text || '');
-
-  for (const [jid, name] of Object.entries(mentionMap)) {
-    const num = number(jid);
-    const display = cleanName(name);
-
-    if (!num || !display) continue;
-
-    const regex = new RegExp(`@${escapeRegExp(num)}(?=\\s|$|\\n|\\r|\\t|[.,!¡¿?;:])`, 'g');
-    output = output.replace(regex, `@${display}`);
-  }
-
-  return output;
-}
-
-function getText(message = {}) {
-  return (
-    message.conversation ||
-    message.extendedTextMessage?.text ||
-    message.imageMessage?.caption ||
-    message.videoMessage?.caption ||
-    message.documentMessage?.caption ||
-    ''
-  );
-}
-
-// ✅ Detector adaptado desde tu plugin ver.js
 function getMediaInfo(message = {}) {
   if (message.imageMessage) {
     return {
@@ -200,8 +135,7 @@ function getMediaInfo(message = {}) {
       mediaType: 'video',
       media: message.videoMessage,
       mimetype: message.videoMessage.mimetype || 'video/mp4',
-      caption: message.videoMessage.caption || '',
-      gifPlayback: false
+      caption: message.videoMessage.caption || ''
     };
   }
 
@@ -216,18 +150,8 @@ function getMediaInfo(message = {}) {
     };
   }
 
-  if (message.stickerMessage) {
-    return {
-      type: 'sticker',
-      mediaType: 'sticker',
-      media: message.stickerMessage,
-      mimetype: message.stickerMessage.mimetype || 'image/webp',
-      caption: ''
-    };
-  }
-
   if (message.documentMessage) {
-    const mimetype = message.documentMessage.mimetype || 'application/octet-stream';
+    const mimetype = message.documentMessage.mimetype || '';
     const fileName = message.documentMessage.fileName || 'archivo';
     const caption = message.documentMessage.caption || '';
     const lowerName = String(fileName).toLowerCase();
@@ -261,8 +185,7 @@ function getMediaInfo(message = {}) {
         media: message.documentMessage,
         mimetype,
         fileName,
-        caption,
-        gifPlayback: false
+        caption
       };
     }
 
@@ -277,28 +200,9 @@ function getMediaInfo(message = {}) {
         caption
       };
     }
-
-    return {
-      type: 'document',
-      mediaType: 'document',
-      media: message.documentMessage,
-      mimetype,
-      fileName,
-      caption
-    };
   }
 
   return null;
-}
-
-async function streamToBuffer(stream) {
-  let buffer = Buffer.from([]);
-
-  for await (const chunk of stream) {
-    buffer = Buffer.concat([buffer, chunk]);
-  }
-
-  return buffer;
 }
 
 async function convertGifToMp4(inputPath, outputPath) {
@@ -312,317 +216,336 @@ async function convertGifToMp4(inputPath, outputPath) {
   ]);
 }
 
-function saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata) {
-  const id = msg.key?.id;
+async function sendMedia(sock, remoteJid, mediaInfo, quotedOriginal) {
+  let tempInput = null;
+  let tempOutput = null;
 
-  if (!id || !msg.message) return;
-  if (isDeleteMessage(msg)) return;
+  try {
+    const stream = await downloadContentFromMessage(
+      mediaInfo.media,
+      mediaInfo.mediaType
+    );
 
-  const message = unwrapMessage(msg.message);
+    const buffer = await streamToBuffer(stream);
 
-  const mentionMap = getMentionMap(message, store, groupMetadata);
-  const mentions = getMessageMentions(message);
-  const text = replaceMentionNumbers(getText(message), mentionMap);
+    if (!buffer || !buffer.length) {
+      throw new Error('No se pudo descargar el archivo.');
+    }
 
-  const key = getMsgKey(remoteJid, id);
+    if (mediaInfo.type === 'image') {
+      return sock.sendMessage(remoteJid, {
+        image: buffer,
+        mimetype: mediaInfo.mimetype,
+        caption: mediaInfo.caption || ''
+      }, { quoted: quotedOriginal });
+    }
 
-  deletedCache.set(key, {
-    remoteJid,
-    sender: cleanJid(sender),
-    pushName: pushName || 'Usuario',
-    message,
-    mentions,
-    mentionMap,
-    text,
-    time: Date.now()
-  });
+    if (mediaInfo.type === 'video') {
+      return sock.sendMessage(remoteJid, {
+        video: buffer,
+        mimetype: mediaInfo.mimetype,
+        caption: mediaInfo.caption || ''
+      }, { quoted: quotedOriginal });
+    }
 
-  if (deletedCache.size > MAX_CACHE) {
-    const first = deletedCache.keys().next().value;
-    deletedCache.delete(first);
-  }
-}
+    if (mediaInfo.type === 'gif') {
+      return sock.sendMessage(remoteJid, {
+        video: buffer,
+        mimetype: 'video/mp4',
+        gifPlayback: true,
+        caption: mediaInfo.caption || ''
+      }, { quoted: quotedOriginal });
+    }
 
-function cleanOldCache() {
-  const now = Date.now();
+    if (mediaInfo.type === 'gif_file') {
+      ensureTemp();
 
-  for (const [key, value] of deletedCache.entries()) {
-    if (now - value.time > CACHE_TIME) {
-      deletedCache.delete(key);
+      const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+      tempInput = path.join(TEMP_DIR, `ver_gif_${id}.gif`);
+      tempOutput = path.join(TEMP_DIR, `ver_gif_${id}.mp4`);
+
+      fs.writeFileSync(tempInput, buffer);
+
+      await convertGifToMp4(tempInput, tempOutput);
+
+      const mp4Buffer = fs.readFileSync(tempOutput);
+
+      return sock.sendMessage(remoteJid, {
+        video: mp4Buffer,
+        mimetype: 'video/mp4',
+        gifPlayback: true,
+        caption: mediaInfo.caption || ''
+      }, { quoted: quotedOriginal });
+    }
+
+    if (mediaInfo.type === 'audio') {
+      await sock.sendMessage(remoteJid, {
+        audio: buffer,
+        mimetype: mediaInfo.mimetype,
+        ptt: mediaInfo.ptt || false
+      }, { quoted: quotedOriginal });
+
+      if (mediaInfo.caption) {
+        return sock.sendMessage(remoteJid, {
+          text: mediaInfo.caption
+        }, { quoted: quotedOriginal });
+      }
+
+      return;
+    }
+
+  } finally {
+    for (const file of [tempInput, tempOutput]) {
+      try {
+        if (file && fs.existsSync(file)) {
+          fs.unlinkSync(file);
+        }
+      } catch {}
     }
   }
-}
-
-async function isEnabled(db, remoteJid, fromGroup) {
-  try {
-    // ✅ En privado siempre activo
-    if (!fromGroup) return true;
-
-    // ✅ En grupos depende de configuración
-    const value = await db.getGroupSetting(remoteJid, 'antidelete');
-    return value === true;
-  } catch {
-    return !fromGroup;
-  }
-}
-function buildCaption(user, mediaCaption = '') {
-  return `🕵️ *MENSAJE ELIMINADO*
-
-👤 Usuario: @${number(user)}${mediaCaption ? `\n\n💬 Caption:\n${mediaCaption}` : ''}`;
 }
 
 module.exports = {
-  commands: ['antidelete', 'antiborrar'],
+  commands: ['ver'],
 
-  async onMessage(ctx) {
-    const {
-      sock,
-      msg,
-      remoteJid,
-      sender,
-      pushName,
-      fromGroup,
-      db,
-      store,
-      groupMetadata
-    } = ctx;
+  async execute({ sock, remoteJid, msg, sender, args, db, isOwner }) {
+    let chargedXp = false;
+    let usedTicket = false;
 
     try {
-      cleanOldCache();
+      const userKey = cleanJid(sender);
+      const option = (args?.[0] || '').toLowerCase();
 
-      // ✅ Guarda mensajes tanto en grupos como en privado
-      if (!isDeleteMessage(msg)) {
-        saveMessage(msg, remoteJid, sender, pushName, store, groupMetadata);
-        return;
+      const user = await db.getUser(userKey);
+      const xp = Number(user.xp || 0);
+      const premium = isPremiumUser(user);
+      const owner = isOwner || isOwnerUser(userKey);
+      const verUses = await shop.getItem(userKey, 'verUses');
+
+      if (['cancelar', 'cancel', 'no'].includes(option)) {
+        pendingVer.delete(userKey);
+
+        return sock.sendMessage(remoteJid, {
+          text: '✅ Canje cancelado. No se descontó XP.'
+        }, { quoted: msg });
       }
 
-      const enabled = await isEnabled(db, remoteJid, fromGroup);
-      if (!enabled) return;
+      if (['aceptar', 'confirmar', 'si', 'sí'].includes(option)) {
+        const pending = pendingVer.get(userKey);
 
-      const deletedKey = getDeletedKey(msg);
-      const deletedId = deletedKey?.id;
+        if (!pending) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`❌ No tienes ningún uso pendiente de *.ver*.
 
-      if (!deletedId) return;
+🎟️ Usos comprados: *${verUses}*
 
-      const cacheKey = getMsgKey(remoteJid, deletedId);
-      const saved = deletedCache.get(cacheKey);
+Para usarlo:
+1. Responde a una imagen, video, audio o gif.
+2. Escribe *.ver*
 
-      if (!saved) return;
+🛒 También puedes comprar usos:
+*.comprar ver*
 
-      const user = saved.sender;
-      const text = saved.text || replaceMentionNumbers(getText(saved.message), saved.mentionMap || {});
-      const media = getMediaInfo(saved.message);
-      const mentions = uniqueMentions([user, ...(saved.mentions || [])]);
-
-      if (!media) {
-        if (!text) return;
-
-        await sock.sendMessage(remoteJid, {
-          text:
-`🕵️ *MENSAJE ELIMINADO*
-
-👤 Usuario: @${number(user)}
-
-💬 Mensaje:
-${text}`,
-          mentions
-        });
-
-        deletedCache.delete(cacheKey);
-        return;
-      }
-
-      const stream = await downloadContentFromMessage(
-        media.media,
-        media.mediaType
-      );
-
-      const buffer = await streamToBuffer(stream);
-
-      if (!buffer || !buffer.length) {
-        deletedCache.delete(cacheKey);
-        return;
-      }
-
-      const fixedCaption = replaceMentionNumbers(
-        media.caption || '',
-        saved.mentionMap || {}
-      );
-
-      const caption = buildCaption(user, fixedCaption);
-
-      if (media.type === 'image') {
-        await sock.sendMessage(remoteJid, {
-          image: buffer,
-          mimetype: media.mimetype,
-          caption,
-          mentions
-        });
-      }
-
-      if (media.type === 'video') {
-        await sock.sendMessage(remoteJid, {
-          video: buffer,
-          mimetype: media.mimetype,
-          caption,
-          gifPlayback: media.gifPlayback || false,
-          mentions
-        });
-      }
-
-      if (media.type === 'gif') {
-        await sock.sendMessage(remoteJid, {
-          video: buffer,
-          mimetype: 'video/mp4',
-          gifPlayback: true,
-          caption,
-          mentions
-        });
-      }
-
-      if (media.type === 'gif_file') {
-        let tempInput = null;
-        let tempOutput = null;
-
-        try {
-          ensureTemp();
-
-          const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-          tempInput = path.join(TEMP_DIR, `antidelete_gif_${id}.gif`);
-          tempOutput = path.join(TEMP_DIR, `antidelete_gif_${id}.mp4`);
-
-          fs.writeFileSync(tempInput, buffer);
-
-          await convertGifToMp4(tempInput, tempOutput);
-
-          const mp4Buffer = fs.readFileSync(tempOutput);
-
-          await sock.sendMessage(remoteJid, {
-            video: mp4Buffer,
-            mimetype: 'video/mp4',
-            gifPlayback: true,
-            caption,
-            mentions
-          });
-
-        } finally {
-          for (const file of [tempInput, tempOutput]) {
-            try {
-              if (file && fs.existsSync(file)) {
-                fs.unlinkSync(file);
-              }
-            } catch {}
-          }
+💰 Precio: *${COSTO_VER} XP*
+👑 Premium y owner: gratis`
+          }, { quoted: msg });
         }
+
+        if (Date.now() > pending.expiresAt) {
+          pendingVer.delete(userKey);
+
+          return sock.sendMessage(remoteJid, {
+            text: '⏳ El canje expiró. Vuelve a responder al archivo y usa *.ver*.'
+          }, { quoted: msg });
+        }
+
+        const freshUser = await db.getUser(userKey);
+        const freshXp = Number(freshUser.xp || 0);
+
+        if (freshXp < COSTO_VER) {
+          pendingVer.delete(userKey);
+
+          return sock.sendMessage(remoteJid, {
+            text:
+`❌ No tienes suficiente XP para canjear *.ver*.
+
+💰 Costo: *${COSTO_VER} XP*
+⭐ Tu XP actual: *${freshXp} XP*
+📌 Te faltan: *${COSTO_VER - freshXp} XP*
+
+Usa más el bot, reclama recompensas, participa en eventos o sube de nivel para juntar XP.`
+          }, { quoted: msg });
+        }
+
+        await db.removeXP(userKey, COSTO_VER);
+        chargedXp = true;
+
+        await sendMedia(
+          sock,
+          pending.remoteJid,
+          pending.mediaInfo,
+          pending.quotedOriginal
+        );
+
+        pendingVer.delete(userKey);
+        return;
       }
 
-      if (media.type === 'audio') {
-        await sock.sendMessage(remoteJid, {
-          audio: buffer,
-          mimetype: media.mimetype,
-          ptt: media.ptt || false
-        });
+      const quoted = getQuotedMessage(msg);
+      const quotedOriginal = getQuotedWAMessage(msg, remoteJid);
 
-        await sock.sendMessage(remoteJid, {
-          text: caption,
-          mentions
-        });
-      }
+      if (!quoted) {
+        if (owner || premium) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`❌ Responde a una imagen, video, audio o gif.
 
-      if (media.type === 'sticker') {
-        await sock.sendMessage(remoteJid, {
-          sticker: buffer
-        });
+Ejemplo:
+Responde al archivo y escribe *.ver*
 
-        await sock.sendMessage(remoteJid, {
-          text: caption,
-          mentions
-        });
-      }
+👑 Para ti es gratis.`
+          }, { quoted: msg });
+        }
 
-      if (media.type === 'document') {
-        await sock.sendMessage(remoteJid, {
-          document: buffer,
-          mimetype: media.mimetype,
-          fileName: media.fileName || 'archivo',
-          caption,
-          mentions
-        });
-      }
+        if (verUses > 0) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`🎟️ Tienes *${verUses}* uso(s) comprado(s) de *.ver*.
 
-      deletedCache.delete(cacheKey);
+Para usar uno:
+1. Responde a una imagen, video, audio o gif.
+2. Escribe *.ver*`
+          }, { quoted: msg });
+        }
 
-    } catch (err) {
-      console.log('❌ Error en antidelete:', err?.message || err);
-    }
-  },
+        if (xp < COSTO_VER) {
+          return sock.sendMessage(remoteJid, {
+            text:
+`❌ No tienes usos comprados de *.ver*.
 
-  async execute(ctx) {
-    const {
-      sock,
-      msg,
-      remoteJid,
-      args,
-      fromGroup,
-      isAdmin,
-      isOwner,
-      db
-    } = ctx;
+💰 Necesitas *${COSTO_VER} XP* para comprar o canjear 1 uso.
+⭐ Tu XP actual: *${xp} XP*
+📌 Te faltan: *${COSTO_VER - xp} XP*
 
-    try {
-      // ✅ En privado siempre activo
-      if (!fromGroup) {
-        return sock.sendMessage(remoteJid, {
-          text: '✅ En chats privados, *antidelete* siempre está activo.'
-        }, { quoted: msg });
-      }
+Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder comprarlo.
 
-      if (!isOwner && !isAdmin) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ Solo admins o owner pueden usar este comando.'
-        }, { quoted: msg });
-      }
-
-      const option = (args[0] || '').toLowerCase();
-
-      if (!option) {
-        const enabled = await isEnabled(db, remoteJid, fromGroup);
+🛒 Cuando juntes XP, usa:
+*.comprar ver*`
+          }, { quoted: msg });
+        }
 
         return sock.sendMessage(remoteJid, {
           text:
-`🕵️ *ANTIDELETE*
+`ℹ️ No tienes ningún uso pendiente de *.ver*.
 
-Estado: *${enabled ? 'Activado ✅' : 'Desactivado ❌'}*
+✅ Tienes XP suficiente para comprar o canjear 1 uso.
 
-Uso:
-.antidelete on
-.antidelete off`
+💰 Precio: *${COSTO_VER} XP*
+⭐ Tu XP actual: *${xp} XP*
+
+Opciones:
+🛒 Comprar uso para después:
+*.comprar ver*
+
+⚡ Usarlo ahora:
+1. Responde a una imagen, video, audio o gif.
+2. Escribe *.ver*
+3. Confirma con *.ver aceptar*`
         }, { quoted: msg });
       }
 
-      if (!['on', 'off'].includes(option)) {
+      const mediaInfo = getMediaInfo(quoted);
+
+      if (!mediaInfo) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Usa:\n.antidelete on\n.antidelete off'
+          text: '❌ El mensaje citado no es imagen, video, audio ni gif.'
         }, { quoted: msg });
       }
 
-      await db.setGroupSetting(
+      if (owner || premium) {
+        return sendMedia(sock, remoteJid, mediaInfo, quotedOriginal);
+      }
+
+      if (verUses > 0) {
+        const used = await shop.useItem(userKey, 'verUses', 1);
+
+        if (!used) {
+          return sock.sendMessage(remoteJid, {
+            text: '❌ No se pudo usar tu ticket de *.ver*. Intenta otra vez.'
+          }, { quoted: msg });
+        }
+
+        usedTicket = true;
+
+        await sendMedia(sock, remoteJid, mediaInfo, quotedOriginal);
+        return;
+      }
+
+      if (xp < COSTO_VER) {
+        return sock.sendMessage(remoteJid, {
+          text:
+`❌ No tienes suficiente XP para usar *.ver*.
+
+💰 Costo: *${COSTO_VER} XP*
+⭐ Tu XP actual: *${xp} XP*
+📌 Te faltan: *${COSTO_VER - xp} XP*
+
+Usa más el bot, participa en eventos, reclama XP o sube de nivel para poder canjear 1 uso.
+
+🛒 También puedes comprarlo cuando tengas XP:
+*.comprar ver*`
+        }, { quoted: msg });
+      }
+
+      pendingVer.set(userKey, {
         remoteJid,
-        'antidelete',
-        option === 'on'
-      );
+        mediaInfo,
+        quotedOriginal,
+        expiresAt: Date.now() + PENDING_TIME
+      });
 
       return sock.sendMessage(remoteJid, {
-        text: option === 'on'
-          ? '✅ Antidelete activado en este grupo.'
-          : '✅ Antidelete desactivado en este grupo.'
+        text:
+`⚠️ *Confirmar canje*
+
+No tienes usos comprados de *.ver*.
+
+Vas a gastar *${COSTO_VER} XP* para usar *.ver* una vez.
+
+⭐ Tu XP actual: *${xp} XP*
+⭐ Te quedaría: *${xp - COSTO_VER} XP*
+
+Para confirmar:
+*.ver aceptar*
+
+Para cancelar:
+*.ver cancelar*
+
+⏳ Este canje vence en 60 segundos.`
       }, { quoted: msg });
 
     } catch (err) {
-      console.log('❌ Error comando antidelete:', err?.message || err);
+      console.log('❌ Error en ver:', err?.message || err);
+
+      if (chargedXp) {
+        try {
+          await db.addXP(cleanJid(sender), COSTO_VER);
+        } catch {}
+      }
+
+      if (usedTicket) {
+        try {
+          await shop.addItem(cleanJid(sender), 'verUses', 1);
+        } catch {}
+      }
 
       return sock.sendMessage(remoteJid, {
-        text: '❌ Error configurando antidelete.'
+        text: chargedXp
+          ? '❌ Error reenviando el archivo.\n\n💰 Se devolvieron tus 10000 XP.'
+          : usedTicket
+            ? '❌ Error reenviando el archivo.\n\n🎟️ Se devolvió tu uso de .ver.'
+            : '❌ Error reenviando el archivo.'
       }, { quoted: msg });
     }
   }
