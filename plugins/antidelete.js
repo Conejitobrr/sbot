@@ -35,9 +35,8 @@ return cleanJid(jid)
 }
 
 function getMsgKey(remoteJid, id) {
-return ${cleanJid(remoteJid)}:${id};
+  return `${cleanJid(remoteJid)}:${id}`;
 }
-
 function uniqueList(list = []) {
 return [...new Set(
 list
