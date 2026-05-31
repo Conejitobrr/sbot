@@ -43,26 +43,30 @@ async function convertVideo(input, output) {
     '-map', '0:v:0',
     '-map', '0:a?',
 
-    // ✅ Video compatible con WhatsApp / Estados
+    // ✅ Más rápido y compatible con WhatsApp / Estados
     '-vf', "scale='min(720,iw)':-2",
     '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '28',
+    '-preset', 'ultrafast',
+    '-crf', '29',
     '-pix_fmt', 'yuv420p',
     '-profile:v', 'baseline',
     '-level', '3.1',
 
-    // ✅ Audio compatible
+    // ✅ Audio más fuerte y compatible
     '-c:a', 'aac',
-    '-b:a', '128k',
+    '-b:a', '160k',
     '-ar', '44100',
     '-ac', '2',
+    '-af', 'volume=1.35',
 
     // ✅ Ayuda a WhatsApp a procesarlo mejor
     '-movflags', '+faststart',
 
     output
-  ]);
+  ], {
+    timeout: 180000,
+    maxBuffer: 1024 * 1024 * 10
+  });
 }
 
 module.exports = {
