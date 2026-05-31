@@ -53,6 +53,14 @@ function number(jid = '') {
     .replace(/\D/g, '');
 }
 
+function cleanName(name = '') {
+  return String(name || '')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40);
+}
+
 function isOwnerUser(jid = '') {
   const num = number(jid);
 
@@ -152,7 +160,7 @@ function getTargetJid(msg, args, sender) {
     if (jid) return jid;
   }
 
-  return cleanJid(sender);
+  return sender ? cleanJid(sender) : '';
 }
 
 function emptyStats() {
@@ -226,33 +234,115 @@ function resetUserStats(remoteJid, userJid) {
   saveData(data);
 }
 
-function formatStats(userJid, stats) {
-  return `📊 *CONTADOR DE MENSAJES*
+async function getFreshMetadata(sock, remoteJid, groupMetadata) {
+  try {
+    const metadata = await sock.groupMetadata(remoteJid);
 
-👤 Usuario: @${number(userJid)}
+    if (metadata?.participants?.length) {
+      return metadata;
+    }
+  } catch {}
 
-📨 *Total:* ${stats.total}
-
-💬 Texto: ${stats.text}
-🖼️ Fotos: ${stats.image}
-🎥 Videos: ${stats.video}
-🗿 Stickers: ${stats.sticker}
-🎧 Audios: ${stats.audio}
-🎙️ Notas de voz: ${stats.ptt}
-📄 Documentos: ${stats.document}
-👤 Contactos: ${stats.contact}
-📍 Ubicaciones: ${stats.location}
-📊 Encuestas: ${stats.poll}
-📦 Otros: ${stats.other}`;
+  return groupMetadata || null;
 }
 
-function formatTop(remoteJid) {
+function getParticipantIds(participant = {}) {
+  return [
+    participant.id,
+    participant.jid,
+    participant.participant,
+    participant.lid
+  ]
+    .filter(Boolean)
+    .map(cleanJid)
+    .filter(Boolean);
+}
+
+function findParticipant(metadata, jid = '') {
+  if (!metadata?.participants?.length) return null;
+
+  const clean = cleanJid(jid);
+  const num = number(clean);
+
+  return metadata.participants.find(p => {
+    const ids = getParticipantIds(p);
+
+    return ids.some(id => {
+      return id === clean || number(id) === num;
+    });
+  }) || null;
+}
+
+function getDisplayName(metadata, jid = '') {
+  const participant = findParticipant(metadata, jid);
+
+  const name = cleanName(
+    participant?.name ||
+    participant?.notify ||
+    participant?.verifiedName ||
+    participant?.pushName ||
+    ''
+  );
+
+  if (name) return `@${name}`;
+
+  return `@${number(jid)}`;
+}
+
+function formatStats(userJid, stats, metadata = null) {
+  const lines = [];
+
+  const categories = [
+    ['text', '💬 Texto'],
+    ['image', '🖼️ Fotos'],
+    ['video', '🎥 Videos'],
+    ['sticker', '🗿 Stickers'],
+    ['audio', '🎧 Audios'],
+    ['ptt', '🎙️ Notas de voz'],
+    ['document', '📄 Documentos'],
+    ['contact', '👤 Contactos'],
+    ['location', '📍 Ubicaciones'],
+    ['poll', '📊 Encuestas'],
+    ['other', '📦 Otros']
+  ];
+
+  for (const [key, label] of categories) {
+    const value = Number(stats[key] || 0);
+
+    if (value > 0) {
+      lines.push(`${label}: ${value}`);
+    }
+  }
+
+  const userLabel = metadata
+    ? getDisplayName(metadata, userJid)
+    : `@${number(userJid)}`;
+
+  if (!Number(stats.total || 0)) {
+    return `📊 *CONTADOR DE MENSAJES*
+
+👤 Usuario: ${userLabel}
+
+📨 *Total:* 0 msjs
+
+Este usuario todavía no tiene mensajes contados.`;
+  }
+
+  return `📊 *CONTADOR DE MENSAJES*
+
+👤 Usuario: ${userLabel}
+
+📨 *Total:* ${stats.total} msjs
+
+${lines.join('\n')}`;
+}
+
+function formatAllGroupStats(remoteJid, metadata = null) {
   const groupStats = getGroupStats(remoteJid);
 
   const entries = Object.entries(groupStats)
     .filter(([, stats]) => Number(stats?.total || 0) > 0)
-    .sort((a, b) => Number(b[1].total || 0) - Number(a[1].total || 0))
-    .slice(0, 10);
+    .sort((a, b) => Number(b[1].total || 0) - Number(a[1].total || 0));
 
   if (!entries.length) {
     return {
@@ -265,13 +355,17 @@ function formatTop(remoteJid) {
 
   const list = entries
     .map(([jid, stats], i) => {
-      return `${i + 1}. @${number(jid)} — *${stats.total}* mensajes`;
+      const label = metadata
+        ? getDisplayName(metadata, jid)
+        : `@${number(jid)}`;
+
+      return `${i + 1}. ${label} — Total ${stats.total} msjs`;
     })
     .join('\n');
 
   return {
     text:
-`🏆 *TOP MENSAJES DEL GRUPO*
+`📊 *MENSAJES DE TODOS LOS PARTICIPANTES*
 
 ${list}`,
     mentions
@@ -283,6 +377,8 @@ module.exports = {
     'mensajes',
     'contador',
     'msg',
+    'todosmensajes',
+    'msggrupo',
     'topmensajes',
     'topmsg',
     'resetcontador'
@@ -325,7 +421,8 @@ module.exports = {
       command,
       fromGroup,
       isAdmin,
-      isOwner
+      isOwner,
+      groupMetadata
     } = ctx;
 
     const cmd = String(command || '').toLowerCase();
@@ -337,12 +434,19 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      if (cmd === 'topmensajes' || cmd === 'topmsg') {
-        const top = formatTop(remoteJid);
+      const metadata = await getFreshMetadata(sock, remoteJid, groupMetadata);
+
+      if (
+        cmd === 'todosmensajes' ||
+        cmd === 'msggrupo' ||
+        cmd === 'topmensajes' ||
+        cmd === 'topmsg'
+      ) {
+        const all = formatAllGroupStats(remoteJid, metadata);
 
         return sock.sendMessage(remoteJid, {
-          text: top.text,
-          mentions: top.mentions
+          text: all.text,
+          mentions: all.mentions
         }, { quoted: msg });
       }
 
@@ -355,7 +459,7 @@ module.exports = {
           }, { quoted: msg });
         }
 
-        const target = getTargetJid(msg, args, null);
+        const target = getTargetJid(msg, args, '');
 
         if (target) {
           resetUserStats(remoteJid, target);
@@ -377,7 +481,7 @@ module.exports = {
       const stats = getStats(remoteJid, target);
 
       return sock.sendMessage(remoteJid, {
-        text: formatStats(target, stats),
+        text: formatStats(target, stats, metadata),
         mentions: [target]
       }, { quoted: msg });
 
