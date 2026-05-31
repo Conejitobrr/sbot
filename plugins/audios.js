@@ -156,9 +156,9 @@ module.exports = {
 
       // 🔥 FRASES
       { triggers: ['tu no mete'], file: 'Tu no mete' },
-      { triggers: ['bot feo'], file: 'Elmo' },
       { triggers: ['telepatia', 'telepatía'], file: 'Telepatía' },
       { triggers: ['me voy'], file: 'Me voy' },
+      { triggers: ['bot feo'], file: 'Elmo' },
       { triggers: ['doxean', 'me doxean'], file: 'Me doxean' },
       { triggers: ['no es jueves'], file: 'No es jueves' },
       { triggers: ['jejeje'], file: 'Jejeje' }
