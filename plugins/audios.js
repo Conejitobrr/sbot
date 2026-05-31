@@ -54,7 +54,7 @@ module.exports = {
 
       // 🔥 FRASES
       { triggers: ['tu no mete'], file: 'Tu no mete.mp3' },
-
+      { triggers: ['bot feo'], file: 'Elmo.mp3' },
       { triggers: ['telepatia','telepatía'], file: 'Telepatía.mp3' },
       { triggers: ['me voy'], file: 'Me voy.mp3' },
       { triggers: ['doxean', 'me doxean'], file: 'Me doxean.mp3' },
