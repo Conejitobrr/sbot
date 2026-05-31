@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const CONFIG_PATH = path.join(process.cwd(), 'config.js');
+const ENV_PATH = path.join(process.cwd(), '.env');
 
 function bumpVersion(version = '1.0.0') {
   let [major, minor, patch] = String(version)
@@ -30,26 +30,47 @@ function bumpVersion(version = '1.0.0') {
   return `${major}.${minor}.${patch}`;
 }
 
-function updateConfigVersion() {
-  if (!fs.existsSync(CONFIG_PATH)) {
-    throw new Error('No encontré config.js');
+function getCurrentVersion() {
+  if (process.env.BOT_VERSION) {
+    return process.env.BOT_VERSION;
   }
 
-  const content = fs.readFileSync(CONFIG_PATH, 'utf8');
+  try {
+    delete require.cache[require.resolve('../config')];
 
-  const regex = /(botVersion\s*:\s*['"])(\d+\.\d+\.\d+)(['"])/;
-  const match = content.match(regex);
-
-  if (!match) {
-    throw new Error('No encontré botVersion en config.js');
+    const config = require('../config');
+    return config.botVersion || '1.0.0';
+  } catch {
+    return '1.0.0';
   }
+}
 
-  const oldVersion = match[2];
+function updateEnvVersion() {
+  const oldVersion = getCurrentVersion();
   const newVersion = bumpVersion(oldVersion);
 
-  const updated = content.replace(regex, `$1${newVersion}$3`);
+  let envContent = '';
 
-  fs.writeFileSync(CONFIG_PATH, updated);
+  if (fs.existsSync(ENV_PATH)) {
+    envContent = fs.readFileSync(ENV_PATH, 'utf8');
+  }
+
+  if (/^BOT_VERSION\s*=/m.test(envContent)) {
+    envContent = envContent.replace(
+      /^BOT_VERSION\s*=.*$/m,
+      `BOT_VERSION=${newVersion}`
+    );
+  } else {
+    if (envContent && !envContent.endsWith('\n')) {
+      envContent += '\n';
+    }
+
+    envContent += `BOT_VERSION=${newVersion}\n`;
+  }
+
+  fs.writeFileSync(ENV_PATH, envContent);
+
+  process.env.BOT_VERSION = newVersion;
 
   try {
     delete require.cache[require.resolve('../config')];
@@ -100,7 +121,7 @@ module.exports = {
         execSync('npm install', { stdio: 'pipe' });
       } catch {}
 
-      const versionInfo = updateConfigVersion();
+      const versionInfo = updateEnvVersion();
 
       if (global.loadPlugins) {
         global.loadPlugins();
