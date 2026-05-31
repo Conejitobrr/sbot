@@ -5,6 +5,25 @@ const path = require('path');
 const os = require('os');
 const config = require('../config');
 
+function cleanJid(jid = '') {
+  const value = String(jid || '');
+
+  if (!value) return '';
+
+  if (value.includes('@')) {
+    const [user, server] = value.split('@');
+    return `${user.split(':')[0]}@${server}`;
+  }
+
+  return value.split(':')[0];
+}
+
+function number(jid = '') {
+  return cleanJid(jid)
+    .split('@')[0]
+    .replace(/\D/g, '');
+}
+
 function formatUptime(seconds = 0) {
   seconds = Math.floor(Number(seconds) || 0);
 
@@ -75,6 +94,19 @@ function getCommandsCount() {
   }
 }
 
+function getOwnerCount() {
+  return 2;
+}
+
+function hasAI() {
+  return Boolean(
+    process.env.OPENAI_API_KEY ||
+    process.env.GROQ_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.AI_API_KEY
+  );
+}
+
 module.exports = {
   commands: ['infobot', 'botinfo', 'info', 'sirius'],
 
@@ -84,15 +116,11 @@ module.exports = {
       msg,
       remoteJid,
       sender,
-      pushName,
       fromGroup
     } = ctx;
 
     try {
       const memory = process.memoryUsage();
-      const totalMem = os.totalmem();
-      const freeMem = os.freemem();
-      const usedMem = totalMem - freeMem;
 
       const pluginFiles = countPluginFiles();
       const commandsCount = getCommandsCount();
@@ -105,26 +133,29 @@ module.exports = {
         .split('@')[0]
         .split(':')[0];
 
+      const userJid = cleanJid(sender);
+      const userNumber = number(userJid);
+
       const text =
 `╭━━━〔 🤖 *INFO BOT* 〕━━━⬣
 ┃
 ┃ 🤖 *Nombre:* ${botName}
 ┃ 📦 *Versión:* ${version}
 ┃ ⚙️ *Prefijo:* ${prefix}
-┃ 👑 *Owner:* ${Array.isArray(config.owner) ? config.owner.length : 0}
+┃ 👑 *Owners oficiales:* ${getOwnerCount()}
 ┃
 ┃ 📱 *Número del bot:*
 ┃ wa.me/${botNumber}
 ┃
 ┃ 👤 *Solicitado por:*
-┃ ${pushName || 'Usuario'}
+┃ @${userNumber}
 ┃
-┣━━━〔 ⚡ *SISTEMA* 〕━━━⬣
+┣━━━〔 ⚡ *ESTADO* 〕━━━⬣
 ┃
 ┃ ⏱️ *Activo:* ${formatUptime(process.uptime())}
 ┃ 🟢 *Estado:* En línea
-┃ 🧠 *Node.js:* ${process.version}
-┃ 💻 *Plataforma:* ${os.platform()} ${os.arch()}
+┃ 🧠 *IA:* ${hasAI() ? 'Activada ✅' : 'No configurada ❌'}
+┃ 💻 *Sistema:* ${os.platform()} ${os.arch()}
 ┃
 ┣━━━〔 📁 *BOT* 〕━━━⬣
 ┃
@@ -132,21 +163,18 @@ module.exports = {
 ┃ 🔥 *Comandos:* ${commandsCount || 'No detectado'}
 ┃ 💬 *Chat:* ${fromGroup ? 'Grupo' : 'Privado'}
 ┃
-┣━━━〔 🧩 *MEMORIA* 〕━━━⬣
+┣━━━〔 🧩 *RECURSOS* 〕━━━⬣
 ┃
-┃ 📌 *RAM usada por bot:* ${formatBytes(memory.rss)}
+┃ 📌 *Memoria usada:* ${formatBytes(memory.rss)}
 ┃ 📊 *Heap usado:* ${formatBytes(memory.heapUsed)}
-┃ 🧾 *Heap total:* ${formatBytes(memory.heapTotal)}
-┃
-┃ 💽 *RAM del sistema:*
-┃ ${formatBytes(usedMem)} / ${formatBytes(totalMem)}
 ┃
 ╰━━━━━━━━━━━━━━━━━━━━⬣
 
 ${config.footer || botName}`;
 
       return sock.sendMessage(remoteJid, {
-        text
+        text,
+        mentions: [userJid]
       }, { quoted: msg });
 
     } catch (err) {
