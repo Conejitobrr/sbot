@@ -158,7 +158,8 @@ module.exports = {
       { triggers: ['tu no mete'], file: 'Tu no mete' },
       { triggers: ['telepatia', 'telepatía'], file: 'Telepatía' },
       { triggers: ['me voy'], file: 'Me voy' },
-      { triggers: ['bot feo'], file: 'Elmo' },
+      { triggers: ['una basura'], file: 'Basura' },
+      { triggers: ['cancer','cáncer'], file: 'Cáncer' },
       { triggers: ['doxean', 'me doxean'], file: 'Me doxean' },
       { triggers: ['no es jueves'], file: 'No es jueves' },
       { triggers: ['jejeje'], file: 'Jejeje' }
