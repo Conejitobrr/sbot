@@ -21,9 +21,6 @@ module.exports = {
       const code = await sock.groupInviteCode(remoteJid);
       const link = `https://chat.whatsapp.com/${code}`;
 
-      // ✅ Mandar SOLO el link limpio.
-      // ✅ Con link-preview-js instalado, Baileys/WhatsApp puede generar la preview.
-      // ✅ No se pone texto extra porque eso puede hacer que se vea como enlace simple.
       return sock.sendMessage(remoteJid, {
         text: link
       });
