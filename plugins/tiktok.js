@@ -52,13 +52,13 @@ async function downloadTikTok(url, output) {
       ]
     },
     {
-      name: 'impersonate chrome',
+      name: 'sin formato específico',
       args: [
-        '--impersonate', 'chrome',
         '--no-playlist',
         '--force-overwrites',
         '--merge-output-format', 'mp4',
-        '-f', 'bv*+ba/b',
+        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
+        '--add-header', 'referer:https://www.tiktok.com/',
         '-o', output,
         url
       ]
@@ -68,7 +68,7 @@ async function downloadTikTok(url, output) {
       args: [
         '--no-playlist',
         '--force-overwrites',
-        '-f', 'best',
+        '-f', 'b/best',
         '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
         '-o', output,
         url
@@ -201,7 +201,10 @@ module.exports = {
       console.log('❌ Error en tiktok:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Error al descargar TikTok.\nVerifica yt-dlp y ffmpeg.'
+        text:
+`❌ Error al descargar TikTok.
+
+Puede ser que ese video esté restringido, no disponible para yt-dlp o TikTok haya bloqueado ese enlace temporalmente.`
       }, { quoted: msg });
 
     } finally {
