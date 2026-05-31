@@ -3,7 +3,16 @@
 const dbGlobal = require('../lib/database');
 
 function cleanJid(jid = '') {
-  return String(jid || '').split(':')[0];
+  const value = String(jid || '');
+
+  if (!value) return '';
+
+  if (value.includes('@')) {
+    const [user, server] = value.split('@');
+    return `${user.split(':')[0]}@${server}`;
+  }
+
+  return value.split(':')[0];
 }
 
 function number(jid = '') {
@@ -26,9 +35,9 @@ function getContextInfo(msg = {}) {
 
 function isAdminParticipant(participant = {}) {
   return (
-    participant.admin === 'admin' ||
-    participant.admin === 'superadmin' ||
-    participant.isAdmin === true
+    participant?.admin === 'admin' ||
+    participant?.admin === 'superadmin' ||
+    participant?.isAdmin === true
   );
 }
 
@@ -36,8 +45,8 @@ function getParticipantId(participant = {}) {
   return cleanJid(
     participant.id ||
     participant.jid ||
-    participant.lid ||
     participant.participant ||
+    participant.lid ||
     ''
   );
 }
@@ -56,19 +65,99 @@ async function isPremiumUser(db, sender) {
   }
 }
 
+async function getFreshMetadata(sock, remoteJid, groupMetadata) {
+  try {
+    const metadata = await sock.groupMetadata(remoteJid);
+    if (metadata?.participants?.length) return metadata;
+  } catch {}
+
+  return groupMetadata || null;
+}
+
 async function isBotAdmin(sock, remoteJid, groupMetadata) {
   try {
-    const metadata = groupMetadata || await sock.groupMetadata(remoteJid);
+    const metadata = await getFreshMetadata(sock, remoteJid, groupMetadata);
 
-    const botJid = cleanJid(sock.user?.id || sock.user?.jid || '');
-    const botNumber = number(botJid);
+    if (!metadata?.participants?.length) return false;
 
-    const bot = metadata?.participants?.find(p => {
-      const id = getParticipantId(p);
-      return id === botJid || number(id) === botNumber;
+    const botRaw =
+      sock.user?.id ||
+      sock.user?.jid ||
+      sock.user?.lid ||
+      '';
+
+    const botJid = cleanJid(botRaw);
+    const botNum = number(botJid);
+
+    const botParticipant = metadata.participants.find(p => {
+      const ids = [
+        p.id,
+        p.jid,
+        p.participant,
+        p.lid
+      ]
+        .filter(Boolean)
+        .map(cleanJid);
+
+      return ids.some(id => {
+        return (
+          id === botJid ||
+          number(id) === botNum
+        );
+      });
     });
 
-    return isAdminParticipant(bot);
+    console.log('🤖 Bot admin detect:', {
+      botJid,
+      botNum,
+      found: botParticipant
+        ? {
+            id: botParticipant.id,
+            jid: botParticipant.jid,
+            lid: botParticipant.lid,
+            participant: botParticipant.participant,
+            admin: botParticipant.admin
+          }
+        : null
+    });
+
+    return isAdminParticipant(botParticipant);
+
+  } catch (err) {
+    console.log('⚠️ Error detectando admin del bot:', err?.message || err);
+    return false;
+  }
+}
+
+async function isUserAdminFallback(sock, remoteJid, sender, groupMetadata) {
+  try {
+    const metadata = await getFreshMetadata(sock, remoteJid, groupMetadata);
+
+    if (!metadata?.participants?.length) return false;
+
+    const senderJid = cleanJid(sender);
+    const senderNum = number(senderJid);
+
+    const participant = metadata.participants.find(p => {
+      const ids = [
+        p.id,
+        p.jid,
+        p.participant,
+        p.lid
+      ]
+        .filter(Boolean)
+        .map(cleanJid);
+
+      return ids.some(id => {
+        return (
+          id === senderJid ||
+          number(id) === senderNum
+        );
+      });
+    });
+
+    return isAdminParticipant(participant);
+
   } catch {
     return false;
   }
@@ -93,6 +182,7 @@ async function tryDeleteMessage(sock, remoteJid, key, isOwnMessage) {
       });
 
       return true;
+
     } catch (err) {
       lastError = err;
     }
@@ -121,7 +211,18 @@ module.exports = {
     try {
       const premium = await isPremiumUser(db, sender);
 
-      if (!isOwner && !isAdmin && !premium) {
+      let senderIsAdmin = isAdmin === true;
+
+      if (fromGroup && !senderIsAdmin) {
+        senderIsAdmin = await isUserAdminFallback(
+          sock,
+          remoteJid,
+          sender,
+          groupMetadata
+        );
+      }
+
+      if (!isOwner && !senderIsAdmin && !premium) {
         return sock.sendMessage(remoteJid, {
           text: '❌ Solo owner, admins del grupo o usuarios premium pueden usar este comando.'
         }, { quoted: msg });
@@ -141,7 +242,13 @@ Uso:
         }, { quoted: msg });
       }
 
-      const botJid = cleanJid(sock.user?.id || sock.user?.jid || '');
+      const botRaw =
+        sock.user?.id ||
+        sock.user?.jid ||
+        sock.user?.lid ||
+        '';
+
+      const botJid = cleanJid(botRaw);
       const botNum = number(botJid);
 
       const quotedParticipant = cleanJid(quoted.participant || '');
