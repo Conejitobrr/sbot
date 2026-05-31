@@ -25,13 +25,85 @@ function isTikTokUrl(url = '') {
 }
 
 async function downloadTikTok(url, output) {
-  await execFileAsync('yt-dlp', [
-    '-f', 'mp4',
-    '--no-playlist',
-    '--add-header', 'user-agent:Mozilla/5.0',
-    '-o', output,
-    url
-  ]);
+  const attempts = [
+    {
+      name: 'normal mejor calidad',
+      args: [
+        '--no-playlist',
+        '--force-overwrites',
+        '--merge-output-format', 'mp4',
+        '-f', 'bv*+ba/b',
+        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
+        '--add-header', 'referer:https://www.tiktok.com/',
+        '-o', output,
+        url
+      ]
+    },
+    {
+      name: 'mp4 directo',
+      args: [
+        '--no-playlist',
+        '--force-overwrites',
+        '-f', 'b[ext=mp4]/best[ext=mp4]/best',
+        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
+        '--add-header', 'referer:https://www.tiktok.com/',
+        '-o', output,
+        url
+      ]
+    },
+    {
+      name: 'impersonate chrome',
+      args: [
+        '--impersonate', 'chrome',
+        '--no-playlist',
+        '--force-overwrites',
+        '--merge-output-format', 'mp4',
+        '-f', 'bv*+ba/b',
+        '-o', output,
+        url
+      ]
+    },
+    {
+      name: 'best fallback',
+      args: [
+        '--no-playlist',
+        '--force-overwrites',
+        '-f', 'best',
+        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
+        '-o', output,
+        url
+      ]
+    }
+  ];
+
+  let lastError = null;
+
+  for (const attempt of attempts) {
+    try {
+      try {
+        if (fs.existsSync(output)) fs.unlinkSync(output);
+      } catch {}
+
+      console.log(`🎬 TikTok intento: ${attempt.name}`);
+
+      await execFileAsync('yt-dlp', attempt.args, {
+        timeout: 180000,
+        maxBuffer: 1024 * 1024 * 10
+      });
+
+      if (fs.existsSync(output) && fs.statSync(output).size > 0) {
+        return;
+      }
+
+      throw new Error('yt-dlp terminó, pero no creó el archivo.');
+
+    } catch (err) {
+      lastError = err;
+      console.log(`⚠️ Falló intento TikTok (${attempt.name}):`, err?.message || err);
+    }
+  }
+
+  throw lastError || new Error('No se pudo descargar el TikTok.');
 }
 
 async function convertVideo(input, output) {
