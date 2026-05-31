@@ -2,8 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const db = require('../lib/database');
+
+const execFileAsync = promisify(execFile);
 
 // 🔥 NORMALIZAR TEXTO (quita tildes)
 function normalize(text = '') {
@@ -11,6 +14,32 @@ function normalize(text = '') {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+}
+
+async function convertToVoice(input, output) {
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i', input,
+
+    // ✅ Usar primera pista de audio y corregir timestamps raros
+    '-vn',
+    '-map', '0:a:0',
+    '-af', 'aresample=async=1:first_pts=0',
+
+    // ✅ Nota de voz compatible con WhatsApp
+    '-c:a', 'libopus',
+    '-application', 'voip',
+    '-b:a', '48k',
+    '-ar', '48000',
+    '-ac', '1',
+    '-frame_duration', '20',
+    '-f', 'ogg',
+
+    output
+  ], {
+    timeout: 60000,
+    maxBuffer: 1024 * 1024 * 10
+  });
 }
 
 module.exports = {
@@ -41,9 +70,9 @@ module.exports = {
       { triggers: ['tetas'], file: 'ATetas.mp3' },
       { triggers: ['añanin'], file: 'Añañin.mp3' },
       { triggers: ['chaoo'], file: 'Chaoo.mp3' },
-      { triggers: ['coger'], file: 'Coger.mp3' }, // 🔥 ya no detecta "recoger"
+      { triggers: ['coger'], file: 'Coger.mp3' },
       { triggers: ['viernes'], file: 'viernes.mp3' },
-      { triggers: ['siu','siuu','siuuu','siuuuu','siuuuuu','siuuuuuu'], file: 'siu.mp3' },
+      { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu', 'siuuuuu', 'siuuuuuu'], file: 'siu.mp3' },
       { triggers: ['noche'], file: 'Noche.mp3' },
       { triggers: ['sexo'], file: 'S3x0g.mp3' },
       { triggers: ['mff'], file: 'Mff.mp3' },
@@ -55,7 +84,7 @@ module.exports = {
       // 🔥 FRASES
       { triggers: ['tu no mete'], file: 'Tu no mete.mp3' },
       { triggers: ['bot feo'], file: 'Elmo.mp3' },
-      { triggers: ['telepatia','telepatía'], file: 'Telepatía.mp3' },
+      { triggers: ['telepatia', 'telepatía'], file: 'Telepatía.mp3' },
       { triggers: ['me voy'], file: 'Me voy.mp3' },
       { triggers: ['doxean', 'me doxean'], file: 'Me doxean.mp3' },
       { triggers: ['no es jueves'], file: 'No es jueves.mp3' },
@@ -78,6 +107,7 @@ module.exports = {
         } else {
           // 👇 PALABRA EXACTA (NO dentro de otra)
           const regex = new RegExp(`\\b${t}\\b`, 'i');
+
           if (regex.test(text)) {
             selected = audio;
             break;
@@ -101,47 +131,51 @@ module.exports = {
 
     // 📁 TEMP
     const tempDir = path.join(__dirname, '../temp');
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-    const output = path.join(tempDir, `voice_${Date.now()}.ogg`);
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
 
-    // 🔥 CONVERTIR A NOTA DE VOZ REAL
-    const cmd = `
-ffmpeg -y -i "${input}" \
--vn -c:a libopus -b:a 48k \
--ar 48000 -ac 1 \
-"${output}"
-`;
+    const output = path.join(tempDir, `voice_${Date.now()}_${Math.floor(Math.random() * 9999)}.ogg`);
 
-    exec(cmd, async (err) => {
-      if (err) {
-        console.log('❌ FFMPEG ERROR:', err);
+    try {
+      // 🔥 CONVERTIR A NOTA DE VOZ REAL
+      await convertToVoice(input, output);
 
+      if (!fs.existsSync(output) || fs.statSync(output).size <= 0) {
         return sock.sendMessage(
           remoteJid,
-          { text: '❌ Error convirtiendo audio' },
+          { text: '❌ El audio convertido salió vacío.' },
           { quoted: msg }
         );
       }
 
-      try {
-        await sock.sendMessage(
-          remoteJid,
-          {
-            audio: fs.readFileSync(output),
-            mimetype: 'audio/ogg; codecs=opus',
-            ptt: true
-          },
-          { quoted: msg }
-        );
-      } catch (e) {
-        console.log('❌ Error enviando audio:', e);
-      }
+      await sock.sendMessage(
+        remoteJid,
+        {
+          audio: fs.readFileSync(output),
+          mimetype: 'audio/ogg; codecs=opus',
+          ptt: true
+        },
+        { quoted: msg }
+      );
 
+    } catch (err) {
+      console.log('❌ FFMPEG ERROR:', err?.message || err);
+
+      return sock.sendMessage(
+        remoteJid,
+        { text: '❌ Error convirtiendo audio' },
+        { quoted: msg }
+      );
+
+    } finally {
       // 🧹 limpiar
       try {
-        fs.unlinkSync(output);
+        if (fs.existsSync(output)) {
+          fs.unlinkSync(output);
+        }
       } catch {}
-    });
+    }
   }
 };
