@@ -48,6 +48,7 @@ module.exports = {
       { triggers: ['sexo'], file: 'S3x0g.mp3' },
       { triggers: ['mff'], file: 'Mff.mp3' },
       { triggers: ['linda'], file: 'Linda.mp3' },
+      { triggers: ['chamba'], file: 'Chamba.mp3' },
 
       // 🔥 FRASES
       { triggers: ['tu no mete'], file: 'Tu no mete.mp3' },
