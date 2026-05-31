@@ -81,7 +81,7 @@ function formatTime(ms) {
 }
 
 module.exports = {
-  commands: ['trabajar', 'work', 'chamba'],
+  commands: ['trabajar', 'work', 'chambear'],
 
   async execute(ctx) {
     const { sock, msg, remoteJid, sender } = ctx;
