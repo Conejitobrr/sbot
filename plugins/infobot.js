@@ -72,23 +72,30 @@ function countPluginFiles() {
 
 function getCommandsCount() {
   try {
-    if (global.plugins && Array.isArray(global.plugins)) {
-      let total = 0;
+    const pluginsDir = path.join(process.cwd(), 'plugins');
 
-      for (const plugin of global.plugins) {
+    if (!fs.existsSync(pluginsDir)) return 0;
+
+    let total = 0;
+
+    const files = fs.readdirSync(pluginsDir)
+      .filter(file => file.endsWith('.js'));
+
+    for (const file of files) {
+      try {
+        const pluginPath = path.join(pluginsDir, file);
+
+        delete require.cache[require.resolve(pluginPath)];
+
+        const plugin = require(pluginPath);
+
         if (Array.isArray(plugin?.commands)) {
           total += plugin.commands.length;
         }
-      }
-
-      return total;
+      } catch {}
     }
 
-    if (global.commands && typeof global.commands === 'object') {
-      return Object.keys(global.commands).length;
-    }
-
-    return 0;
+    return total;
   } catch {
     return 0;
   }
@@ -160,7 +167,7 @@ module.exports = {
 ┣━━━〔 📁 *BOT* 〕━━━⬣
 ┃
 ┃ 📂 *Plugins:* ${pluginFiles}
-┃ 🔥 *Comandos:* ${commandsCount || 'No detectado'}
+┃ 🔥 *Comandos:* ${commandsCount}
 ┃ 💬 *Chat:* ${fromGroup ? 'Grupo' : 'Privado'}
 ┃
 ┣━━━〔 🧩 *RECURSOS* 〕━━━⬣
