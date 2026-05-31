@@ -25,110 +25,23 @@ function isTikTokUrl(url = '') {
 }
 
 async function downloadTikTok(url, output) {
-  const attempts = [
-    {
-      name: 'normal mejor calidad',
-      args: [
-        '--no-playlist',
-        '--force-overwrites',
-        '--merge-output-format', 'mp4',
-        '-f', 'bv*+ba/b',
-        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
-        '--add-header', 'referer:https://www.tiktok.com/',
-        '-o', output,
-        url
-      ]
-    },
-    {
-      name: 'mp4 directo',
-      args: [
-        '--no-playlist',
-        '--force-overwrites',
-        '-f', 'b[ext=mp4]/best[ext=mp4]/best',
-        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
-        '--add-header', 'referer:https://www.tiktok.com/',
-        '-o', output,
-        url
-      ]
-    },
-    {
-      name: 'sin formato específico',
-      args: [
-        '--no-playlist',
-        '--force-overwrites',
-        '--merge-output-format', 'mp4',
-        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
-        '--add-header', 'referer:https://www.tiktok.com/',
-        '-o', output,
-        url
-      ]
-    },
-    {
-      name: 'best fallback',
-      args: [
-        '--no-playlist',
-        '--force-overwrites',
-        '-f', 'b/best',
-        '--add-header', 'user-agent:Mozilla/5.0 (Linux; Android 10)',
-        '-o', output,
-        url
-      ]
-    }
-  ];
-
-  let lastError = null;
-
-  for (const attempt of attempts) {
-    try {
-      try {
-        if (fs.existsSync(output)) fs.unlinkSync(output);
-      } catch {}
-
-      console.log(`🎬 TikTok intento: ${attempt.name}`);
-
-      await execFileAsync('yt-dlp', attempt.args, {
-        timeout: 180000,
-        maxBuffer: 1024 * 1024 * 10
-      });
-
-      if (fs.existsSync(output) && fs.statSync(output).size > 0) {
-        return;
-      }
-
-      throw new Error('yt-dlp terminó, pero no creó el archivo.');
-
-    } catch (err) {
-      lastError = err;
-      console.log(`⚠️ Falló intento TikTok (${attempt.name}):`, err?.message || err);
-    }
-  }
-
-  throw lastError || new Error('No se pudo descargar el TikTok.');
+  await execFileAsync('yt-dlp', [
+    '-f', 'mp4',
+    '--no-playlist',
+    '--add-header', 'user-agent:Mozilla/5.0',
+    '-o', output,
+    url
+  ]);
 }
 
 async function convertVideo(input, output) {
   await execFileAsync('ffmpeg', [
     '-y',
     '-i', input,
-
-    // ✅ Video compatible con WhatsApp / Estados
-    '-vf', "scale='min(720,iw)':-2",
     '-c:v', 'libx264',
+    '-c:a', 'aac',
     '-preset', 'veryfast',
     '-crf', '28',
-    '-pix_fmt', 'yuv420p',
-    '-profile:v', 'baseline',
-    '-level', '3.1',
-
-    // ✅ Audio compatible
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-ar', '44100',
-    '-ac', '2',
-
-    // ✅ Mejora compatibilidad al subir/descargar
-    '-movflags', '+faststart',
-
     output
   ]);
 }
@@ -201,10 +114,7 @@ module.exports = {
       console.log('❌ Error en tiktok:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text:
-`❌ Error al descargar TikTok.
-
-Puede ser que ese video esté restringido, no disponible para yt-dlp o TikTok haya bloqueado ese enlace temporalmente.`
+        text: '❌ Error al descargar TikTok.\nVerifica yt-dlp y ffmpeg.'
       }, { quoted: msg });
 
     } finally {
