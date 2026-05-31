@@ -8,12 +8,84 @@ const db = require('../lib/database');
 
 const execFileAsync = promisify(execFile);
 
+const MEDIA_DIR = path.resolve(__dirname, '../media');
+
+const AUDIO_EXTENSIONS = [
+  '.mp3',
+  '.ogg',
+  '.opus',
+  '.wav',
+  '.m4a',
+  '.aac',
+  '.flac',
+  '.webm',
+  '.mp4',
+  '.mpeg'
+];
+
 // 🔥 NORMALIZAR TEXTO (quita tildes)
 function normalize(text = '') {
-  return text
+  return String(text || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+}
+
+function escapeRegExp(text = '') {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeFileName(name = '') {
+  return normalize(name)
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// 🔥 Buscar audio por nombre base sin importar extensión
+function resolveAudioFile(file = '') {
+  if (!file) return null;
+
+  if (!fs.existsSync(MEDIA_DIR)) {
+    console.log('❌ Carpeta media no encontrada:', MEDIA_DIR);
+    return null;
+  }
+
+  const directPath = path.resolve(MEDIA_DIR, file);
+
+  if (fs.existsSync(directPath)) {
+    return directPath;
+  }
+
+  const wantedExt = path.extname(file).toLowerCase();
+  const wantedBase = normalizeFileName(
+    wantedExt
+      ? path.basename(file, wantedExt)
+      : path.basename(file)
+  );
+
+  const files = fs.readdirSync(MEDIA_DIR);
+
+  for (const item of files) {
+    const full = path.join(MEDIA_DIR, item);
+
+    try {
+      if (!fs.statSync(full).isFile()) continue;
+    } catch {
+      continue;
+    }
+
+    const ext = path.extname(item).toLowerCase();
+
+    if (!AUDIO_EXTENSIONS.includes(ext)) continue;
+
+    const base = normalizeFileName(path.basename(item, ext));
+
+    if (base === wantedBase) {
+      return full;
+    }
+  }
+
+  return null;
 }
 
 async function convertToVoice(input, output) {
@@ -63,32 +135,33 @@ module.exports = {
 
     const text = normalize(body);
 
-    // 🔥 NUEVO SISTEMA (PALABRAS + FRASES)
+    // 🔥 SISTEMA DE AUDIOS
+    // ✅ Ahora file va sin extensión
     const audios = [
-      { triggers: ['hola'], file: 'hola.mp3' },
-      { triggers: ['autoestima'], file: 'Autoestima.mp3' },
-      { triggers: ['tetas'], file: 'ATetas.mp3' },
-      { triggers: ['añanin'], file: 'Añañin.mp3' },
-      { triggers: ['chaoo'], file: 'Chaoo.mp3' },
-      { triggers: ['coger'], file: 'Coger.mp3' },
-      { triggers: ['viernes'], file: 'viernes.mp3' },
-      { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu', 'siuuuuu', 'siuuuuuu'], file: 'siu.mp3' },
-      { triggers: ['noche'], file: 'Noche.mp3' },
-      { triggers: ['sexo'], file: 'S3x0g.mp3' },
-      { triggers: ['mff'], file: 'Mff.mp3' },
-      { triggers: ['linda'], file: 'Linda.mp3' },
-      { triggers: ['chamba'], file: 'Chamba.mp3' },
-      { triggers: ['uwu'], file: 'UwU.mp3' },
-      { triggers: ['ag'], file: 'Asco.mp3' },
+      { triggers: ['hola'], file: 'hola' },
+      { triggers: ['autoestima'], file: 'Autoestima' },
+      { triggers: ['tetas'], file: 'ATetas' },
+      { triggers: ['añanin'], file: 'Añañin' },
+      { triggers: ['chaoo'], file: 'Chaoo' },
+      { triggers: ['coger'], file: 'Coger' },
+      { triggers: ['viernes'], file: 'viernes' },
+      { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu', 'siuuuuu', 'siuuuuuu'], file: 'siu' },
+      { triggers: ['noche'], file: 'Noche' },
+      { triggers: ['sexo'], file: 'S3x0g' },
+      { triggers: ['mff'], file: 'Mff' },
+      { triggers: ['linda'], file: 'Linda' },
+      { triggers: ['chamba'], file: 'Chamba' },
+      { triggers: ['uwu'], file: 'UwU' },
+      { triggers: ['ag'], file: 'Asco' },
 
       // 🔥 FRASES
-      { triggers: ['tu no mete'], file: 'Tu no mete.mp3' },
-      { triggers: ['bot feo'], file: 'Elmo.mp3' },
-      { triggers: ['telepatia', 'telepatía'], file: 'Telepatía.mp3' },
-      { triggers: ['me voy'], file: 'Me voy.mp3' },
-      { triggers: ['doxean', 'me doxean'], file: 'Me doxean.mp3' },
-      { triggers: ['no es jueves'], file: 'No es jueves.mp3' },
-      { triggers: ['jejeje'], file: 'Jejeje.mp3' }
+      { triggers: ['tu no mete'], file: 'Tu no mete' },
+      { triggers: ['bot feo'], file: 'Elmo' },
+      { triggers: ['telepatia', 'telepatía'], file: 'Telepatía' },
+      { triggers: ['me voy'], file: 'Me voy' },
+      { triggers: ['doxean', 'me doxean'], file: 'Me doxean' },
+      { triggers: ['no es jueves'], file: 'No es jueves' },
+      { triggers: ['jejeje'], file: 'Jejeje' }
     ];
 
     // 🔥 BUSCAR MATCH CORRECTO
@@ -106,7 +179,7 @@ module.exports = {
           }
         } else {
           // 👇 PALABRA EXACTA (NO dentro de otra)
-          const regex = new RegExp(`\\b${t}\\b`, 'i');
+          const regex = new RegExp(`\\b${escapeRegExp(t)}\\b`, 'i');
 
           if (regex.test(text)) {
             selected = audio;
@@ -120,12 +193,17 @@ module.exports = {
 
     if (!selected) return;
 
-    const input = path.resolve(__dirname, '../media', selected.file);
+    const input = resolveAudioFile(selected.file);
 
-    console.log('🎧 AUDIO TRIGGER:', selected.file);
+    console.log(
+      '🎧 AUDIO TRIGGER:',
+      selected.file,
+      '=>',
+      input ? path.basename(input) : 'NO ENCONTRADO'
+    );
 
-    if (!fs.existsSync(input)) {
-      console.log('❌ Audio no encontrado:', input);
+    if (!input || !fs.existsSync(input)) {
+      console.log('❌ Audio no encontrado para:', selected.file);
       return;
     }
 
@@ -136,10 +214,13 @@ module.exports = {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const output = path.join(tempDir, `voice_${Date.now()}_${Math.floor(Math.random() * 9999)}.ogg`);
+    const output = path.join(
+      tempDir,
+      `voice_${Date.now()}_${Math.floor(Math.random() * 9999)}.ogg`
+    );
 
     try {
-      // 🔥 CONVERTIR A NOTA DE VOZ REAL
+      // 🔥 CONVERTIR CUALQUIER AUDIO A NOTA DE VOZ REAL
       await convertToVoice(input, output);
 
       if (!fs.existsSync(output) || fs.statSync(output).size <= 0) {
