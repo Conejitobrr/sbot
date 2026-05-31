@@ -49,6 +49,47 @@ function isOwnerUser(jid = '') {
   return owners.includes(num) || rowners.includes(num);
 }
 
+function getBotNumber(sock) {
+  const botRaw =
+    sock.user?.id ||
+    sock.user?.jid ||
+    sock.user?.lid ||
+    '';
+
+  return number(botRaw);
+}
+
+function isBotTarget(sock, target = {}) {
+  const botNum = getBotNumber(sock);
+
+  if (!botNum) return false;
+
+  const ids = [
+    target.jid,
+    ...(target.ids || [])
+  ];
+
+  return ids.some(id => number(id) === botNum);
+}
+
+function isProtectedTarget(sock, target = {}) {
+  const ids = [
+    target.jid,
+    ...(target.ids || [])
+  ];
+
+  const isOwner = ids.some(id => isOwnerUser(id));
+  const isBot = isBotTarget(sock, target);
+
+  return isOwner || isBot;
+}
+
+function getProtectedReason(sock, target = {}) {
+  if (isBotTarget(sock, target)) return 'bot';
+  if ([target.jid, ...(target.ids || [])].some(id => isOwnerUser(id))) return 'owner';
+  return 'protegido';
+}
+
 function isAdminParticipant(participant = {}) {
   return (
     participant?.admin === 'admin' ||
@@ -405,7 +446,6 @@ async function getTargets(ctx) {
     const value = String(arg || '').trim();
     if (!value) continue;
 
-    // ✅ Si ya viene como mención real de WhatsApp, no vuelvas a sacar número del @texto.
     if (value.startsWith('@') && mentioned.length > 0) continue;
 
     const jid = jidFromNumber(value);
@@ -526,8 +566,8 @@ module.exports = {
     'promote',
     'demote',
     'revoke',
-    'group',
-    'grupo',
+    'abrirgrupo',
+    'cerrargrupo',
     'warn',
     'unwarn',
     'warnings',
@@ -597,6 +637,16 @@ module.exports = {
           return sock.sendMessage(remoteJid, {
             text:
 `⚠️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero no puedo expulsarlo porque no soy admin.`,
+            mentions: [target.jid]
+          });
+        }
+
+        if (isProtectedTarget(sock, target)) {
+          resetWarn(remoteJid, target.jid);
+
+          return sock.sendMessage(remoteJid, {
+            text:
+`🛡️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero no puede ser expulsado porque es ${getProtectedReason(sock, target)}.`,
             mentions: [target.jid]
           });
         }
@@ -673,7 +723,7 @@ Uso:
 
       if (!(await requireAdminOrOwner(ctx))) return;
 
-      if (['kick', 'promote', 'demote', 'revoke', 'group', 'grupo'].includes(cmd)) {
+      if (['kick', 'promote', 'demote', 'revoke', 'abrirgrupo', 'cerrargrupo'].includes(cmd)) {
         if (!(await requireBotAdmin(ctx))) return;
       }
 
@@ -691,11 +741,25 @@ Ejemplos:
           }, { quoted: msg });
         }
 
-        await groupUpdateTargets(sock, remoteJid, targets, 'remove');
+        const protectedTargets = targets.filter(t => isProtectedTarget(sock, t));
+        const allowedTargets = targets.filter(t => !isProtectedTarget(sock, t));
+
+        if (protectedTargets.length) {
+          await sendSafe(sock, remoteJid, {
+            text:
+`🛡️ No puedo expulsar a:
+${protectedTargets.map(t => `• ${t.label} (${getProtectedReason(sock, t)})`).join('\n')}`,
+            mentions: protectedTargets.map(t => t.jid)
+          }, { quoted: msg });
+        }
+
+        if (!allowedTargets.length) return;
+
+        await groupUpdateTargets(sock, remoteJid, allowedTargets, 'remove');
 
         await sendSafe(sock, remoteJid, {
-          text: `✅ Usuario(s) expulsado(s): ${targets.map(t => t.label).join(', ')}`,
-          mentions: targets.map(t => t.jid)
+          text: `✅ Usuario(s) expulsado(s): ${allowedTargets.map(t => t.label).join(', ')}`,
+          mentions: allowedTargets.map(t => t.jid)
         }, { quoted: msg });
 
         return;
@@ -759,27 +823,15 @@ ${link}`
         }, { quoted: msg });
       }
 
-      if (cmd === 'group' || cmd === 'grupo') {
-        const option = String(args?.[0] || '').toLowerCase();
+      if (cmd === 'cerrargrupo') {
+        await sock.groupSettingUpdate(remoteJid, 'announcement');
 
-        if (!['abrir', 'cerrar', 'open', 'close'].includes(option)) {
-          return sock.sendMessage(remoteJid, {
-            text:
-`❌ Usa:
+        return sock.sendMessage(remoteJid, {
+          text: '🔒 Grupo cerrado. Solo admins pueden escribir.'
+        }, { quoted: msg });
+      }
 
-.group abrir
-.group cerrar`
-          }, { quoted: msg });
-        }
-
-        if (['cerrar', 'close'].includes(option)) {
-          await sock.groupSettingUpdate(remoteJid, 'announcement');
-
-          return sock.sendMessage(remoteJid, {
-            text: '🔒 Grupo cerrado. Solo admins pueden escribir.'
-          }, { quoted: msg });
-        }
-
+      if (cmd === 'abrirgrupo') {
         await sock.groupSettingUpdate(remoteJid, 'not_announcement');
 
         return sock.sendMessage(remoteJid, {
@@ -823,6 +875,18 @@ Ejemplo:
           );
 
           if (count >= MAX_WARN) {
+            if (isProtectedTarget(sock, target)) {
+              resetWarn(remoteJid, target.jid);
+
+              await sendSafe(sock, remoteJid, {
+                text:
+`🛡️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero no puede ser expulsado porque es ${getProtectedReason(sock, target)}.`,
+                mentions: [target.jid]
+              }, { quoted: msg });
+
+              continue;
+            }
+
             if (botAdmin) {
               await groupUpdateTargets(sock, remoteJid, [target], 'remove');
               resetWarn(remoteJid, target.jid);
