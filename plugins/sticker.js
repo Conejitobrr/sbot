@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-const STICKER_PACK_NAME = 'SiriusBot';
+const STICKER_PACK_NAME = '𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕';
 const STICKER_AUTHOR = '';
 
 function ensureTemp() {
