@@ -18,9 +18,9 @@ module.exports = {
   // ─────────────────────────────────────────
   // 🤖 BOT INFO
   // ─────────────────────────────────────────
-  botName    : process.env.BOT_NAME    || 'SiriusBot',
+  botName    : process.env.BOT_NAME    || '𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕',
   botVersion : process.env.BOT_VERSION || '1.0.0',
-  footer     : process.env.BOT_FOOTER  || 'SiriusBot',
+  footer     : process.env.BOT_FOOTER  || '𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕',
 
   // ─────────────────────────────────────────
   // ⚙️ PREFIJO
