@@ -132,7 +132,7 @@ module.exports = {
       const pluginFiles = countPluginFiles();
       const commandsCount = getCommandsCount();
 
-      const botName = config.botName || 'SiriusBot';
+      const botName = config.botName || '𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕';
       const version = config.botVersion || '1.0.0';
       const prefix = config.prefix || '.';
 
