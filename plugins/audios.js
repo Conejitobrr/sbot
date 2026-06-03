@@ -158,6 +158,7 @@ module.exports = {
       { triggers: ['tu no mete'], file: 'Tu no mete' },
       { triggers: ['telepatia', 'telepatía'], file: 'Telepatía' },
       { triggers: ['un pato'], file: 'pato' },
+      { triggers: ['Duérmete alv'], file: 'Duerme' },
       { triggers: ['bendicion'], file: 'Bendicion' },
       { triggers: ['compartan'], file: 'Compartan' },
       { triggers: ['brr'], file: 'Brr' },
