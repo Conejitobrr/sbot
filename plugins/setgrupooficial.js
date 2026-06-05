@@ -6,16 +6,6 @@ const config = require('../config')
 
 const FILE = path.join(__dirname, '../database/grupooficial.json')
 
-function loadData() {
-  if (!fs.existsSync(FILE)) return {}
-
-  try {
-    return JSON.parse(fs.readFileSync(FILE))
-  } catch {
-    return {}
-  }
-}
-
 function saveData(data) {
   const dir = path.dirname(FILE)
 
@@ -29,7 +19,7 @@ function saveData(data) {
 module.exports = {
   command: ['setgrupooficial'],
 
-  async run(ctx) {
+  async execute(ctx) {
 
     const {
       sock,
@@ -39,24 +29,18 @@ module.exports = {
       fromGroup
     } = ctx
 
-    // 🔒 Verificar Owner
     const isOwner = config.owner.some(owner => {
       const cleanOwner = String(owner).replace(/\D/g, '')
       const cleanSender = String(sender).replace(/\D/g, '')
 
-      return (
-        cleanSender === cleanOwner ||
-        cleanSender.includes(cleanOwner) ||
-        cleanOwner.includes(cleanSender)
-      )
+      return cleanSender.includes(cleanOwner) ||
+             cleanOwner.includes(cleanSender)
     })
 
     if (!isOwner) {
       return sock.sendMessage(
         remoteJid,
-        {
-          text: '❌ Solo los Owners del bot pueden usar este comando.'
-        },
+        { text: '❌ Solo los owners pueden usar este comando.' },
         { quoted: msg }
       )
     }
@@ -64,9 +48,7 @@ module.exports = {
     if (!fromGroup) {
       return sock.sendMessage(
         remoteJid,
-        {
-          text: '❌ Usa este comando dentro del grupo que deseas marcar como oficial.'
-        },
+        { text: '❌ Usa este comando dentro de un grupo.' },
         { quoted: msg }
       )
     }
@@ -75,38 +57,30 @@ module.exports = {
 
       const metadata = await sock.groupMetadata(remoteJid)
 
-      const data = loadData()
-
-      data.group = remoteJid
-      data.name = metadata.subject
-      data.updated = Date.now()
-
-      saveData(data)
+      saveData({
+        group: remoteJid,
+        name: metadata.subject,
+        updated: Date.now()
+      })
 
       await sock.sendMessage(
         remoteJid,
         {
           text:
-`✅ *Grupo oficial configurado correctamente*
+`✅ Grupo oficial configurado
 
-📌 Nombre:
-${metadata.subject}
-
-🆔 ID:
-${remoteJid}`
+📌 ${metadata.subject}`
         },
         { quoted: msg }
       )
 
     } catch (e) {
 
-      console.log('❌ Error setgrupooficial:', e)
+      console.log(e)
 
       await sock.sendMessage(
         remoteJid,
-        {
-          text: '❌ Error configurando el grupo oficial.'
-        },
+        { text: '❌ Error configurando grupo oficial.' },
         { quoted: msg }
       )
     }
