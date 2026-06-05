@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 
@@ -14,7 +15,7 @@ global.spotify2Selections = global.spotify2Selections || new Map();
 async function downloadAudio(video) {
 
 if (!fs.existsSync(TEMP_DIR)) {
-fs.mkdirSync(TEMP_DIR,{recursive:true});
+fs.mkdirSync(TEMP_DIR,{ recursive:true });
 }
 
 const id = Date.now();
@@ -22,7 +23,7 @@ const id = Date.now();
 const output =
 path.join(
 TEMP_DIR,
-`spotify2_${id}.%(ext)s`
+"spotify2_${id}.%(ext)s"
 );
 
 await execFileAsync('yt-dlp',[
@@ -32,6 +33,10 @@ await execFileAsync('yt-dlp',[
 '--geo-bypass',
 '--force-ipv4',
 
+'--no-playlist',
+'--ignore-errors',
+'--no-warnings',
+
 '-f',
 'ba/b',
 
@@ -39,20 +44,115 @@ await execFileAsync('yt-dlp',[
 '--audio-format',
 'mp3',
 
+'--audio-quality',
+'320K',
+
 '-o',
 output,
 
 video.url
 ]);
 
-const file =
+const downloaded =
 fs.readdirSync(TEMP_DIR)
 .find(f =>
-f.startsWith(`spotify2_${id}`)
-&& f.endsWith('.mp3')
+f.startsWith("spotify2_${id}") &&
+f.endsWith('.mp3')
 );
 
-return path.join(TEMP_DIR,file);
+if (!downloaded) {
+throw new Error('No se descargó el audio');
+}
+
+const audioPath =
+path.join(
+TEMP_DIR,
+downloaded
+);
+
+const coverPath =
+path.join(
+TEMP_DIR,
+"cover_${id}.jpg"
+);
+
+const finalPath =
+path.join(
+TEMP_DIR,
+"final_${id}.mp3"
+);
+
+try {
+
+const image =
+await axios.get(
+video.thumbnail,
+{
+responseType:'arraybuffer'
+}
+);
+
+fs.writeFileSync(
+coverPath,
+image.data
+);
+
+const artist =
+video.author?.name ||
+'YouTube';
+
+await execFileAsync('ffmpeg',[
+'-i',
+audioPath,
+
+'-i',
+coverPath,
+
+'-map',
+'0',
+
+'-map',
+'1',
+
+'-c',
+'copy',
+
+'-id3v2_version',
+'3',
+
+'-metadata',
+"title=${video.title}",
+
+'-metadata',
+"artist=${artist}",
+
+'-metadata',
+'album=YouTube Music',
+
+'-metadata',
+'genre=Music',
+
+'-disposition:v',
+'attached_pic',
+
+'-y',
+
+finalPath
+]);
+
+return {
+audio: finalPath,
+cover: coverPath
+};
+
+} catch {
+
+return {
+audio: audioPath,
+cover: null
+};
+
+}
 }
 
 module.exports = {
@@ -110,7 +210,7 @@ text:'❌ No hay más resultados.'
 }
 
 let message =
-`🎵 *Más resultados*\n\n`;
+"🎵 *Más resultados*\n\n";
 
 results.forEach((v,i)=>{
 
@@ -131,7 +231,9 @@ message +=
 4
 5
 
-o siguiente`;
+o escribe:
+
+siguiente`;
 
 const sent =
 await sock.sendMessage(
@@ -150,9 +252,9 @@ const num =
 parseInt(text);
 
 if (
-isNaN(num)
-|| num < 1
-|| num > 5
+isNaN(num) ||
+num < 1 ||
+num > 5
 ) return;
 
 const index =
@@ -173,29 +275,87 @@ remoteJid,
 text:
 `🎧 Descargando...
 
-${video.title}`
-},
-{ quoted: msg }
-);
-
-const file =
-await downloadAudio(video);
-
-await sock.sendMessage(
-remoteJid,
-{
-audio:
-fs.readFileSync(file),
-mimetype:
-'audio/mpeg',
-fileName:
-`${video.title}.mp3`
+🎶 ${video.title}`
 },
 { quoted: msg }
 );
 
 try {
-fs.unlinkSync(file);
+
+const media =
+await downloadAudio(video);
+
+if (media.cover) {
+
+await sock.sendMessage(
+remoteJid,
+{
+image:
+fs.readFileSync(media.cover),
+
+caption:
+`🎧 Spotify2
+
+🎶 ${video.title}
+👤 ${video.author?.name || 'Desconocido'}
+⏱️ ${video.timestamp || 'Desconocido'}`
+},
+{ quoted: msg }
+);
+
+}
+
+await sock.sendMessage(
+remoteJid,
+{
+audio:
+fs.readFileSync(media.audio),
+
+mimetype:
+'audio/mpeg',
+
+fileName:
+"${video.title}.mp3",
+
+ptt:false
+},
+{ quoted: msg }
+);
+
+try {
+
+if (
+media.audio &&
+fs.existsSync(media.audio)
+) {
+fs.unlinkSync(media.audio);
+}
+
+if (
+media.cover &&
+fs.existsSync(media.cover)
+) {
+fs.unlinkSync(media.cover);
+}
+
 } catch {}
+
+} catch (e) {
+
+console.log(
+'spotify2 error:',
+e
+);
+
+await sock.sendMessage(
+remoteJid,
+{
+text:
+'❌ Error descargando la canción.'
+},
+{ quoted: msg }
+);
+
+}
 }
 };
