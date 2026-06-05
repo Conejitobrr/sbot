@@ -49,89 +49,71 @@ module.exports = {
 
     execute: async (ctx) => {
 
-    const { sock, remoteJid, sender, command } = ctx;
+        const { sock, remoteJid, command } = ctx;
 
-    const data = await db.getAll();
-    const users = data.users || {};
+        const data = await db.getAll();
+        const users = data.users || {};
 
-    // ===============================
-    // 🔥 CONVERTIR DB REAL A LISTA
-    // ===============================
-    const list = Object.entries(users).map(([id, u]) => ({
-        id,
-        xp: u.xp || 0,
-        level: u.level || db.calculateLevel(u.xp || 0)
-    }));
+        // convertir a array usable
+        const list = Object.entries(users).map(([id, u]) => ({
+            id,
+            xp: u.xp || 0,
+            level: u.level || 1
+        }));
 
-    // ===============================
-    // 🏆 TOP GRUPO (FIX REAL)
-    // ===============================
-    if (command === 'topxp') {
+        // ===============================
+        // 🏆 TOP GRUPO
+        // ===============================
+        if (command === 'topxp') {
 
-        // SOLO USUARIOS QUE HAN INTERACTUADO EN ESTE CHAT
-        const groupUsers = list.filter(u =>
-            u.id.endsWith('@s.whatsapp.net')
-        );
+            const groupUsers = list.filter(u =>
+                u.id.includes(remoteJid.split('@')[0])
+            );
 
-        const top = groupUsers
-            .sort((a, b) => (b.xp) - (a.xp))
-            .slice(0, 10);
+            const top = groupUsers
+                .sort((a, b) => b.xp - a.xp)
+                .slice(0, 10);
 
-        let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
-        let mentions = [];
+            let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
+            let mentions = [];
 
-        for (let i = 0; i < top.length; i++) {
+            for (let i = 0; i < top.length; i++) {
 
-            const u = top[i];
-            mentions.push(u.id);
+                const u = top[i];
+                mentions.push(u.id);
 
-            text +=
-`#${i + 1}
-👤 @${u.id.split('@')[0]}
-⭐ Nivel: ${u.level}
-⚡ XP: ${u.xp}
+                text += `#${i + 1}\n👤 @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
+            }
 
-`;
+            return sock.sendMessage(remoteJid, {
+                text,
+                mentions
+            });
         }
 
-        return sock.sendMessage(remoteJid, {
-            text,
-            mentions
-        });
-    }
+        // ===============================
+        // 🌍 TOP GLOBAL
+        // ===============================
+        if (command === 'topglobal') {
 
-    // ===============================
-    // 🌍 TOP GLOBAL (REAL)
-    // ===============================
-    if (command === 'topglobal') {
+            const top = list
+                .sort((a, b) => b.xp - a.xp)
+                .slice(0, 10);
 
-        const top = list
-            .sort((a, b) => b.xp - a.xp)
-            .slice(0, 10);
+            let text = `🌍 *TOP GLOBAL XP*\n\n`;
+            let mentions = [];
 
-        let text = `🌍 *TOP GLOBAL XP*\n\n`;
-        let mentions = [];
+            for (let i = 0; i < top.length; i++) {
 
-        for (let i = 0; i < top.length; i++) {
+                const u = top[i];
+                mentions.push(u.id);
 
-            const u = top[i];
-            mentions.push(u.id);
+                text += `#${i + 1}\n👤 @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
+            }
 
-            text +=
-`#${i + 1}
-👤 @${u.id.split('@')[0]}
-⭐ Nivel: ${u.level}
-⚡ XP: ${u.xp}
-
-`;
-        }
-
-        return sock.sendMessage(remoteJid, {
-            text,
-            mentions
-        });
-    }
-    }                mentions
+            return sock.sendMessage(remoteJid, {
+                text,
+                mentions
             });
         }
     }
