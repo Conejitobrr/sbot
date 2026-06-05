@@ -128,7 +128,7 @@ const VERDADES = [
 ];
 
 module.exports = {
-  commands: ['verdad', 'truth'],
+  commands: ['verdad', 'velda'],
 
   async execute(ctx) {
     const { sock, msg, remoteJid, sender, args, db } = ctx;
