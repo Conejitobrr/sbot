@@ -15,18 +15,17 @@ global.spotify2Selections = global.spotify2Selections || new Map();
 async function downloadAudio(video) {
 
 if (!fs.existsSync(TEMP_DIR)) {
-fs.mkdirSync(TEMP_DIR,{ recursive:true });
+fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
 const id = Date.now();
 
-const output =
-path.join(
+const output = path.join(
 TEMP_DIR,
 "spotify2_${id}.%(ext)s"
 );
 
-await execFileAsync('yt-dlp',[
+await execFileAsync('yt-dlp', [
 '--extractor-args',
 'youtube:player_client=android',
 
@@ -65,30 +64,20 @@ throw new Error('No se descargó el audio');
 }
 
 const audioPath =
-path.join(
-TEMP_DIR,
-downloaded
-);
+path.join(TEMP_DIR, downloaded);
 
 const coverPath =
-path.join(
-TEMP_DIR,
-"cover_${id}.jpg"
-);
+path.join(TEMP_DIR, "cover_${id}.jpg");
 
 const finalPath =
-path.join(
-TEMP_DIR,
-"final_${id}.mp3"
-);
+path.join(TEMP_DIR, "final_${id}.mp3");
 
 try {
 
-const image =
-await axios.get(
+const image = await axios.get(
 video.thumbnail,
 {
-responseType:'arraybuffer'
+responseType: 'arraybuffer'
 }
 );
 
@@ -97,11 +86,18 @@ coverPath,
 image.data
 );
 
-const artist =
-video.author?.name ||
-'YouTube';
+const title =
+(video.title || 'Canción')
+.replace(/\n/g, ' ')
+.trim();
 
-await execFileAsync('ffmpeg',[
+const artist =
+(video.author?.name || 'YouTube')
+.replace(/\n/g, ' ')
+.trim();
+
+await execFileAsync('ffmpeg', [
+
 '-i',
 audioPath,
 
@@ -109,28 +105,40 @@ audioPath,
 coverPath,
 
 '-map',
-'0',
+'0:a',
 
 '-map',
 '1',
 
-'-c',
-'copy',
+'-c:a',
+'libmp3lame',
+
+'-b:a',
+'320k',
 
 '-id3v2_version',
 '3',
 
 '-metadata',
-"title=${video.title}",
+"title=${title}",
 
 '-metadata',
 "artist=${artist}",
 
 '-metadata',
-'album=YouTube Music',
+"album=${artist}",
+
+'-metadata',
+"album_artist=${artist}",
 
 '-metadata',
 'genre=Music',
+
+'-metadata',
+"date=${new Date().getFullYear()}",
+
+'-metadata',
+'comment=Downloaded by SiriusBot',
 
 '-disposition:v',
 'attached_pic',
@@ -138,21 +146,27 @@ coverPath,
 '-y',
 
 finalPath
+
 ]);
 
 return {
 audio: finalPath,
-cover: coverPath
+cover: coverPath,
+title,
+artist
 };
 
 } catch {
 
 return {
 audio: audioPath,
-cover: null
+cover: null,
+title: video.title,
+artist: video.author?.name || 'YouTube'
 };
 
 }
+
 }
 
 module.exports = {
@@ -203,19 +217,20 @@ data.page--;
 return sock.sendMessage(
 remoteJid,
 {
-text:'❌ No hay más resultados.'
+text: '❌ No hay más resultados.'
 },
 { quoted: msg }
 );
+
 }
 
 let message =
-"🎵 *Más resultados*\n\n";
+'🎵 Más resultados\n\n';
 
-results.forEach((v,i)=>{
+results.forEach((v, i) => {
 
 message +=
-`${i+1}. ${v.title}
+`${i + 1}. ${v.title}
 ⏱️ ${v.timestamp}
 
 `;
@@ -246,6 +261,7 @@ data.messageId =
 sent.key.id;
 
 return;
+
 }
 
 const num =
@@ -296,8 +312,8 @@ fs.readFileSync(media.cover),
 caption:
 `🎧 Spotify2
 
-🎶 ${video.title}
-👤 ${video.author?.name || 'Desconocido'}
+🎶 ${media.title}
+👤 ${media.artist}
 ⏱️ ${video.timestamp || 'Desconocido'}`
 },
 { quoted: msg }
@@ -315,9 +331,9 @@ mimetype:
 'audio/mpeg',
 
 fileName:
-"${video.title}.mp3",
+"${media.title}.mp3",
 
-ptt:false
+ptt: false
 },
 { quoted: msg }
 );
@@ -357,5 +373,7 @@ text:
 );
 
 }
+
 }
+
 };
