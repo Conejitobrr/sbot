@@ -1,39 +1,24 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const db = require('../lib/database');
 
-const dbPath = path.join(process.cwd(), 'lib', 'xp.json');
+// ===============================
+// ⏱️ COOLDOWN
+// ===============================
+const cooldown = new Map();
+const keyGen = (g, u) => `${g}:${u}`;
 
-if (!fs.existsSync(dbPath)) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    fs.writeFileSync(dbPath, JSON.stringify({}));
-}
-
-function loadDB() {
-    return JSON.parse(fs.readFileSync(dbPath));
-}
-
-function saveDB(data) {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-}
-
+// ===============================
 function randomXP() {
     return Math.floor(Math.random() * 10) + 5;
 }
 
-const cooldown = new Map();
-const keyGen = (g, u) => `${g}:${u}`;
-
+// ===============================
 module.exports = {
 
-    // ===============================
-    // 🔥 ON MESSAGE (FIXED PARA TU HANDLER)
-    // ===============================
     onMessage: async (ctx) => {
 
         const {
-            sock,
             sender,
             remoteJid,
             fromGroup,
@@ -52,87 +37,72 @@ module.exports = {
 
         cooldown.set(key, now);
 
-        let db = loadDB();
+        // ===============================
+        // 🔥 USAR TU DB REAL
+        // ===============================
+        const user = await db.getUser(sender);
 
-        if (!db[remoteJid]) db[remoteJid] = {};
-        if (!db.global) db.global = {};
+        const gain = randomXP();
 
-        if (!db[remoteJid][sender]) {
-            db[remoteJid][sender] = { xp: 0, level: 1 };
-        }
+        user.xp = (user.xp || 0) + gain;
 
-        if (!db.global[sender]) {
-            db.global[sender] = { xp: 0, level: 1 };
-        }
+        const level = user.level || 1;
+        const need = level * 1000;
 
-        let gain = randomXP();
+        // ===============================
+        // 📈 LEVEL UP
+        // ===============================
+        if (user.xp >= need) {
+            user.level = level + 1;
+            user.xp -= need;
 
-        // GROUP XP
-        db[remoteJid][sender].xp += gain;
+            await db.saveUser(sender, user).catch(() => {});
 
-        let needGroup = db[remoteJid][sender].level * 120;
-
-        if (db[remoteJid][sender].xp >= needGroup) {
-            db[remoteJid][sender].level++;
-            db[remoteJid][sender].xp -= needGroup;
-
-            await reply(
-                `🎉 @${sender.split('@')[0]} subió a nivel *${db[remoteJid][sender].level}*`
+            return reply(
+                `🎉 @${sender.split('@')[0]} subió a nivel *${user.level}*`
             );
         }
 
-        // GLOBAL XP
-        db.global[sender].xp += gain;
-
-        let needGlobal = db.global[sender].level * 200;
-
-        if (db.global[sender].xp >= needGlobal) {
-            db.global[sender].level++;
-            db.global[sender].xp -= needGlobal;
-
-            await reply(
-                `🌍 @${sender.split('@')[0]} subió a nivel GLOBAL *${db.global[sender].level}*`
-            );
-        }
-
-        saveDB(db);
+        await db.saveUser(sender, user).catch(() => {});
     },
 
     // ===============================
-    // 🏆 COMMANDS (IMPORTANTE: TU LOADER NECESITA ESTO)
+    // 🏆 LEADERBOARD (GRUPO + GLOBAL)
     // ===============================
-    commands: ['topxp', 'topglobal', 'nivelglobal'],
+    commands: ['topxp', 'topglobal'],
 
     execute: async (ctx) => {
 
-        const { sock, remoteJid, sender, command } = ctx;
+        const { sock, remoteJid, command } = ctx;
 
-        let db = loadDB();
+        const allUsers = await db.getAllUsers(); 
+        // ⚠️ IMPORTANTE: necesitas esta función en tu db
 
         // ===============================
         // 🏆 TOP GRUPO
         // ===============================
         if (command === 'topxp') {
 
-            let data = db[remoteJid] || {};
+            const groupUsers = allUsers.filter(u =>
+                u.id?.includes(remoteJid)
+            );
 
-            let top = Object.entries(data)
-                .sort((a, b) =>
-                    (b[1].level * 100 + b[1].xp) -
-                    (a[1].level * 100 + a[1].xp)
-                )
+            const top = groupUsers
+                .sort((a, b) => (b.xp || 0) - (a.xp || 0))
                 .slice(0, 10);
 
             let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
             let mentions = [];
 
             for (let i = 0; i < top.length; i++) {
-                let id = top[i][0];
-                let d = top[i][1];
+
+                const id = top[i].id;
+                const xp = top[i].xp || 0;
+                const level = top[i].level || 1;
 
                 mentions.push(id);
 
-                text += `#${i + 1}\n👤 @${id.split('@')[0]}\n⭐ Nivel: ${d.level}\n⚡ XP: ${d.xp}\n\n`;
+                text += `#${i + 1}\n👤 @${id.split('@')[0]}\n⭐ Nivel: ${level}\n⚡ XP: ${xp}\n\n`;
             }
 
             return sock.sendMessage(remoteJid, {
@@ -146,53 +116,27 @@ module.exports = {
         // ===============================
         if (command === 'topglobal') {
 
-            let data = db.global || {};
-
-            let top = Object.entries(data)
-                .sort((a, b) =>
-                    (b[1].level * 200 + b[1].xp) -
-                    (a[1].level * 200 + a[1].xp)
-                )
+            const top = allUsers
+                .sort((a, b) => (b.xp || 0) - (a.xp || 0))
                 .slice(0, 10);
 
             let text = `🌍 *TOP GLOBAL XP*\n\n`;
             let mentions = [];
 
             for (let i = 0; i < top.length; i++) {
-                let id = top[i][0];
-                let d = top[i][1];
+
+                const id = top[i].id;
+                const xp = top[i].xp || 0;
+                const level = top[i].level || 1;
 
                 mentions.push(id);
 
-                text += `#${i + 1}\n👤 @${id.split('@')[0]}\n⭐ Nivel: ${d.level}\n⚡ XP: ${d.xp}\n\n`;
+                text += `#${i + 1}\n👤 @${id.split('@')[0]}\n⭐ Nivel: ${level}\n⚡ XP: ${xp}\n\n`;
             }
 
             return sock.sendMessage(remoteJid, {
                 text,
                 mentions
-            });
-        }
-
-        // ===============================
-        // 📊 TU NIVEL GLOBAL
-        // ===============================
-        if (command === 'nivelglobal') {
-
-            let user = db.global?.[sender];
-
-            if (!user) {
-                return sock.sendMessage(remoteJid, {
-                    text: '❌ No tienes nivel global aún.'
-                });
-            }
-
-            return sock.sendMessage(remoteJid, {
-                text:
-`🌍 *TU NIVEL GLOBAL*
-
-⭐ Nivel: ${user.level}
-⚡ XP: ${user.xp}`,
-                mentions: [sender]
             });
         }
     }
