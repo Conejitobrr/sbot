@@ -1,84 +1,52 @@
-'use strict'
+'use strict';
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('fs');
+const path = require('path');
 
-const FILE = path.join(__dirname, '../database/grupooficial.json')
-
-function loadData() {
-
-  if (!fs.existsSync(FILE)) {
-    return null
-  }
-
-  try {
-    return JSON.parse(fs.readFileSync(FILE))
-  } catch {
-    return null
-  }
-}
+const FILE = path.join(__dirname, '../lib/grupooficial.json');
 
 module.exports = {
-  command: [
-    'grupobot',
-    'grupooficial',
-    'linkbot'
-  ],
+  commands: ['grupobot'],
 
-  async execute(ctx) {
+  async execute({ sock, msg, remoteJid }) {
 
-    const {
-      sock,
-      remoteJid,
-      msg
-    } = ctx
+    if (!fs.existsSync(FILE)) {
+      return sock.sendMessage(
+        remoteJid,
+        {
+          text: '❌ No hay grupo oficial configurado.'
+        },
+        { quoted: msg }
+      );
+    }
+
+    const data = JSON.parse(fs.readFileSync(FILE));
 
     try {
 
-      const data = loadData()
-
-      if (!data?.group) {
-
-        return sock.sendMessage(
-          remoteJid,
-          { text: '❌ No hay grupo oficial configurado.' },
-          { quoted: msg }
-        )
-      }
-
-      const metadata =
-        await sock.groupMetadata(data.group)
-
-      const code =
-        await sock.groupInviteCode(data.group)
-
-      const link =
-        `https://chat.whatsapp.com/${code}`
+      const code = await sock.groupInviteCode(data.id);
 
       await sock.sendMessage(
         remoteJid,
         {
           text:
-`🤖 *GRUPO OFICIAL*
+`🌌 *Grupo Oficial del Bot*
 
-📌 ${metadata.subject}
-
-🔗 ${link}`
+🔗 https://chat.whatsapp.com/${code}`
         },
         { quoted: msg }
-      )
+      );
 
-    } catch (e) {
-
-      console.log(e)
+    } catch {
 
       await sock.sendMessage(
         remoteJid,
         {
-          text: '❌ No pude obtener el enlace del grupo.'
+          text: '❌ No pude obtener el enlace del grupo oficial.'
         },
         { quoted: msg }
-      )
+      );
+
     }
   }
-}
+};
