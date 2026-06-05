@@ -3,91 +3,82 @@
 const fs = require('fs');
 const path = require('path');
 
-// 📁 archivo de base de datos simple
-const dbPath = path.join(__dirname, '../database/xp.json');
+const dbPath = path.join(__dirname, '../xp.json');
 
-// crear si no existe
+// crear archivo si no existe
 if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, JSON.stringify({}));
 }
 
-// cargar datos
 function loadDB() {
     return JSON.parse(fs.readFileSync(dbPath));
 }
 
-// guardar datos
 function saveDB(data) {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
 }
 
-// generar XP aleatorio
 function randomXP() {
-    return Math.floor(Math.random() * 10) + 5; // 5 a 14 XP
+    return Math.floor(Math.random() * 10) + 5;
 }
 
-module.exports = async (m, { conn, command, args }) => {
+module.exports = async (m, { conn, command }) => {
 
-    const isGroup = m.isGroup;
-    const sender = m.sender;
-    const groupId = isGroup ? m.chat : null;
+    if (!m.isGroup) return;
 
-    if (!groupId) return;
+    const user = m.sender;
+    const group = m.chat;
 
     let db = loadDB();
 
     // crear grupo si no existe
-    if (!db[groupId]) db[groupId] = {};
+    if (!db[group]) db[group] = {};
 
     // crear usuario si no existe
-    if (!db[groupId][sender]) {
-        db[groupId][sender] = { xp: 0, level: 1 };
+    if (!db[group][user]) {
+        db[group][user] = { xp: 0, level: 1 };
     }
 
-    // =========================
-    // 🎯 GANAR XP AUTOMÁTICO
-    // =========================
-    const gain = randomXP();
+    // 🎯 ganar XP
+    let gain = randomXP();
 
-    db[groupId][sender].xp += gain;
+    db[group][user].xp += gain;
 
-    // sistema de nivel simple
-    const user = db[groupId][sender];
-    const needed = user.level * 100;
+    let need = db[group][user].level * 100;
 
-    if (user.xp >= needed) {
-        user.level += 1;
-        user.xp = user.xp - needed;
+    if (db[group][user].xp >= need) {
+        db[group][user].level++;
+        db[group][user].xp -= need;
 
-        await conn.sendMessage(groupId, {
-            text: `🎉 @${sender.split('@')[0]} subió a nivel *${user.level}*`,
-            mentions: [sender]
+        await conn.sendMessage(group, {
+            text: `🎉 @${user.split('@')[0]} subió a nivel *${db[group][user].level}*`,
+            mentions: [user]
         });
     }
 
     saveDB(db);
 
-    // =========================
-    // 📊 COMANDO: .topxp
-    // =========================
+    // ======================
+    // 📊 TOP XP
+    // ======================
     if (command === 'topxp') {
 
-        let groupData = db[groupId];
+        let data = db[group] || {};
 
-        let top = Object.entries(groupData)
-            .sort((a, b) => (b[1].xp + (b[1].level * 100)) - (a[1].xp + (a[1].level * 100)))
+        let top = Object.entries(data)
+            .sort((a, b) => (b[1].level * 100 + b[1].xp) - (a[1].level * 100 + a[1].xp))
             .slice(0, 10);
 
-        let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
+        let text = `🏆 *TOP XP - GRUPO*\n\n`;
 
         for (let i = 0; i < top.length; i++) {
-            let userId = top[i][0];
-            let data = top[i][1];
+            let id = top[i][0];
+            let d = top[i][1];
 
-            text += `#${i + 1}\n👤 @${userId.split('@')[0]}\n⭐ Nivel: ${data.level}\n⚡ XP: ${data.xp}\n\n`;
+            text += `#${i + 1}\n👤 @${id.split('@')[0]}\n⭐ Nivel: ${d.level}\n⚡ XP: ${d.xp}\n\n`;
         }
 
-        return conn.sendMessage(groupId, {
+        return conn.sendMessage(group, {
             text,
             mentions: top.map(u => u[0])
         });
