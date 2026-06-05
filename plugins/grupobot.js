@@ -6,10 +6,7 @@ const path = require('path')
 const FILE = path.join(__dirname, '../database/grupooficial.json')
 
 function loadData() {
-
-  if (!fs.existsSync(FILE)) {
-    return {}
-  }
+  if (!fs.existsSync(FILE)) return {}
 
   try {
     return JSON.parse(fs.readFileSync(FILE))
@@ -42,7 +39,7 @@ module.exports = {
         return sock.sendMessage(
           remoteJid,
           {
-            text: '❌ Aún no se ha configurado un grupo oficial.'
+            text: '❌ No hay un grupo oficial configurado.'
           },
           { quoted: msg }
         )
@@ -50,7 +47,6 @@ module.exports = {
 
       const metadata = await sock.groupMetadata(data.group)
 
-      // 🔥 Obtiene SIEMPRE el enlace actual
       const code = await sock.groupInviteCode(data.group)
 
       const link = `https://chat.whatsapp.com/${code}`
@@ -61,10 +57,10 @@ module.exports = {
           text:
 `🤖 *GRUPO OFICIAL DEL BOT*
 
-📌 *Nombre:*
+📌 Nombre:
 ${metadata.subject}
 
-🔗 *Únete aquí:*
+🔗 Enlace:
 ${link}`
         },
         { quoted: msg }
@@ -72,13 +68,12 @@ ${link}`
 
     } catch (e) {
 
-      console.log(e)
+      console.log('❌ Error grupobot:', e)
 
       await sock.sendMessage(
         remoteJid,
         {
-          text:
-'❌ No pude obtener el enlace del grupo oficial.\n\nAsegúrate de que el bot siga dentro del grupo.'
+          text: '❌ No pude obtener el enlace del grupo oficial.'
         },
         { quoted: msg }
       )
