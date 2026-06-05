@@ -35,11 +35,17 @@ module.exports = {
 ➤ ${eventText}
 
 ━━━━━━━━━━━━━━━━━━━
+👀 *unirse al grupo del bot*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}grupobot*
+
+━━━━━━━━━━━━━━━━━━━
 💰 *ECONOMÍA*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}xp* → Ver tu experiencia
 ➤ *${p}rank* → Ranking del chat
 ➤ *${p}claim* → Recompensa diaria
+➤ *${p}chambear* → Trabajas
 ➤ *${p}robar* → Robar XP
 ➤ *${p}dar* → Transferir XP
 ➤ *${p}tienda* → Ver tienda
@@ -72,12 +78,14 @@ module.exports = {
 ➤ *${p}gay2*
 ➤ *${p}topgays*
 ➤ *${p}hornycard*
+➤ *${p}verdad*
+➤ *${p}reto*
 ➤ *${p}tutti* añade los seg que desean
 ➤ *${p}consejo*
 ➤ *${p}frase*
 ➤ *${p}historiaromantica*
 ➤ *${p}clon*
-➤ *${p}proponer*
+➤ *${p}proponer* menciona para casarte
 ➤ *${p}follar*
 
 ━━━━━━━━━━━━━━━━━━━
@@ -148,6 +156,7 @@ module.exports = {
 ➤ *${p}banuser* → Banear usuario del bot
 ➤ *${p}unbanuser* → Quitar ban del bot
 ➤ *${p}update* → Actualizar bot
+➤ *${p}setgrupooficial*
 
 ━━━━━━━━━━━━━━━━━━━
 🚀 Usa los comandos y sube de nivel`;
