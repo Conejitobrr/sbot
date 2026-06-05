@@ -15,15 +15,11 @@ function randomXP() {
 module.exports = {
 
     // ===============================
-    // 🔥 XP SYSTEM (USA TU DB REAL)
+    // 🔥 XP SYSTEM
     // ===============================
     onMessage: async (ctx) => {
 
-        const {
-            sender,
-            remoteJid,
-            fromGroup,
-        } = ctx;
+        const { sender, remoteJid, fromGroup } = ctx;
 
         if (!fromGroup) return;
 
@@ -38,130 +34,110 @@ module.exports = {
 
         const gain = randomXP();
 
-        // ✔ USA TU SISTEMA REAL (NO DUPLICA NADA)
         await db.addXP(sender, gain);
     },
 
     // ===============================
-    // 🏆 LEADERBOARDS
+    // 🏆 COMANDOS
     // ===============================
     commands: ['topxp', 'topglobal'],
 
     execute: async (ctx) => {
 
-    const { sock, remoteJid, sender, command } = ctx;
+        const { sock, remoteJid, command } = ctx;
 
-    const data = await db.getAll();
-    const users = data.users || {};
+        const data = await db.getAll();
+        const users = data.users || {};
 
-    // ===============================
-    // 🔥 CONVERTIR DB REAL A LISTA
-    // ===============================
-    const list = Object.entries(users).map(([id, u]) => ({
-        id,
-        xp: u.xp || 0,
-        level: u.level || db.calculateLevel(u.xp || 0)
-    }));
-
-    // ===============================
-    // 🏆 TOP GRUPO (FIX REAL)
-    // ===============================
-    if (command === 'topxp') {
-
-    let metadata;
-
-    try {
-        metadata = await sock.groupMetadata(remoteJid);
-    } catch {
-        return sock.sendMessage(remoteJid, {
-            text: '❌ Solo funciona en grupos'
-        });
-    }
-
-    const participants = metadata.participants.map(p =>
-        p.id
-    );
-
-    const data = await db.getAll();
-    const users = data.users || {};
-
-    // ===============================
-    // 🔥 SOLO MIEMBROS REALES DEL GRUPO
-    // ===============================
-    const groupUsers = participants
-        .filter(id => users[id])
-        .map(id => ({
+        // ===============================
+        // 🌍 LISTA GLOBAL
+        // ===============================
+        const list = Object.entries(users).map(([id, u]) => ({
             id,
-            xp: users[id].xp || 0,
-            level: users[id].level || db.calculateLevel(users[id].xp || 0)
+            xp: u.xp || 0,
+            level: u.level || db.calculateLevel(u.xp || 0)
         }));
 
-    if (groupUsers.length === 0) {
-        return sock.sendMessage(remoteJid, {
-            text: '❌ Ningún usuario del grupo tiene XP aún'
-        });
-    }
+        // ===============================
+        // 🏆 TOP GRUPO REAL
+        // ===============================
+        if (command === 'topxp') {
 
-    const top = groupUsers
-        .sort((a, b) => b.xp - a.xp)
-        .slice(0, 10);
+            let metadata;
 
-    let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
-    let mentions = [];
+            try {
+                metadata = await sock.groupMetadata(remoteJid);
+            } catch {
+                return sock.sendMessage(remoteJid, {
+                    text: '❌ Este comando solo funciona en grupos'
+                }, { quoted: ctx.msg });
+            }
 
-    for (let i = 0; i < top.length; i++) {
+            const participants = metadata.participants.map(p => p.id);
 
-        const u = top[i];
-        mentions.push(u.id);
+            const groupUsers = participants
+                .filter(id => users[id])
+                .map(id => ({
+                    id,
+                    xp: users[id].xp || 0,
+                    level: users[id].level || db.calculateLevel(users[id].xp || 0)
+                }));
 
-        text +=
-`#${i + 1}
-👤 @${u.id.split('@')[0]}
-⭐ Nivel: ${u.level}
-⚡ XP: ${u.xp}
+            if (!groupUsers.length) {
+                return sock.sendMessage(remoteJid, {
+                    text: '❌ Ningún usuario del grupo tiene XP aún'
+                }, { quoted: ctx.msg });
+            }
 
-`;
-    }
+            const top = groupUsers
+                .sort((a, b) => b.xp - a.xp)
+                .slice(0, 10);
 
-    return sock.sendMessage(remoteJid, {
-        text,
-        mentions
-    });
-    }
+            let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
+            let mentions = [];
 
-    // ===============================
-    // 🌍 TOP GLOBAL (REAL)
-    // ===============================
-    if (command === 'topglobal') {
+            for (let i = 0; i < top.length; i++) {
 
-        const top = list
-            .sort((a, b) => b.xp - a.xp)
-            .slice(0, 10);
+                const u = top[i];
+                mentions.push(u.id);
 
-        let text = `🌍 *TOP GLOBAL XP*\n\n`;
-        let mentions = [];
+                const pos = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
 
-        for (let i = 0; i < top.length; i++) {
+                text += `${pos} @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
+            }
 
-            const u = top[i];
-            mentions.push(u.id);
-
-            text +=
-`#${i + 1}
-👤 @${u.id.split('@')[0]}
-⭐ Nivel: ${u.level}
-⚡ XP: ${u.xp}
-
-`;
+            return sock.sendMessage(remoteJid, {
+                text,
+                mentions
+            }, { quoted: ctx.msg });
         }
 
-        return sock.sendMessage(remoteJid, {
-            text,
-            mentions
-        });
-    }
-    }                mentions
-            });
+        // ===============================
+        // 🌍 TOP GLOBAL
+        // ===============================
+        if (command === 'topglobal') {
+
+            const top = list
+                .sort((a, b) => b.xp - a.xp)
+                .slice(0, 10);
+
+            let text = `🌍 *TOP GLOBAL XP*\n\n`;
+            let mentions = [];
+
+            for (let i = 0; i < top.length; i++) {
+
+                const u = top[i];
+                mentions.push(u.id);
+
+                const pos = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
+
+                text += `${pos} @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
+            }
+
+            return sock.sendMessage(remoteJid, {
+                text,
+                mentions
+            }, { quoted: ctx.msg });
         }
     }
 };
