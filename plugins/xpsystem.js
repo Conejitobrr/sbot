@@ -2,72 +2,48 @@
 
 const db = require('../lib/database');
 
-// ===============================
-// ⏱️ COOLDOWN
-// ===============================
 const cooldown = new Map();
-const keyGen = (g, u) => `${g}:${u}`;
 
-// ===============================
+function key(g, u) {
+    return `${g}:${u}`;
+}
+
 function randomXP() {
     return Math.floor(Math.random() * 10) + 5;
 }
 
-// ===============================
 module.exports = {
 
+    // ===============================
+    // 🔥 XP SYSTEM (USA TU DB REAL)
+    // ===============================
     onMessage: async (ctx) => {
 
         const {
             sender,
             remoteJid,
             fromGroup,
-            reply
         } = ctx;
 
         if (!fromGroup) return;
 
-        const key = keyGen(remoteJid, sender);
+        const k = key(remoteJid, sender);
         const now = Date.now();
 
-        if (cooldown.has(key)) {
-            const last = cooldown.get(key);
-            if (now - last < 8000) return;
+        if (cooldown.has(k)) {
+            if (now - cooldown.get(k) < 8000) return;
         }
 
-        cooldown.set(key, now);
-
-        // ===============================
-        // 🔥 USAR TU DB REAL
-        // ===============================
-        const user = await db.getUser(sender);
+        cooldown.set(k, now);
 
         const gain = randomXP();
 
-        user.xp = (user.xp || 0) + gain;
-
-        const level = user.level || 1;
-        const need = level * 1000;
-
-        // ===============================
-        // 📈 LEVEL UP
-        // ===============================
-        if (user.xp >= need) {
-            user.level = level + 1;
-            user.xp -= need;
-
-            await db.saveUser(sender, user).catch(() => {});
-
-            return reply(
-                `🎉 @${sender.split('@')[0]} subió a nivel *${user.level}*`
-            );
-        }
-
-        await db.saveUser(sender, user).catch(() => {});
+        // ✔ USA TU SISTEMA REAL (NO DUPLICA NADA)
+        await db.addXP(sender, gain);
     },
 
     // ===============================
-    // 🏆 LEADERBOARD (GRUPO + GLOBAL)
+    // 🏆 LEADERBOARDS
     // ===============================
     commands: ['topxp', 'topglobal'],
 
@@ -75,20 +51,27 @@ module.exports = {
 
         const { sock, remoteJid, command } = ctx;
 
-        const allUsers = await db.getAllUsers(); 
-        // ⚠️ IMPORTANTE: necesitas esta función en tu db
+        const data = await db.getAll();
+        const users = data.users || {};
+
+        // convertir a array usable
+        const list = Object.entries(users).map(([id, u]) => ({
+            id,
+            xp: u.xp || 0,
+            level: u.level || 1
+        }));
 
         // ===============================
         // 🏆 TOP GRUPO
         // ===============================
         if (command === 'topxp') {
 
-            const groupUsers = allUsers.filter(u =>
-                u.id?.includes(remoteJid)
+            const groupUsers = list.filter(u =>
+                u.id.includes(remoteJid.split('@')[0])
             );
 
             const top = groupUsers
-                .sort((a, b) => (b.xp || 0) - (a.xp || 0))
+                .sort((a, b) => b.xp - a.xp)
                 .slice(0, 10);
 
             let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
@@ -96,13 +79,10 @@ module.exports = {
 
             for (let i = 0; i < top.length; i++) {
 
-                const id = top[i].id;
-                const xp = top[i].xp || 0;
-                const level = top[i].level || 1;
+                const u = top[i];
+                mentions.push(u.id);
 
-                mentions.push(id);
-
-                text += `#${i + 1}\n👤 @${id.split('@')[0]}\n⭐ Nivel: ${level}\n⚡ XP: ${xp}\n\n`;
+                text += `#${i + 1}\n👤 @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
             }
 
             return sock.sendMessage(remoteJid, {
@@ -116,8 +96,8 @@ module.exports = {
         // ===============================
         if (command === 'topglobal') {
 
-            const top = allUsers
-                .sort((a, b) => (b.xp || 0) - (a.xp || 0))
+            const top = list
+                .sort((a, b) => b.xp - a.xp)
                 .slice(0, 10);
 
             let text = `🌍 *TOP GLOBAL XP*\n\n`;
@@ -125,13 +105,10 @@ module.exports = {
 
             for (let i = 0; i < top.length; i++) {
 
-                const id = top[i].id;
-                const xp = top[i].xp || 0;
-                const level = top[i].level || 1;
+                const u = top[i];
+                mentions.push(u.id);
 
-                mentions.push(id);
-
-                text += `#${i + 1}\n👤 @${id.split('@')[0]}\n⭐ Nivel: ${level}\n⚡ XP: ${xp}\n\n`;
+                text += `#${i + 1}\n👤 @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
             }
 
             return sock.sendMessage(remoteJid, {
