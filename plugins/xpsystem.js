@@ -68,36 +68,65 @@ module.exports = {
     // ===============================
     if (command === 'topxp') {
 
-        // SOLO USUARIOS QUE HAN INTERACTUADO EN ESTE CHAT
-        const groupUsers = list.filter(u =>
-            u.id.endsWith('@s.whatsapp.net')
-        );
+    let metadata;
 
-        const top = groupUsers
-            .sort((a, b) => (b.xp) - (a.xp))
-            .slice(0, 10);
+    try {
+        metadata = await sock.groupMetadata(remoteJid);
+    } catch {
+        return sock.sendMessage(remoteJid, {
+            text: '❌ Solo funciona en grupos'
+        });
+    }
 
-        let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
-        let mentions = [];
+    const participants = metadata.participants.map(p =>
+        p.id
+    );
 
-        for (let i = 0; i < top.length; i++) {
+    const data = await db.getAll();
+    const users = data.users || {};
 
-            const u = top[i];
-            mentions.push(u.id);
+    // ===============================
+    // 🔥 SOLO MIEMBROS REALES DEL GRUPO
+    // ===============================
+    const groupUsers = participants
+        .filter(id => users[id])
+        .map(id => ({
+            id,
+            xp: users[id].xp || 0,
+            level: users[id].level || db.calculateLevel(users[id].xp || 0)
+        }));
 
-            text +=
+    if (groupUsers.length === 0) {
+        return sock.sendMessage(remoteJid, {
+            text: '❌ Ningún usuario del grupo tiene XP aún'
+        });
+    }
+
+    const top = groupUsers
+        .sort((a, b) => b.xp - a.xp)
+        .slice(0, 10);
+
+    let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
+    let mentions = [];
+
+    for (let i = 0; i < top.length; i++) {
+
+        const u = top[i];
+        mentions.push(u.id);
+
+        text +=
 `#${i + 1}
 👤 @${u.id.split('@')[0]}
 ⭐ Nivel: ${u.level}
 ⚡ XP: ${u.xp}
 
 `;
-        }
+    }
 
-        return sock.sendMessage(remoteJid, {
-            text,
-            mentions
-        });
+    return sock.sendMessage(remoteJid, {
+        text,
+        mentions
+    });
     }
 
     // ===============================
