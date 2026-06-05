@@ -5,7 +5,6 @@ const path = require('path');
 
 const dbPath = path.join(__dirname, '../xp.json');
 
-// crear archivo si no existe
 if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, JSON.stringify({}));
 }
@@ -22,54 +21,56 @@ function randomXP() {
     return Math.floor(Math.random() * 10) + 5;
 }
 
-module.exports = async (m, { conn, command }) => {
+// ===============================
+// 🔥 ESTE ES EL FORMATO CORRECTO
+// ===============================
+module.exports = {
+    onMessage: async (m, { conn }) => {
 
-    if (!m.isGroup) return;
+        if (!m.isGroup) return;
 
-    const user = m.sender;
-    const group = m.chat;
+        const user = m.sender;
+        const group = m.chat;
 
-    let db = loadDB();
+        let db = loadDB();
 
-    // crear grupo si no existe
-    if (!db[group]) db[group] = {};
+        if (!db[group]) db[group] = {};
+        if (!db[group][user]) {
+            db[group][user] = { xp: 0, level: 1 };
+        }
 
-    // crear usuario si no existe
-    if (!db[group][user]) {
-        db[group][user] = { xp: 0, level: 1 };
-    }
+        let gain = randomXP();
+        db[group][user].xp += gain;
 
-    // 🎯 ganar XP
-    let gain = randomXP();
+        let need = db[group][user].level * 100;
 
-    db[group][user].xp += gain;
+        if (db[group][user].xp >= need) {
+            db[group][user].level++;
+            db[group][user].xp -= need;
 
-    let need = db[group][user].level * 100;
+            await conn.sendMessage(group, {
+                text: `🎉 @${user.split('@')[0]} subió a nivel *${db[group][user].level}*`,
+                mentions: [user]
+            });
+        }
 
-    if (db[group][user].xp >= need) {
-        db[group][user].level++;
-        db[group][user].xp -= need;
+        saveDB(db);
+    },
 
-        await conn.sendMessage(group, {
-            text: `🎉 @${user.split('@')[0]} subió a nivel *${db[group][user].level}*`,
-            mentions: [user]
-        });
-    }
+    execute: async (m, { conn, command }) => {
 
-    saveDB(db);
+        if (command !== 'topxp') return;
 
-    // ======================
-    // 📊 TOP XP
-    // ======================
-    if (command === 'topxp') {
+        let group = m.chat;
 
+        let db = loadDB();
         let data = db[group] || {};
 
         let top = Object.entries(data)
             .sort((a, b) => (b[1].level * 100 + b[1].xp) - (a[1].level * 100 + a[1].xp))
             .slice(0, 10);
 
-        let text = `🏆 *TOP XP - GRUPO*\n\n`;
+        let text = `🏆 *TOP XP DEL GRUPO*\n\n`;
 
         for (let i = 0; i < top.length; i++) {
             let id = top[i][0];
