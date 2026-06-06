@@ -2,14 +2,58 @@
 
 const axios = require('axios');
 
+// 🧠 mejora básica de búsqueda (mini “IA”)
+function improveQuery(q = '') {
+    q = q.toLowerCase();
+
+    const map = [
+        ['batimix', 'batman cinematic wallpaper'],
+        ['perrito', 'cute puppy'],
+        ['gato', 'cute cat'],
+        ['carro', 'sports car wallpaper'],
+        ['anime', 'anime aesthetic wallpaper']
+    ];
+
+    for (const [bad, good] of map) {
+        if (q.includes(bad)) return good;
+    }
+
+    return q;
+}
+
+async function bingImages(query) {
+    try {
+        const res = await axios.get(
+            `https://www.bing.com/images/async?q=${encodeURIComponent(query)}&first=0&count=30`,
+            {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0'
+                },
+                timeout: 15000
+            }
+        );
+
+        const html = res.data;
+
+        const matches = [...html.matchAll(/murl&quot;:&quot;(.*?)&quot;/g)];
+
+        return matches
+            .map(m => m[1])
+            .filter(u => u && u.startsWith('http'));
+
+    } catch {
+        return [];
+    }
+}
+
 module.exports = {
-    commands: ['img', 'image'],
+    commands: ['img', 'image', 'imgpro'],
 
     execute: async (ctx) => {
 
         const { sock, remoteJid, args, msg } = ctx;
 
-        const query = args.join(' ').trim();
+        let query = args.join(' ').trim();
 
         if (!query) {
             return sock.sendMessage(remoteJid, {
@@ -17,48 +61,33 @@ module.exports = {
             }, { quoted: msg });
         }
 
-        try {
+        // 🧠 mejorar búsqueda automáticamente
+        const improved = improveQuery(query);
 
-            await sock.sendMessage(remoteJid, {
-                text: `🔎 Buscando imágenes de: *${query}*`
-            }, { quoted: msg });
+        await sock.sendMessage(remoteJid, {
+            text: `🔎 Buscando:\n*${query}*\n✨ Mejorado a: *${improved}*`
+        }, { quoted: msg });
 
-            const res = await axios.get(
-                `https://www.bing.com/images/async?q=${encodeURIComponent(query)}&first=0&count=20`,
-                {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0'
-                    },
-                    timeout: 15000
-                }
-            );
+        let images = await bingImages(improved);
 
-            const html = res.data;
+        // 🔥 fallback inteligente
+        if (!images.length) {
+            images = [
+                `https://source.unsplash.com/800x600/?${encodeURIComponent(improved)}`,
+                `https://picsum.photos/seed/${encodeURIComponent(improved)}/800/600`
+            ];
+        }
 
-            const matches = [...html.matchAll(/murl&quot;:&quot;(.*?)&quot;/g)];
+        // 📸 tomar hasta 5 imágenes
+        const results = images.slice(0, 5);
 
-            const images = matches
-                .map(m => m[1])
-                .filter(u => u && u.startsWith('http'));
-
-            if (!images.length) {
-                throw new Error('no images found');
-            }
-
-            const img = images[Math.floor(Math.random() * images.length)];
-
-            await sock.sendMessage(remoteJid, {
-                image: { url: img },
-                caption: `🖼️ Resultado: *${query}*`
-            }, { quoted: msg });
-
-        } catch (e) {
-
-            console.log('IMG ERROR:', e?.message || e);
-
-            await sock.sendMessage(remoteJid, {
-                text: '❌ No se encontraron imágenes, intenta otra búsqueda'
-            }, { quoted: msg });
+        for (let i = 0; i < results.length; i++) {
+            try {
+                await sock.sendMessage(remoteJid, {
+                    image: { url: results[i] },
+                    caption: `🖼️ Resultado ${i + 1} de "${query}"`
+                }, { quoted: msg });
+            } catch {}
         }
     }
 };
