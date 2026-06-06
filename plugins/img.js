@@ -15,11 +15,10 @@ module.exports = {
             }, { quoted: msg });
         }
 
-        // limpiar query para URL
-        const prompt = encodeURIComponent(query);
+        const encoded = encodeURIComponent(query);
 
-        // API estable de imágenes
-        const url = `https://image.pollinations.ai/prompt/${prompt}`;
+        // 🔥 API estable (Unsplash Source - no key)
+        const url = `https://source.unsplash.com/800x600/?${encoded}`;
 
         try {
 
@@ -34,10 +33,10 @@ module.exports = {
 
         } catch (e) {
 
-            console.log('Error img:', e);
+            console.log('IMG ERROR:', e?.message || e);
 
             await sock.sendMessage(remoteJid, {
-                text: '❌ No se pudo generar la imagen, intenta otra búsqueda.'
+                text: '❌ No se pudo obtener la imagen, intenta otra búsqueda.'
             }, { quoted: msg });
         }
     }
