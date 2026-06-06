@@ -52,7 +52,7 @@ async function convertToImage(input, output, isAnimated) {
 }
 
 module.exports = {
-  commands: ['toimage', 'img'],
+  commands: ['toimage', 'aimg'],
 
   async execute(ctx) {
     const { sock, msg, remoteJid } = ctx;
