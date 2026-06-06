@@ -1,6 +1,8 @@
 'use strict';
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     commands: ['img', 'image'],
@@ -18,41 +20,65 @@ module.exports = {
         }
 
         await sock.sendMessage(remoteJid, {
-            text: `🔎 Buscando imágenes reales de: *${query}*`
+            text: `🔎 Buscando en la web: *${query}*`
         }, { quoted: msg });
 
         try {
 
-            // 🔥 API tipo Google Images (DuckDuckGo Lite - mejor parsing)
-            const url = `https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}&o=json`;
-
-            const res = await axios.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'application/json'
-                },
-                timeout: 15000
-            });
+            // 🔥 1. Buscar imágenes tipo Google
+            const res = await axios.get(
+                `https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}`,
+                {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0',
+                        'Accept': 'application/json'
+                    },
+                    timeout: 15000
+                }
+            );
 
             const results = res.data?.results || [];
 
-            if (!results.length) throw new Error('sin resultados');
+            if (!results.length) {
+                return sock.sendMessage(remoteJid, {
+                    text: '❌ No se encontraron imágenes'
+                }, { quoted: msg });
+            }
 
-            const img = results[Math.floor(Math.random() * results.length)]?.image;
+            const imgUrl = results[0].image;
 
-            if (!img) throw new Error('sin imagen');
+            if (!imgUrl) {
+                return sock.sendMessage(remoteJid, {
+                    text: '❌ Imagen inválida'
+                }, { quoted: msg });
+            }
 
+            // 🔥 2. Descargar imagen localmente
+            const fileName = `img_${Date.now()}.jpg`;
+            const filePath = path.join(__dirname, fileName);
+
+            const imgBuffer = await axios.get(imgUrl, {
+                responseType: 'arraybuffer',
+                timeout: 20000
+            });
+
+            fs.writeFileSync(filePath, imgBuffer.data);
+
+            // 🔥 3. Enviar a WhatsApp como archivo real
             await sock.sendMessage(remoteJid, {
-                image: { url: img },
-                caption: `🖼️ Resultado real: *${query}*`
+                image: fs.readFileSync(filePath),
+                caption: `🖼️ Resultado: *${query}*`
             }, { quoted: msg });
+
+            // 🔥 4. limpiar archivo
+            fs.unlinkSync(filePath);
 
         } catch (e) {
 
             console.log('IMG ERROR:', e?.message || e);
 
             await sock.sendMessage(remoteJid, {
-                text: '❌ No se encontraron imágenes reales, intenta otra búsqueda.'
+                text: '❌ Error buscando imágenes, intenta otra palabra'
             }, { quoted: msg });
         }
     }
