@@ -20,25 +20,32 @@ module.exports = {
         try {
 
             await sock.sendMessage(remoteJid, {
-                text: `🔎 Buscando: *${query}*`
+                text: `🔎 Buscando imágenes de: *${query}*`
             }, { quoted: msg });
 
             const res = await axios.get(
-                `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`,
-                { timeout: 15000 }
+                `https://www.bing.com/images/async?q=${encodeURIComponent(query)}&first=0&count=20`,
+                {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0'
+                    },
+                    timeout: 15000
+                }
             );
 
-            const matches = [...res.data.matchAll(/"image":"(.*?)"/g)];
+            const html = res.data;
+
+            const matches = [...html.matchAll(/murl&quot;:&quot;(.*?)&quot;/g)];
 
             const images = matches
                 .map(m => m[1])
                 .filter(u => u && u.startsWith('http'));
 
-            const img = images[Math.floor(Math.random() * images.length)];
-
-            if (!img) {
-                throw new Error('no images');
+            if (!images.length) {
+                throw new Error('no images found');
             }
+
+            const img = images[Math.floor(Math.random() * images.length)];
 
             await sock.sendMessage(remoteJid, {
                 image: { url: img },
