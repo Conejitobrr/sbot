@@ -1,31 +1,6 @@
 'use strict';
 
-const axios = require('axios');
-
-async function searchImages(query) {
-    try {
-        const res = await axios.get('https://duckduckgo.com/?q=' + encodeURIComponent(query) + '&iax=images&ia=images', {
-            headers: {
-                'User-Agent': 'Mozilla/5.0'
-            }
-        });
-
-        const body = res.data;
-
-        const urls = [...body.matchAll(/"image":"(.*?)"/g)].map(m => m[1]);
-
-        return urls.filter(u =>
-            u.startsWith('http') &&
-            !u.includes('base64')
-        );
-
-    } catch (e) {
-        return [];
-    }
-}
-
 module.exports = {
-
     commands: ['img', 'image'],
 
     execute: async (ctx) => {
@@ -36,27 +11,34 @@ module.exports = {
 
         if (!query) {
             return sock.sendMessage(remoteJid, {
-                text: '❌ Escribe lo que quieres buscar\nEj: .img gatos tiernos'
+                text: '❌ Uso:\n.img gatos tiernos'
             }, { quoted: msg });
         }
 
-        await sock.sendMessage(remoteJid, {
-            text: `🔎 Buscando imágenes de: *${query}*...`
-        }, { quoted: msg });
+        // limpiar query para URL
+        const prompt = encodeURIComponent(query);
 
-        const images = await searchImages(query);
+        // API estable de imágenes
+        const url = `https://image.pollinations.ai/prompt/${prompt}`;
 
-        if (!images.length) {
-            return sock.sendMessage(remoteJid, {
-                text: '❌ No encontré imágenes 😢'
+        try {
+
+            await sock.sendMessage(remoteJid, {
+                text: `🔎 Buscando: *${query}*`
+            }, { quoted: msg });
+
+            await sock.sendMessage(remoteJid, {
+                image: { url },
+                caption: `🖼️ Resultado: *${query}*`
+            }, { quoted: msg });
+
+        } catch (e) {
+
+            console.log('Error img:', e);
+
+            await sock.sendMessage(remoteJid, {
+                text: '❌ No se pudo generar la imagen, intenta otra búsqueda.'
             }, { quoted: msg });
         }
-
-        const img = images[Math.floor(Math.random() * images.length)];
-
-        await sock.sendMessage(remoteJid, {
-            image: { url: img },
-            caption: `🖼️ Resultado para: *${query}*`
-        }, { quoted: msg });
     }
 };
