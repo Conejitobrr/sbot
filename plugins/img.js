@@ -2,92 +2,102 @@
 
 const axios = require('axios');
 
-// 🧠 mejora básica de búsqueda (mini “IA”)
-function improveQuery(q = '') {
-    q = q.toLowerCase();
-
-    const map = [
-        ['batimix', 'batman cinematic wallpaper'],
-        ['perrito', 'cute puppy'],
-        ['gato', 'cute cat'],
-        ['carro', 'sports car wallpaper'],
-        ['anime', 'anime aesthetic wallpaper']
-    ];
-
-    for (const [bad, good] of map) {
-        if (q.includes(bad)) return good;
-    }
-
-    return q;
+function cleanQuery(text = '') {
+  return text.trim().replace(/\s+/g, ' ');
 }
 
-async function bingImages(query) {
-    try {
-        const res = await axios.get(
-            `https://www.bing.com/images/async?q=${encodeURIComponent(query)}&first=0&count=30`,
-            {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0'
-                },
-                timeout: 15000
-            }
-        );
+// 🔥 obtener token vqd de duckduckgo
+async function getVqd(query) {
+  const url = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`;
 
-        const html = res.data;
-
-        const matches = [...html.matchAll(/murl&quot;:&quot;(.*?)&quot;/g)];
-
-        return matches
-            .map(m => m[1])
-            .filter(u => u && u.startsWith('http'));
-
-    } catch {
-        return [];
+  const res = await axios.get(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
     }
+  });
+
+  const match = res.data.match(/vqd=([\d-]+)/i);
+  if (!match) throw new Error('No vqd token');
+
+  return match[1];
+}
+
+// 🔥 buscar imágenes
+async function searchImages(query, vqd) {
+  const url = `https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}&vqd=${vqd}&o=json&f=,,,&p=1`;
+
+  const res = await axios.get(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+      'Referer': 'https://duckduckgo.com/'
+    }
+  });
+
+  return res.data?.results || [];
+}
+
+// 🔥 descargar imagen
+async function downloadImage(url) {
+  const res = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: 15000,
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+    }
+  });
+
+  return Buffer.from(res.data);
 }
 
 module.exports = {
-    commands: ['img', 'image', 'imgpro'],
+  commands: ['img', 'imagen', 'image'],
 
-    execute: async (ctx) => {
+  execute: async (ctx) => {
+    const { sock, remoteJid, args, msg } = ctx;
 
-        const { sock, remoteJid, args, msg } = ctx;
+    const query = cleanQuery(args.join(' '));
 
-        let query = args.join(' ').trim();
-
-        if (!query) {
-            return sock.sendMessage(remoteJid, {
-                text: '❌ Uso:\n.img gatos tiernos'
-            }, { quoted: msg });
-        }
-
-        // 🧠 mejorar búsqueda automáticamente
-        const improved = improveQuery(query);
-
-        await sock.sendMessage(remoteJid, {
-            text: `🔎 Buscando:\n*${query}*\n✨ Mejorado a: *${improved}*`
-        }, { quoted: msg });
-
-        let images = await bingImages(improved);
-
-        // 🔥 fallback inteligente
-        if (!images.length) {
-            images = [
-                `https://source.unsplash.com/800x600/?${encodeURIComponent(improved)}`,
-                `https://picsum.photos/seed/${encodeURIComponent(improved)}/800/600`
-            ];
-        }
-
-        // 📸 tomar hasta 5 imágenes
-        const results = images.slice(0, 5);
-
-        for (let i = 0; i < results.length; i++) {
-            try {
-                await sock.sendMessage(remoteJid, {
-                    image: { url: results[i] },
-                    caption: `🖼️ Resultado ${i + 1} de "${query}"`
-                }, { quoted: msg });
-            } catch {}
-        }
+    if (!query) {
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Usa: .img <texto>'
+      }, { quoted: msg });
     }
+
+    await sock.sendMessage(remoteJid, {
+      text: `🔎 Buscando: *${query}*`
+    }, { quoted: msg });
+
+    try {
+      const vqd = await getVqd(query);
+      const results = await searchImages(query, vqd);
+
+      if (!results.length) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ No se encontraron imágenes'
+        }, { quoted: msg });
+      }
+
+      const imgUrl =
+        results.find(r => r.image)?.image ||
+        results[0].image ||
+        results[0].thumbnail;
+
+      const buffer = await downloadImage(imgUrl);
+
+      return sock.sendMessage(remoteJid, {
+        image: buffer,
+        caption: `🖼️ Resultado: *${query}*`
+      }, { quoted: msg });
+
+    } catch (err) {
+      console.log('IMG ERROR:', err?.message || err);
+
+      return sock.sendMessage(remoteJid, {
+        text: '❌ Error buscando imagen. Intenta otra palabra.'
+      }, { quoted: msg });
+    }
+  }
 };
