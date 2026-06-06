@@ -1,8 +1,8 @@
 'use strict';
 
+const puppeteer = require('puppeteer');
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 
 module.exports = {
     commands: ['img', 'image'],
@@ -20,65 +20,66 @@ module.exports = {
         }
 
         await sock.sendMessage(remoteJid, {
-            text: `🔎 Buscando en la web: *${query}*`
+            text: `🔎 Buscando en Google Images: *${query}*`
         }, { quoted: msg });
+
+        let browser;
 
         try {
 
-            // 🔥 1. Buscar imágenes tipo Google
-            const res = await axios.get(
-                `https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}`,
-                {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0',
-                        'Accept': 'application/json'
-                    },
-                    timeout: 15000
-                }
-            );
-
-            const results = res.data?.results || [];
-
-            if (!results.length) {
-                return sock.sendMessage(remoteJid, {
-                    text: '❌ No se encontraron imágenes'
-                }, { quoted: msg });
-            }
-
-            const imgUrl = results[0].image;
-
-            if (!imgUrl) {
-                return sock.sendMessage(remoteJid, {
-                    text: '❌ Imagen inválida'
-                }, { quoted: msg });
-            }
-
-            // 🔥 2. Descargar imagen localmente
-            const fileName = `img_${Date.now()}.jpg`;
-            const filePath = path.join(__dirname, fileName);
-
-            const imgBuffer = await axios.get(imgUrl, {
-                responseType: 'arraybuffer',
-                timeout: 20000
+            browser = await puppeteer.launch({
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
             });
 
-            fs.writeFileSync(filePath, imgBuffer.data);
+            const page = await browser.newPage();
 
-            // 🔥 3. Enviar a WhatsApp como archivo real
+            await page.setUserAgent(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+            );
+
+            // 🔥 abrir Google Images
+            await page.goto(
+                `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`,
+                { waitUntil: 'networkidle2' }
+            );
+
+            // 🔥 extraer imágenes reales
+            const images = await page.evaluate(() => {
+                const imgs = Array.from(document.querySelectorAll('img'));
+                return imgs
+                    .map(img => img.src)
+                    .filter(src => src && src.startsWith('http'));
+            });
+
+            await browser.close();
+
+            if (!images.length) {
+                return sock.sendMessage(remoteJid, {
+                    text: '❌ No se encontraron imágenes en Google'
+                }, { quoted: msg });
+            }
+
+            const imgUrl = images[Math.floor(Math.random() * images.length)];
+
+            // 🔥 descargar imagen
+            const buffer = await axios.get(imgUrl, {
+                responseType: 'arraybuffer'
+            });
+
             await sock.sendMessage(remoteJid, {
-                image: fs.readFileSync(filePath),
-                caption: `🖼️ Resultado: *${query}*`
+                image: buffer.data,
+                caption: `🖼️ Google Images: *${query}*`
             }, { quoted: msg });
-
-            // 🔥 4. limpiar archivo
-            fs.unlinkSync(filePath);
 
         } catch (e) {
 
             console.log('IMG ERROR:', e?.message || e);
 
+            if (browser) await browser.close();
+
             await sock.sendMessage(remoteJid, {
-                text: '❌ Error buscando imágenes, intenta otra palabra'
+                text: '❌ Error usando navegador, intenta otra búsqueda'
             }, { quoted: msg });
         }
     }
