@@ -2,34 +2,6 @@
 
 const axios = require('axios');
 
-async function getImage(query) {
-    try {
-        // API estable de búsqueda de imágenes
-        const res = await axios.get(
-            `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&ia=images`,
-            { timeout: 10000 }
-        );
-
-        const results = res.data?.RelatedTopics || [];
-
-        let urls = [];
-
-        for (const r of results) {
-            if (r?.Icon?.URL) {
-                urls.push(r.Icon.URL);
-            }
-            if (r?.FirstURL) {
-                urls.push(r.FirstURL);
-            }
-        }
-
-        return urls.filter(u => u.startsWith('http'));
-
-    } catch (e) {
-        return [];
-    }
-}
-
 module.exports = {
     commands: ['img', 'image'],
 
@@ -46,23 +18,42 @@ module.exports = {
         }
 
         await sock.sendMessage(remoteJid, {
-            text: `🔎 Buscando: *${query}*`
+            text: `🔎 Buscando imágenes reales de: *${query}*`
         }, { quoted: msg });
 
-        let images = await getImage(query);
+        try {
 
-        // 🔥 fallback seguro si falla todo
-        if (!images.length) {
-            images = [
-                `https://picsum.photos/seed/${encodeURIComponent(query)}/800/600`
-            ];
+            // 🔥 API tipo Google Images (DuckDuckGo Lite - mejor parsing)
+            const url = `https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}&o=json`;
+
+            const res = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0',
+                    'Accept': 'application/json'
+                },
+                timeout: 15000
+            });
+
+            const results = res.data?.results || [];
+
+            if (!results.length) throw new Error('sin resultados');
+
+            const img = results[Math.floor(Math.random() * results.length)]?.image;
+
+            if (!img) throw new Error('sin imagen');
+
+            await sock.sendMessage(remoteJid, {
+                image: { url: img },
+                caption: `🖼️ Resultado real: *${query}*`
+            }, { quoted: msg });
+
+        } catch (e) {
+
+            console.log('IMG ERROR:', e?.message || e);
+
+            await sock.sendMessage(remoteJid, {
+                text: '❌ No se encontraron imágenes reales, intenta otra búsqueda.'
+            }, { quoted: msg });
         }
-
-        const img = images[Math.floor(Math.random() * images.length)];
-
-        await sock.sendMessage(remoteJid, {
-            image: { url: img },
-            caption: `🖼️ Resultado: *${query}*`
-        }, { quoted: msg });
     }
 };
