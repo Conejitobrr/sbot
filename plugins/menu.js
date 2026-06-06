@@ -72,6 +72,7 @@ module.exports = {
 ➤ *${p}piropo*
 ➤ *${p}pregunta*
 ➤ *${p}trivia*
+➤ *${p}felizcumple* menciona para felicitar
 ➤ *${p}formarpareja*
 ➤ *${p}formarparejas*
 ➤ *${p}love*
