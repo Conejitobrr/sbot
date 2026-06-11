@@ -58,9 +58,9 @@ const RESPONSES = {
 
   pajera: target => `_*${upperText(target)}* *ES 😏💦* *${getPercent()}%* *PAJERA*_`,
 
-  puto: target => `_*${upperText(target)}* *ES 🔥* *${getPercent()}%* *MÁS INFORMACIÓN A SU PRIVADO 🔥🥵 XD*_`,
+  puto: target => `_*${upperText(target)}* *ES 🔥* *${getPercent()}%* *PUTO, MÁS INFORMACIÓN A SU PRIVADO 🔥🥵 XD*_`,
 
-  puta: target => `_*${upperText(target)}* *ES 🔥* *${getPercent()}%* *MÁS INFORMACIÓN A SU PRIVADO 🔥🥵 XD*_`,
+  puta: target => `_*${upperText(target)}* *ES 🔥* *${getPercent()}%* *PUTA, MÁS INFORMACIÓN A SU PRIVADO 🔥🥵 XD*_`,
 
   manco: target => `_*${upperText(target)}* *ES* *${getPercent()}%* *MANCO 💩*_`,
 
