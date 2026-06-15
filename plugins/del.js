@@ -287,14 +287,33 @@ Uso:
 
       await tryDeleteMessage(sock, remoteJid, deleteKey, isOwnMessage);
 
+      // borrar también el mensaje que ejecutó el comando
       try {
-        await sock.sendMessage(remoteJid, {
-          react: {
-            text: '✅',
-            key: msg.key
-          }
-        });
-      } catch {}
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const commandDeleteKey = {
+          remoteJid: msg.key.remoteJid,
+          id: msg.key.id,
+          fromMe: true
+        };
+
+        if (msg.key.participant) {
+          commandDeleteKey.participant = msg.key.participant;
+        }
+
+        await tryDeleteMessage(
+          sock,
+          remoteJid,
+          commandDeleteKey,
+          true
+        );
+
+      } catch (e) {
+        console.log(
+          '⚠️ No se pudo borrar el comando:',
+          e?.message || e
+        );
+      }
 
     } catch (err) {
       console.log('❌ Error en del:', err?.message || err);
