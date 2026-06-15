@@ -22,7 +22,8 @@ module.exports = {
       sender,
       args,
       fromGroup,
-      isOwner
+      isOwner,
+      isAdmin
     } = ctx;
 
     const feature = (args[0] || '').toLowerCase();
@@ -50,11 +51,19 @@ ${FEATURES.map(f => `➤ ${f}`).join('\n')}
       }, { quoted: msg });
     }
 
-    // 🔥 SOLO OWNER
+    // 🔥 OWNER O ADMIN (solo para welcome y audios)
     if (!isOwner) {
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Solo el owner puede usar este comando.'
-      }, { quoted: msg });
+
+      const adminAllowed =
+        fromGroup &&
+        isAdmin &&
+        ['welcome', 'audios'].includes(feature);
+
+      if (!adminAllowed) {
+        return sock.sendMessage(remoteJid, {
+          text: '❌ Solo el owner puede usar este comando.'
+        }, { quoted: msg });
+      }
     }
 
     // 🌐 CHATBOT GLOBAL
