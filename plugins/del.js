@@ -289,10 +289,9 @@ Uso:
 
       try {
         await sock.sendMessage(remoteJid, {
-          remoteJid: msg.key.remoteJid,
-          fromMe: msg.key.fromMe,
-          id: msg.key.id,
-          participant: msg.key.participant
+          react: {
+            text: '✅',
+            key: msg.key
           }
         });
       } catch {}
