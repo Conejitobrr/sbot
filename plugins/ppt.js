@@ -196,33 +196,40 @@ ${mention(game.target)} no respondió.`,
 
     await sock.sendMessage(sender, {
       text:
-`🎮 RETO PPT
+`🎮 *RETO PPT*
 
-Responde solamente:
+Responde únicamente:
 
-piedra
-papel
-tijera`
+🪨 piedra
+📄 papel
+✂️ tijera
+
+⏳ Tiempo: 3 minutos.`
     });
 
     await sock.sendMessage(target, {
       text:
-`🎮 Te retó ${sender.split('@')[0]}
+`🎮 *TE RETÓ A PPT* ${sender.split('@')[0]}
 
 ${bet > 0 ? `💸 Apuesta: ${bet} XP\n\n` : ''}
 
-Responde solamente:
+Responde únicamente:
 
-piedra
-papel
-tijera`
+🪨 piedra
+📄 papel
+✂️ tijera
+
+⏳ Tiempo: 3 minutos.`
     });
 
     return sock.sendMessage(remoteJid, {
       text:
-`📨 Reto enviado por privado.
+`🎮 *RETO ENVIADO*
+
+📨 Se enviaron mensajes privados a ambos jugadores.
 
 🥷 ${mention(sender)}
+🆚
 ⚔️ ${mention(target)}
 
 ⏳ Esperando respuestas...`,
