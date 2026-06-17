@@ -30,14 +30,6 @@ function formatTime(ms) {
   return `${minutes} min ${seconds} seg`;
 }
 
-async function deleteMessage(sock, remoteJid, key) {
-  try {
-    await sock.sendMessage(remoteJid, {
-      delete: key
-    });
-  } catch {}
-}
-
 module.exports = {
   commands: ['slot', 'casino', '777'],
 
@@ -91,38 +83,46 @@ para volver a usar el tragamonedas.`
 
       await db.removeXP(sender, bet);
 
-      const anim1 =
+      const sent = await sock.sendMessage(remoteJid, {
+        text:
 `🎰 *TRAGAMONEDAS* 🎰
 
 ┏━━━━━━━━━━━┓
 ┃ ${randomEmoji()} │ ${randomEmoji()} │ ${randomEmoji()} ┃
 ┗━━━━━━━━━━━┛
 
-🎲 Girando...`;
-
-      const msg1 = await sock.sendMessage(remoteJid, {
-        text: anim1
+🎲 Girando...`
       }, { quoted: msg });
 
       await sleep(1000);
 
-      const anim2 =
+      await sock.sendMessage(remoteJid, {
+        text:
 `🎰 *TRAGAMONEDAS* 🎰
 
 ┏━━━━━━━━━━━┓
 ┃ ${randomEmoji()} │ ${randomEmoji()} │ ${randomEmoji()} ┃
 ┗━━━━━━━━━━━┛
 
-🎲 Girando...`;
-
-      const msg2 = await sock.sendMessage(remoteJid, {
-        text: anim2
-      }, { quoted: msg });
+🎲 Girando...`,
+        edit: sent.key
+      });
 
       await sleep(1000);
 
-      await deleteMessage(sock, remoteJid, msg1.key);
-      await deleteMessage(sock, remoteJid, msg2.key);
+      await sock.sendMessage(remoteJid, {
+        text:
+`🎰 *TRAGAMONEDAS* 🎰
+
+┏━━━━━━━━━━━┓
+┃ ${randomEmoji()} │ ${randomEmoji()} │ ${randomEmoji()} ┃
+┗━━━━━━━━━━━┛
+
+🎲 Girando...`,
+        edit: sent.key
+      });
+
+      await sleep(1000);
 
       const r1 = randomEmoji();
       const r2 = randomEmoji();
@@ -131,6 +131,7 @@ para volver a usar el tragamonedas.`
       let multiplier = 0;
       let result = '💀 Mala suerte';
 
+      // JACKPOT 777
       if (
         r1 === '7️⃣' &&
         r2 === '7️⃣' &&
@@ -138,13 +139,19 @@ para volver a usar el tragamonedas.`
       ) {
         multiplier = 5;
         result = '💥 JACKPOT 777 💥';
-      } else if (
+      }
+
+      // TRES IGUALES
+      else if (
         r1 === r2 &&
         r2 === r3
       ) {
         multiplier = 3;
         result = '🔥 ¡Tres iguales!';
-      } else if (
+      }
+
+      // DOS IGUALES
+      else if (
         r1 === r2 ||
         r1 === r3 ||
         r2 === r3
@@ -162,7 +169,8 @@ para volver a usar el tragamonedas.`
 
       const finalUser = await db.getUser(sender);
 
-      const finalText =
+      await sock.sendMessage(remoteJid, {
+        text:
 `🎰 *TRAGAMONEDAS* 🎰
 
 ┏━━━━━━━━━━━┓
@@ -174,14 +182,12 @@ ${result}
 💸 Apostaste: ${bet} XP
 ${reward > 0
   ? `🏆 Ganaste: ${reward} XP`
-  : `❌ Perdiste: ${bet} XP`
+  : `💀 Perdiste: ${bet} XP`
 }
 
-🎖️ XP actual: ${finalUser.xp || 0}`;
-
-      await sock.sendMessage(remoteJid, {
-        text: finalText
-      }, { quoted: msg });
+🎖️ XP actual: ${finalUser.xp || 0}`,
+        edit: sent.key
+      });
 
     } catch (err) {
       console.log('❌ Error en slot:', err?.message || err);
