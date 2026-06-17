@@ -61,18 +61,18 @@ module.exports = {
       if (!['piedra', 'papel', 'tijera'].includes(move)) {
         return sock.sendMessage(remoteJid, {
           text:
-`🎮 Piedra Papel o Tijera
+`🎮 *PIEDRA PAPEL O TIJERA*
 
+📌 Contra SiriusBot:
 .ppt piedra
 .ppt papel
 .ppt tijera
 
-.ppt piedra 500
-
-o
-
+📌 Contra jugador:
 .ppt @usuario
-.ppt @usuario 500`
+.ppt @usuario 500
+
+🎰 Puedes apostar XP.`
         }, { quoted: msg });
       }
 
