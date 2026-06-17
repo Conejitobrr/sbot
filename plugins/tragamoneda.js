@@ -46,7 +46,7 @@ module.exports = {
     try {
       const user = await db.getUser(sender);
 
-      const cooldown = 10 * 60 * 1000;
+      const cooldown = 5 * 60 * 1000;
       const lastSlot = Number(user.lastSlot || 0);
 
       if (Date.now() - lastSlot < cooldown) {
