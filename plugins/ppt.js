@@ -1,25 +1,14 @@
 'use strict';
 
-const pendingGames = new Map();
+global.pendingPPTGames = global.pendingPPTGames || new Map();
+
+const pendingGames = global.pendingPPTGames;
 
 const BOT_NAME = 'SiriusBot';
-const BOT_WIN_RATE = 0.66;
 const RESPONSE_TIME = 3 * 60 * 1000;
-
-const OPTIONS = ['piedra', 'papel', 'tijera'];
 
 function mention(jid = '') {
   return '@' + jid.split('@')[0];
-}
-
-function normalizeChoice(text = '') {
-  text = String(text).toLowerCase().trim();
-
-  if (text === 'piedra') return 'piedra';
-  if (text === 'papel') return 'papel';
-  if (text === 'tijera') return 'tijera';
-
-  return null;
 }
 
 function getTarget(msg, args) {
@@ -33,25 +22,7 @@ function getTarget(msg, args) {
 
   if (quoted) return quoted;
 
-  if (args[0]) {
-    const num = args[0].replace(/\D/g, '');
-
-    if (num) {
-      return num + '@s.whatsapp.net';
-    }
-  }
-
   return null;
-}
-
-function winnerMove(move) {
-  if (move === 'piedra') return 'papel';
-  if (move === 'papel') return 'tijera';
-  return 'piedra';
-}
-
-function randomMove() {
-  return OPTIONS[Math.floor(Math.random() * OPTIONS.length)];
 }
 
 function beats(a, b) {
@@ -60,6 +31,12 @@ function beats(a, b) {
     (a === 'papel' && b === 'piedra') ||
     (a === 'tijera' && b === 'papel')
   );
+}
+
+function winnerMove(move) {
+  if (move === 'piedra') return 'papel';
+  if (move === 'papel') return 'tijera';
+  return 'piedra';
 }
 
 module.exports = {
@@ -75,29 +52,27 @@ module.exports = {
       db
     } = ctx;
 
+    const move = String(args[0] || '').toLowerCase();
     const target = getTarget(msg, args);
 
-    // -------------------
     // VS BOT
-    // -------------------
     if (!target) {
-      const move = normalizeChoice(args[0]);
 
-      if (!move) {
+      if (!['piedra', 'papel', 'tijera'].includes(move)) {
         return sock.sendMessage(remoteJid, {
           text:
-`🎮 *PIEDRA PAPEL O TIJERA*
+`🎮 Piedra Papel o Tijera
 
-📌 Contra SiriusBot:
 .ppt piedra
 .ppt papel
 .ppt tijera
 
-📌 Contra jugador:
-.ppt @usuario
-.ppt @usuario 500
+.ppt piedra 500
 
-🎰 Puedes apostar XP.`
+o
+
+.ppt @usuario
+.ppt @usuario 500`
         }, { quoted: msg });
       }
 
@@ -110,31 +85,28 @@ module.exports = {
 
       if ((user.xp || 0) < bet) {
         return sock.sendMessage(remoteJid, {
-          text:
-`❌ No tienes suficiente XP.
-
-🎖️ XP: ${user.xp || 0}
-💸 Apuesta: ${bet}`
+          text: '❌ No tienes suficiente XP.'
         }, { quoted: msg });
       }
 
       await db.removeXP(sender, bet);
 
+      const botWins = Math.random() < 0.66;
+
       let botMove;
 
-      const roll = Math.random();
-
-      if (roll < BOT_WIN_RATE) {
+      if (botWins) {
         botMove = winnerMove(move);
       } else {
-        botMove = randomMove();
+        const moves = ['piedra', 'papel', 'tijera'];
+        botMove = moves[Math.floor(Math.random() * moves.length)];
       }
 
       let text =
-`🎮 *PIEDRA PAPEL O TIJERA*
+`🎮 PIEDRA PAPEL O TIJERA
 
-👤 Jugador: ${mention(sender)}
-🤖 Rival: ${BOT_NAME}
+👤 ${mention(sender)}
+🤖 ${BOT_NAME}
 
 🥷 Tú: ${move}
 🤖 Bot: ${botMove}
@@ -144,12 +116,7 @@ module.exports = {
       if (move === botMove) {
         await db.addXP(sender, bet);
 
-        text +=
-`🤝 EMPATE
-
-💰 Recuperaste tu apuesta.
-
-🎖️ XP actual: ${(await db.getUser(sender)).xp}`;
+        text += '🤝 EMPATE';
       }
 
       else if (beats(move, botMove)) {
@@ -157,22 +124,11 @@ module.exports = {
 
         await db.addXP(sender, reward);
 
-        text +=
-`🏆 GANASTE
-
-💸 Apostaste: ${bet}
-⭐ Premio: ${reward}
-
-🎖️ XP actual: ${(await db.getUser(sender)).xp}`;
+        text += `🏆 GANASTE\n\n⭐ Premio: ${reward} XP`;
       }
 
       else {
-        text +=
-`💀 PERDISTE
-
-❌ Pierdes ${bet} XP
-
-🎖️ XP actual: ${(await db.getUser(sender)).xp}`;
+        text += `💀 PERDISTE\n\n❌ Pierdes ${bet} XP`;
       }
 
       return sock.sendMessage(remoteJid, {
@@ -181,131 +137,96 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    // -------------------
     // VS JUGADOR
-    // -------------------
 
     if (target === sender) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ No puedes retarte a ti mismo.'
+        text: '❌ No puedes jugar contigo mismo.'
       }, { quoted: msg });
     }
 
     const bet =
-      Math.max(
-        0,
-        Number(args.find(a => /^\d+$/.test(a)) || 0)
-      );
+      Number(args.find(a => /^\d+$/.test(a)) || 0);
 
     if (bet > 0) {
-      const challenger = await db.getUser(sender);
-      const opponent = await db.getUser(target);
+      const p1 = await db.getUser(sender);
+      const p2 = await db.getUser(target);
 
-      if ((challenger.xp || 0) < bet) {
+      if ((p1.xp || 0) < bet) {
         return sock.sendMessage(remoteJid, {
           text: '❌ No tienes suficiente XP.'
         }, { quoted: msg });
       }
 
-      if ((opponent.xp || 0) < bet) {
+      if ((p2.xp || 0) < bet) {
         return sock.sendMessage(remoteJid, {
           text: '❌ El rival no tiene suficiente XP.'
         }, { quoted: msg });
       }
     }
 
-    const gameId =
-      Date.now() +
-      '_' +
-      sender +
-      '_' +
-      target;
+    const id = Date.now() + '_' + sender;
 
     const timer = setTimeout(async () => {
-      const game = pendingGames.get(gameId);
+      const game = pendingGames.get(id);
 
       if (!game) return;
 
-      pendingGames.delete(gameId);
+      pendingGames.delete(id);
 
-      try {
-        await sock.sendMessage(game.group, {
-          text:
-`⏰ *Partida cancelada*
+      await sock.sendMessage(game.group, {
+        text:
+`⏰ Partida cancelada
 
-${mention(game.target)} no respondió dentro de los 3 minutos.`,
-          mentions: [game.target]
-        });
-      } catch {}
+${mention(game.target)} no respondió.`,
+        mentions: [game.target]
+      });
     }, RESPONSE_TIME);
 
-    pendingGames.set(gameId, {
-      id: gameId,
+    pendingGames.set(id, {
+      id,
       group: remoteJid,
       sender,
       target,
       bet,
-      timer,
       senderMove: null,
-      targetMove: null
+      targetMove: null,
+      timer
     });
 
-    try {
-      await sock.sendMessage(sender, {
-        text:
-`🎮 *RETO PPT*
+    await sock.sendMessage(sender, {
+      text:
+`🎮 RETO PPT
 
-Elegiste retar a ${target.split('@')[0]}.
+Responde solamente:
 
-Responde únicamente:
+piedra
+papel
+tijera`
+    });
 
-🪨 piedra
-📄 papel
-✂️ tijera
+    await sock.sendMessage(target, {
+      text:
+`🎮 Te retó ${sender.split('@')[0]}
 
-⏳ Tiempo: 3 minutos.`
-      });
+${bet > 0 ? `💸 Apuesta: ${bet} XP\n\n` : ''}
 
-      await sock.sendMessage(target, {
-        text:
-`🎮 *TE HAN RETADO*
+Responde solamente:
 
-👤 ${sender.split('@')[0]} te retó a Piedra Papel o Tijera.
-
-${bet > 0 ? `💸 Apuesta: ${bet} XP\n\n` : ''}Responde únicamente:
-
-🪨 piedra
-📄 papel
-✂️ tijera
-
-⏳ Tiempo: 3 minutos.`
-      });
-    } catch {
-      clearTimeout(timer);
-      pendingGames.delete(gameId);
-
-      return sock.sendMessage(remoteJid, {
-        text: '❌ No pude enviar mensajes privados.'
-      }, { quoted: msg });
-    }
+piedra
+papel
+tijera`
+    });
 
     return sock.sendMessage(remoteJid, {
       text:
-`🎮 *RETO ENVIADO*
-
-📨 Se enviaron mensajes privados a ambos jugadores.
+`📨 Reto enviado por privado.
 
 🥷 ${mention(sender)}
-🆚
 ⚔️ ${mention(target)}
 
-${bet > 0 ? `💸 Apuesta: ${bet} XP\n` : ''}
 ⏳ Esperando respuestas...`,
       mentions: [sender, target]
     }, { quoted: msg });
   }
 };
-
-module.exports.pendingGames = pendingGames;
-module.exports.normalizeChoice = normalizeChoice;
-module.exports.beats = beats;
