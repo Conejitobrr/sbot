@@ -1,13 +1,37 @@
 'use strict';
 
-const ppt = require('./ppt');
+global.pendingPPTGames = global.pendingPPTGames || new Map();
 
-const pendingGames = ppt.pendingGames;
-const normalizeChoice = ppt.normalizeChoice;
-const beats = ppt.beats;
+const pendingGames = global.pendingPPTGames;
 
 function mention(jid = '') {
   return '@' + jid.split('@')[0];
+}
+
+function normalizeChoice(text = '') {
+  text = String(text).toLowerCase().trim();
+
+  if (['piedra', '🪨', 'p'].includes(text)) {
+    return 'piedra';
+  }
+
+  if (['papel', '📄', 'pa'].includes(text)) {
+    return 'papel';
+  }
+
+  if (['tijera', '✂️', '✂', 't'].includes(text)) {
+    return 'tijera';
+  }
+
+  return null;
+}
+
+function beats(a, b) {
+  return (
+    (a === 'piedra' && b === 'tijera') ||
+    (a === 'papel' && b === 'piedra') ||
+    (a === 'tijera' && b === 'papel')
+  );
 }
 
 async function finishGame(sock, game, db) {
@@ -64,9 +88,9 @@ Nadie gana XP.`;
     ) {
       await sock.sendMessage(game.group, {
         text:
-`❌ La partida fue anulada.
+`❌ La apuesta fue anulada.
 
-Uno de los jugadores ya no tiene suficiente XP para cubrir la apuesta.`
+Uno de los jugadores ya no tiene suficiente XP.`
       });
 
       pendingGames.delete(game.id);
@@ -99,7 +123,6 @@ module.exports = {
   async onMessage(ctx) {
     const {
       sock,
-      msg,
       sender,
       remoteJid,
       body,
@@ -117,9 +140,7 @@ module.exports = {
 
     if (!move) return;
 
-    const games = [...pendingGames.values()];
-
-    const game = games.find(g =>
+    const game = [...pendingGames.values()].find(g =>
       (g.sender === sender || g.target === sender) &&
       (
         (g.sender === sender && !g.senderMove) ||
@@ -127,7 +148,12 @@ module.exports = {
       )
     );
 
-    if (!game) return;
+    if (!game) {
+      return sock.sendMessage(remoteJid, {
+        text:
+`⚠️ No tienes ninguna partida PPT pendiente.`
+      });
+    }
 
     if (sender === game.sender) {
       game.senderMove = move;
@@ -137,16 +163,33 @@ module.exports = {
       game.targetMove = move;
     }
 
-    try {
-      await sock.sendMessage(remoteJid, {
-        text: `✅ Elegiste: *${move}*`
-      });
-    } catch {}
+    await sock.sendMessage(remoteJid, {
+      text:
+`✅ Respuesta recibida
 
-    if (!game.senderMove || !game.targetMove) {
-      return;
+🎮 Elegiste: *${move}*
+
+${game.senderMove && game.targetMove
+  ? '⚡ Ambos jugadores respondieron.'
+  : '⏳ Esperando al otro jugador...'
+}`
+    });
+
+    if (
+      game.senderMove &&
+      game.targetMove
+    ) {
+      try {
+        await sock.sendMessage(game.sender, {
+          text: '⚡ Ambos jugadores respondieron. Calculando resultado...'
+        });
+
+        await sock.sendMessage(game.target, {
+          text: '⚡ Ambos jugadores respondieron. Calculando resultado...'
+        });
+      } catch {}
+
+      await finishGame(sock, game, db);
     }
-
-    await finishGame(sock, game, db);
   }
 };
