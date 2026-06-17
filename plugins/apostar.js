@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  commands: ['apostar', 'bet', 'casino'],
+  commands: ['bet', 'casino'],
 
   async execute(ctx) {
     const {
