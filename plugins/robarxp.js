@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const db = require('../lib/database');
+const shop = require('../lib/shop'); // 🔥 IMPORTADO: Necesario para revisar el escudo
 
 const ROBOS_PATH = path.join(process.cwd(), 'lib', 'robos_recientes.json');
 
@@ -107,6 +108,16 @@ module.exports = {
     const robber = await db.getUser(thief);
     const victim = await db.getUser(target);
 
+    // 🔥 LÓGICA DE ESCUDO ANTI-ROBO
+    const victimInv = await shop.getInventory(target);
+    if ((victimInv.shieldUses || 0) > 0) {
+        await shop.useItem(target, 'shieldUses', 1);
+        return sock.sendMessage(remoteJid, {
+            text: `🛡️ @${target.split('@')[0]} tiene un *Escudo Anti-Robo* activo. ¡El escudo absorbió el ataque y se rompió!`,
+            mentions: [target]
+        }, { quoted: msg });
+    }
+
     const now = Date.now();
     const cooldown = 10 * 60 * 1000;
 
@@ -131,19 +142,16 @@ antes de volver a robar XP.`
     let amount = 0;
     let jackpot = false;
 
-    // 🔥 Sistema Dinámico Ajustado (Más balanceado)
+    // 🔥 Sistema Dinámico Ajustado
     if (Math.random() < 0.05) {
-      // Jackpot: Roba entre el 12% y el 20% de la XP de la víctima
       let porcentaje = (Math.random() * 0.08) + 0.12;
       amount = Math.floor(victim.xp * porcentaje);
       jackpot = true;
     } else {
-      // Normal: Roba entre el 3% y el 8% de la XP de la víctima
       let porcentaje = (Math.random() * 0.05) + 0.03;
       amount = Math.floor(victim.xp * porcentaje);
     }
 
-    // Aseguramos matemáticamente que no exceda lo que tiene (Por seguridad)
     amount = Math.min(amount, victim.xp);
 
     await db.removeXP(target, amount);
