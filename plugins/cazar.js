@@ -1,7 +1,7 @@
 'use strict';
 
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const shop = require('../lib/shop'); // 🔥 NECESARIO PARA EL INVENTARIO
+const shop = require('../lib/shop'); // 🔥 IMPORTADO: Necesario para revisar el inventario
 
 // 🔥 CANDADO ANTI-SPAM
 const enUso = new Set();
@@ -22,7 +22,9 @@ function randXP(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// ... (los diccionarios de caza se mantienen igual)
+// ==========================================
+// DICCIONARIOS DE VARIEDAD (CAZA)
+// ==========================================
 const cazaLegendaria = [
     '🐉 ¡MÍTICO! Lograste abatir a un *Dragón Ancestral* que aterrorizaba la región.',
     '🦄 ¡Increíble! Encontraste un *Unicornio Mágico* y te regaló parte de su magia por dejarlo ir.',
@@ -61,7 +63,7 @@ const cazaNormal = [
     '🦝 Cazaste a un *Mapache* que intentaba robarte la comida.',
     '🦎 Atrapaste a una gran *Iguana* escondida en las rocas.',
     '🦔 Atrapaste a un *Puercoespín*, pero te pinchaste un poco.',
-    'Armadillo Atrapaste un *Armadillo* rodando por el desierto.'
+    ' armadillo Atrapaste un *Armadillo* rodando por el desierto.'
 ];
 
 const cazaBasura = [
@@ -102,20 +104,12 @@ module.exports = {
 
         const userKey = cleanJid(sender);
 
-        // 🔥 VALIDACIÓN DE ARMA
-        const inv = await shop.getInventory(userKey);
-        const tieneArma = (inv.arma || 0) > 0 || (inv.arma_pro || 0) > 0;
-        
-        if (!tieneArma) {
-            return reply('❌ ¡Necesitas un *Arma de Caza* para cazar! Cómprala en la tienda: *.comprar arma*');
-        }
-
-        // 🔥 Bloqueo Anti-Spam
+        // 🔥 Bloqueo Anti-Spam: Si el usuario ya está cazando, se ignora el comando
         if (enUso.has(userKey)) return;
 
         const userData = await db.getUser(userKey);
         const now = Date.now();
-        const cooldown = 5 * 60 * 1000; 
+        const cooldown = 5 * 60 * 1000; // 5 minutos de espera
 
         const remaining = cooldown - (now - (userData.lastCazar || 0));
 
@@ -125,14 +119,24 @@ module.exports = {
             return reply(`⏳ Tus presas están escondidas. Debes esperar *${m}m ${s}s* para volver a cazar.`);
         }
 
+        // 🔥 Ponemos el candado
         enUso.add(userKey);
         await db.setUser(userKey, { lastCazar: now });
 
         try {
-            // 🔥 BONO PRO: Si tiene Arma Pro, multiplicador de 1.5x
-            let multiplicador = (inv.arma_pro || 0) > 0 ? 1.5 : 1.0;
-            let avisoPro = multiplicador > 1 ? '\n🏹 *¡Tu Arco de Cacería Pro te da un bono de XP!*' : '';
+            // 🔥 VERIFICACIÓN DE ARMA PRO
+            const inv = await shop.getInventory(userKey);
+            let multiplicador = 1;
+            let avisoPro = '';
 
+            if ((inv.arma_pro || 0) > 0) {
+                multiplicador = 1.5;
+                avisoPro = '\n🏹 *¡Tu Arco de Cacería Pro te da un bono de XP!*';
+            }
+
+            // ==========================================
+            // ANIMACIÓN DE CAZA
+            // ==========================================
             let msg = await sock.sendMessage(remoteJid, { 
                 text: `🌳 @${number(sender)} se adentra en lo profundo del bosque con su rifle en mano...`, 
                 mentions: [userKey] 
@@ -142,7 +146,7 @@ module.exports = {
 
             try { 
                 await sock.sendMessage(remoteJid, { 
-                    text: `🐾 *¡CRACK!* Se escucha una rama romperse... @${number(sender)} apunta su arma 🎯`, 
+                    text: `🐾 *¡CRACK!* Se escucha una rama romperse... @${number(sender)} contiene la respiración y apunta su arma 🎯`, 
                     edit: msg.key, 
                     mentions: [userKey] 
                 }); 
@@ -150,18 +154,21 @@ module.exports = {
             
             await esperar(4000);
 
+            // ==========================================
+            // CÁLCULO DE PROBABILIDADES
+            // ==========================================
             let rand = Math.random() * 100;
             let premio = 0;
             let resultadoTxt = '';
 
             if (rand < 5) { 
-                premio = Math.floor(randXP(4000, 6000) * multiplicador);
+                premio = Math.floor(randXP(4000, 6000) * multiplicador); // Aplica multiplicador
                 resultadoTxt = `${pick(cazaLegendaria)}${avisoPro}\n💰 Recompensa: *+${premio} XP*.`;
             } else if (rand < 20) { 
-                premio = Math.floor(randXP(1500, 2500) * multiplicador);
+                premio = Math.floor(randXP(1500, 2500) * multiplicador); // Aplica multiplicador
                 resultadoTxt = `${pick(cazaEpica)}${avisoPro}\n💰 Recompensa: *+${premio} XP*.`;
             } else if (rand < 70) { 
-                premio = Math.floor(randXP(400, 1000) * multiplicador);
+                premio = Math.floor(randXP(400, 1000) * multiplicador);  // Aplica multiplicador
                 resultadoTxt = `${pick(cazaNormal)}${avisoPro}\n💰 Recompensa: *+${premio} XP*.`;
             } else if (rand < 90) { 
                 premio = 0;
@@ -173,8 +180,14 @@ module.exports = {
                 resultadoTxt = `${pick(cazaCastigo)}\n❌ Perdiste: *-${castigo} XP*.`;
             }
 
-            if (premio > 0) await db.addXP(userKey, premio);
+            // Entregar el premio si ganó algo
+            if (premio > 0) {
+                await db.addXP(userKey, premio);
+            }
 
+            // ==========================================
+            // RESULTADO FINAL
+            // ==========================================
             let finalMsg = `*RESULTADO DE LA CACERÍA* 🏹\n\n${resultadoTxt}\n👤 Cazador: @${number(sender)}`;
             
             try { 
