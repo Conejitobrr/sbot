@@ -11,10 +11,10 @@ const ITEMS = {
   spotify: { key: 'spotifyUses', name: '🎵 Uso de .spotify', price: 1500, desc: 'Permite usar .spotify 1 vez' },
   llave: { key: 'keys', name: '🔑 Llave de celda', price: 1000, desc: 'Permite salir de la cárcel 1 vez' },
   
-  // EQUIPO PRO (Mejoras)
-  cana_pro: { key: 'cana_pro', name: '🎣 Caña Profesional', price: 5000, desc: 'Pesca con mayor éxito y más XP' },
-  arma_pro: { key: 'arma_pro', name: '🏹 Arco de Cacería', price: 5000, desc: 'Caza con mayor éxito y más XP' },
-  pico_pro: { key: 'pico_pro', name: '⛏️ Pico de Diamante', price: 5000, desc: 'Mina con mayor éxito y más XP' },
+  // EQUIPO PRO (Ahora a 30k XP)
+  cana_pro: { key: 'cana_pro', name: '🎣 Caña Profesional', price: 30000, desc: 'Pesca con mayor éxito y más XP' },
+  arma_pro: { key: 'arma_pro', name: '🏹 Arco de Cacería', price: 30000, desc: 'Caza con mayor éxito y más XP' },
+  pico_pro: { key: 'pico_pro', name: '⛏️ Pico de Diamante', price: 30000, desc: 'Mina con mayor éxito y más XP' },
   
   // ESPECIALES
   caja: { key: 'cajaUses', name: '📦 Caja Sorpresa XP', price: 2000, desc: 'Contiene XP aleatorio' },
@@ -41,9 +41,9 @@ function shopText() {
 🎟️ *ver* (10k XP)
 🎵 *spotify* (1.5k XP)
 🔑 *llave* (1k XP)
-🎣 *cana_pro* (5k XP)
-🏹 *arma_pro* (5k XP)
-⛏️ *pico_pro* (5k XP)
+🎣 *cana_pro* (30k XP)
+🏹 *arma_pro* (30k XP)
+⛏️ *pico_pro* (30k XP)
 📦 *caja* (2k XP)
 🛡️ *escudo* (2.5k XP)
 
