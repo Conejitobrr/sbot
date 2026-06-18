@@ -4,9 +4,9 @@
 const carreras = {};
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Función auxiliar idéntica a la de tu handler para asegurar que la DB lea bien al usuario
-function cleanNumber(jid = '') {
-    return String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+// Extraída de tu robaxp.js para mantener el mismo formato de ID
+function cleanJid(jid = '') {
+    return String(jid).split(':')[0];
 }
 
 module.exports = {
@@ -14,10 +14,10 @@ module.exports = {
     execute: async ({ sock, remoteJid, sender, pushName, args, command, db, reply, fromGroup }) => {
         
         if (!fromGroup) {
-            return reply('❌ Este comando es más divertido y está diseñado para usarse solo en grupos.');
+            return reply('❌ Este comando solo funciona en grupos.');
         }
 
-        const userKey = cleanNumber(sender);
+        const userKey = cleanJid(sender);
         const userData = await db.getUser(userKey);
 
         // ==========================================
@@ -28,29 +28,42 @@ module.exports = {
                 return reply('⚠️ Ya hay una carrera organizándose o corriendo en este grupo.');
             }
 
-            const apuesta = parseInt(args[0]);
-            
-            if (!apuesta || isNaN(apuesta) || apuesta <= 0) {
-                return reply('🏁 Debes ingresar una cantidad válida de experiencia para apostar.\nEjemplo: *.carrera 500*');
-            }
+            let apuesta = 0;
 
-            if (userData.xp < apuesta) {
-                return reply(`❌ No tienes suficiente experiencia para iniciar esta carrera.\nTu XP actual es: *${userData.xp}*`);
-            }
+            // Si el usuario puso un número (ej. .carrera 500)
+            if (args[0]) {
+                apuesta = parseInt(args[0]);
+                
+                if (isNaN(apuesta) || apuesta <= 0) {
+                    return reply('🏁 Debes ingresar una cantidad válida si quieres apostar.\n\nEjemplos:\n*.carrera* (para jugar por diversión)\n*.carrera 500* (para apostar 500 XP)');
+                }
 
-            // Descontamos la XP inmediatamente usando tu función removeXP
-            await db.removeXP(userKey, apuesta);
+                if ((userData.xp || 0) < apuesta) {
+                    return reply(`❌ No tienes suficiente experiencia para esta apuesta.\nTu XP actual es: *${userData.xp || 0}*`);
+                }
+
+                // Descontamos la XP inmediatamente
+                await db.removeXP(userKey, apuesta);
+            }
 
             // Registramos la carrera
             carreras[remoteJid] = {
                 estado: 'esperando',
                 apuesta: apuesta,
-                // Guardamos el userKey para poder darle el premio después si gana
                 participantes: [{ id: sender, userKey: userKey, nombre: pushName || 'Jugador', posicion: 0 }],
                 longitudPista: 12
             };
 
-            reply(`🏁 ¡Se ha iniciado una carrera de caballos!\n💰 Apuesta fijada: *${apuesta} XP*\n\n⏳ Tienen 2 minutos para unirse escribiendo *.unirse*`);
+            // Construir el mensaje dependiendo de si hay apuesta o no
+            let msgInicial = `🏁 ¡Se ha iniciado una carrera de caballos!\n\n`;
+            if (apuesta > 0) {
+                msgInicial += `💰 Apuesta fijada: *${apuesta} XP*\n\n`;
+            } else {
+                msgInicial += `🎮 *Carrera amistosa* (Sin apuestas)\n\n`;
+            }
+            msgInicial += `⏳ Tienen 2 minutos para unirse escribiendo *.unirse*`;
+
+            reply(msgInicial);
 
             // Temporizador de 2 minutos (120,000 ms)
             setTimeout(async () => {
@@ -86,15 +99,18 @@ module.exports = {
                 return reply('⚠️ Ya estás inscrito en esta carrera.');
             }
 
-            if (userData.xp < carrera.apuesta) {
-                return reply(`❌ No tienes suficiente XP para igualar la apuesta de *${carrera.apuesta} XP*.\nTu XP actual es: *${userData.xp}*`);
+            // Si la carrera tiene apuesta, validamos y cobramos
+            if (carrera.apuesta > 0) {
+                if ((userData.xp || 0) < carrera.apuesta) {
+                    return reply(`❌ No tienes suficiente XP para igualar la apuesta de *${carrera.apuesta} XP*.\nTu XP actual es: *${userData.xp || 0}*`);
+                }
+                await db.removeXP(userKey, carrera.apuesta);
+                reply(`🐎 *${pushName || 'Jugador'}* se ha unido a la carrera apostando *${carrera.apuesta} XP*.`);
+            } else {
+                reply(`🐎 *${pushName || 'Jugador'}* se ha unido a la carrera amistosa.`);
             }
-
-            // Descontar XP al unirse
-            await db.removeXP(userKey, carrera.apuesta);
             
             carrera.participantes.push({ id: sender, userKey: userKey, nombre: pushName || 'Jugador', posicion: 0 });
-            reply(`🐎 *${pushName}* se ha unido a la carrera igualando la apuesta.`);
         }
     }
 };
@@ -110,7 +126,13 @@ async function animarCarrera(sock, remoteJid, db) {
     let pozoTotal = carrera.apuesta * carrera.participantes.length;
 
     while (!hayGanador) {
-        let textoFrame = `🏁 *CARRERA DE CABALLOS*\n💰 Pozo en juego: *${pozoTotal} XP*\n\n`;
+        let textoFrame = `🏁 *CARRERA DE CABALLOS*\n`;
+        
+        if (carrera.apuesta > 0) {
+            textoFrame += `💰 Pozo en juego: *${pozoTotal} XP*\n\n`;
+        } else {
+            textoFrame += `🎮 Carrera Amistosa\n\n`;
+        }
 
         for (let p of carrera.participantes) {
             p.posicion += Math.floor(Math.random() * 3);
@@ -120,8 +142,8 @@ async function animarCarrera(sock, remoteJid, db) {
                 hayGanador = true;
             }
 
-            let izquierda = carrera.longitudPista - p.posicion;
-            let derecha = p.posicion;
+            let izquierda = Math.max(0, carrera.longitudPista - p.posicion);
+            let derecha = Math.max(0, p.posicion);
             
             textoFrame += `🏁${'─'.repeat(izquierda)}🐎${'─'.repeat(derecha)} @${p.nombre}\n`;
         }
@@ -132,30 +154,17 @@ async function animarCarrera(sock, remoteJid, db) {
         } else {
             try {
                 await sock.sendMessage(remoteJid, { text: textoFrame, edit: mensajeId });
-            } catch (err) {}
+            } catch (err) {
+                // Se ignora el error si falla la edición por latencia
+            }
         }
 
         await esperar(1500); 
     }
 
-    let ganadores = carrera.participantes.filter(p => p.posicion === carrera.longitudPista);
-    let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
+    let ganadores = carrera.participantes.filter(p => p.posicion >= carrera.longitudPista);
     let textoFinal = "🏆 *¡LA CARRERA HA TERMINADO!*\n\n";
 
-    if (ganadores.some(g => g.id === 'bot')) {
-        textoFinal += `🤖 ¡SiriusBot ha cruzado la meta y se queda con todo el botín de *${pozoTotal} XP*! Suerte para la próxima.`;
-    } else {
-        let nombresGanadores = ganadores.map(g => g.nombre).join(', ');
-        textoFinal += `🎉 ¡Felicidades a *${nombresGanadores}*!\n💰 Has ganado *${premioPorGanador} XP*.`;
-
-        // Entregar la ganancia usando tu función addXP y el userKey limpio
-        for (let g of ganadores) {
-            if (g.id !== 'bot') {
-                await db.addXP(g.userKey, premioPorGanador);
-            }
-        }
-    }
-
-    await sock.sendMessage(remoteJid, { text: textoFinal });
-    delete carreras[remoteJid];
-}
+    // Si hubo apuestas
+    if (carrera.apuesta > 0)
+        
