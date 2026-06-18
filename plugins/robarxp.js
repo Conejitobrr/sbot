@@ -107,18 +107,26 @@ module.exports = {
 
     const robber = await db.getUser(thief);
     const victim = await db.getUser(target);
+    
+    // Obtenemos el tiempo actual al principio
+    const now = Date.now();
 
     // 🔥 LÓGICA DE ESCUDO ANTI-ROBO
     const victimInv = await shop.getInventory(target);
     if ((victimInv.shieldUses || 0) > 0) {
         await shop.useItem(target, 'shieldUses', 1);
+        
+        // 🔥 APLICAMOS COOLDOWN AL LADRÓN TAMBIÉN CUANDO ES BLOQUEADO
+        await db.setUser(thief, {
+            lastRobXp: now
+        });
+
         return sock.sendMessage(remoteJid, {
             text: `🛡️ @${target.split('@')[0]} tiene un *Escudo Anti-Robo* activo. ¡El escudo absorbió el ataque y se rompió!`,
             mentions: [target]
         }, { quoted: msg });
     }
 
-    const now = Date.now();
     const cooldown = 10 * 60 * 1000;
 
     const remaining = cooldown - (now - (robber.lastRobXp || 0));
