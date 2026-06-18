@@ -9,6 +9,13 @@ function cleanJid(jid = '') {
     return String(jid).split(':')[0];
 }
 
+// Función para obtener solo el número y formatear la mención
+function number(jid = '') {
+    return cleanJid(jid)
+        .split('@')[0]
+        .replace(/\D/g, '');
+}
+
 module.exports = {
     commands: ['carrera', 'unirse'],
     execute: async ({ sock, remoteJid, sender, pushName, args, command, db, reply, fromGroup }) => {
@@ -46,11 +53,11 @@ module.exports = {
                 await db.removeXP(userKey, apuesta);
             }
 
-            // Registramos la carrera
+            // Registramos la carrera (usamos cleanJid(sender) para la mención)
             carreras[remoteJid] = {
                 estado: 'esperando',
                 apuesta: apuesta,
-                participantes: [{ id: sender, userKey: userKey, nombre: pushName || 'Jugador', posicion: 0 }],
+                participantes: [{ id: cleanJid(sender), userKey: userKey, nombre: pushName || 'Jugador', posicion: 0 }],
                 longitudPista: 12
             };
 
@@ -95,7 +102,7 @@ module.exports = {
                 return reply('⚠️ No hay ninguna carrera en fase de inscripción ahora mismo.');
             }
 
-            if (carrera.participantes.find(p => p.id === sender)) {
+            if (carrera.participantes.find(p => p.id === cleanJid(sender))) {
                 return reply('⚠️ Ya estás inscrito en esta carrera.');
             }
 
@@ -105,12 +112,19 @@ module.exports = {
                     return reply(`❌ No tienes suficiente XP para igualar la apuesta de *${carrera.apuesta} XP*.\nTu XP actual es: *${userData.xp || 0}*`);
                 }
                 await db.removeXP(userKey, carrera.apuesta);
-                reply(`🐎 *${pushName || 'Jugador'}* se ha unido a la carrera apostando *${carrera.apuesta} XP*.`);
+                
+                await sock.sendMessage(remoteJid, {
+                    text: `🐎 @${number(sender)} se ha unido a la carrera apostando *${carrera.apuesta} XP*.`,
+                    mentions: [cleanJid(sender)]
+                });
             } else {
-                reply(`🐎 *${pushName || 'Jugador'}* se ha unido a la carrera amistosa.`);
+                await sock.sendMessage(remoteJid, {
+                    text: `🐎 @${number(sender)} se ha unido a la carrera amistosa.`,
+                    mentions: [cleanJid(sender)]
+                });
             }
             
-            carrera.participantes.push({ id: sender, userKey: userKey, nombre: pushName || 'Jugador', posicion: 0 });
+            carrera.participantes.push({ id: cleanJid(sender), userKey: userKey, nombre: pushName || 'Jugador', posicion: 0 });
         }
     }
 };
@@ -124,6 +138,9 @@ async function animarCarrera(sock, remoteJid, db) {
     let mensajeId = null;
 
     let pozoTotal = carrera.apuesta * carrera.participantes.length;
+    
+    // Filtramos al bot para obtener solo los JIDs de jugadores reales
+    let arrayMenciones = carrera.participantes.filter(p => p.id !== 'bot').map(p => p.id);
 
     while (!hayGanador) {
         let textoFrame = `🏁 *CARRERA DE CABALLOS*\n`;
@@ -145,15 +162,25 @@ async function animarCarrera(sock, remoteJid, db) {
             let izquierda = Math.max(0, carrera.longitudPista - p.posicion);
             let derecha = Math.max(0, p.posicion);
             
-            textoFrame += `🏁${'─'.repeat(izquierda)}🐎${'─'.repeat(derecha)} @${p.nombre}\n`;
+            // Asignamos la mención si es jugador, o el nombre normal si es el bot
+            let tagNombre = p.id === 'bot' ? 'SiriusBot' : `@${number(p.id)}`;
+            
+            textoFrame += `🏁${'─'.repeat(izquierda)}🐎${'─'.repeat(derecha)} ${tagNombre}\n`;
         }
 
         if (!mensajeId) {
-            let msg = await sock.sendMessage(remoteJid, { text: textoFrame });
+            let msg = await sock.sendMessage(remoteJid, { 
+                text: textoFrame,
+                mentions: arrayMenciones 
+            });
             mensajeId = msg.key;
         } else {
             try {
-                await sock.sendMessage(remoteJid, { text: textoFrame, edit: mensajeId });
+                await sock.sendMessage(remoteJid, { 
+                    text: textoFrame, 
+                    edit: mensajeId,
+                    mentions: arrayMenciones 
+                });
             } catch (err) {
                 // Se ignora el error si falla la edición por latencia
             }
@@ -172,8 +199,8 @@ async function animarCarrera(sock, remoteJid, db) {
         if (ganadores.some(g => g.id === 'bot')) {
             textoFinal += `🤖 ¡SiriusBot ha cruzado la meta y se queda con todo el botín de *${pozoTotal} XP*! Suerte para la próxima.`;
         } else {
-            let nombresGanadores = ganadores.map(g => g.nombre).join(', ');
-            textoFinal += `🎉 ¡Felicidades a *${nombresGanadores}*!\n💰 Has ganado *${premioPorGanador} XP*.`;
+            let tagsGanadores = ganadores.map(g => `@${number(g.id)}`).join(', ');
+            textoFinal += `🎉 ¡Felicidades a ${tagsGanadores}!\n💰 Has ganado *${premioPorGanador} XP*.`;
 
             for (let g of ganadores) {
                 if (g.id !== 'bot') {
@@ -184,14 +211,21 @@ async function animarCarrera(sock, remoteJid, db) {
     } 
     // Si fue una carrera amistosa
     else {
-        let nombresGanadores = ganadores.map(g => g.nombre).join(', ');
         if (ganadores.some(g => g.id === 'bot')) {
             textoFinal += `🤖 ¡SiriusBot ha cruzado la meta en primer lugar! Nadie me puede ganar.`;
         } else {
-            textoFinal += `🎉 ¡Felicidades a *${nombresGanadores}* por ganar la carrera!`;
+            let tagsGanadores = ganadores.map(g => `@${number(g.id)}`).join(', ');
+            textoFinal += `🎉 ¡Felicidades a ${tagsGanadores} por ganar la carrera!`;
         }
     }
 
-    await sock.sendMessage(remoteJid, { text: textoFinal });
+    // Obtenemos solo los JIDs de los ganadores para la mención final
+    let mencionesGanadores = ganadores.filter(g => g.id !== 'bot').map(g => g.id);
+
+    await sock.sendMessage(remoteJid, { 
+        text: textoFinal,
+        mentions: mencionesGanadores
+    });
+    
     delete carreras[remoteJid];
 }
