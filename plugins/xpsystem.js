@@ -12,9 +12,9 @@ function randomXP() {
     return Math.floor(Math.random() * 10) + 5;
 }
 
-// Función auxiliar para asegurar que el ID coincida con la base de datos
-function cleanNumber(jid = '') {
-    return String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+// Limpiamos solo el código de dispositivo para evitar errores, pero conservamos @s.whatsapp.net
+function cleanJid(jid = '') {
+    return String(jid).split(':')[0];
 }
 
 module.exports = {
@@ -50,9 +50,9 @@ module.exports = {
         const data = await db.getAll();
         const users = data.users || {};
 
-        // 🔄 IGNORAMOS EL NIVEL GUARDADO Y FORZAMOS EL RECÁLCULO NUEVO
+        // 🔄 IGNORAMOS EL NIVEL GUARDADO Y FORZAMOS EL RECÁLCULO NUEVO PARA EL GLOBAL
         const list = Object.entries(users).map(([id, u]) => ({
-            id,
+            id: cleanJid(id),
             xp: u.xp || 0,
             level: db.calculateLevel(u.xp || 0)
         }));
@@ -72,20 +72,16 @@ module.exports = {
                 });
             }
 
-            // Obtenemos los JIDs y buscamos su equivalente limpio en la DB
-            const participants = metadata.participants.map(p => p.id);
+            // Obtenemos los JIDs reales de los miembros actuales
+            const participants = metadata.participants.map(p => cleanJid(p.id));
 
             const groupUsers = participants
-                .map(id => {
-                    const cleanId = cleanNumber(id);
-                    return { id, cleanId };
-                })
-                .filter(p => users[p.cleanId])
-                .map(p => ({
-                    id: p.id,
-                    xp: users[p.cleanId].xp || 0,
-                    // Forzamos recálculo aquí también
-                    level: db.calculateLevel(users[p.cleanId].xp || 0) 
+                .filter(id => users[id]) // Buscamos su ID exacto en la DB
+                .map(id => ({
+                    id,
+                    xp: users[id].xp || 0,
+                    // Forzamos el recálculo aquí también
+                    level: db.calculateLevel(users[id].xp || 0) 
                 }));
 
             if (!groupUsers.length) {
@@ -108,7 +104,7 @@ module.exports = {
 
                 const medal = ['🥇','🥈','🥉'][i] || `${i + 1}.`;
 
-                text += `${medal} @${cleanNumber(u.id)}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
+                text += `${medal} @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
             }
 
             return sock.sendMessage(remoteJid, {
@@ -132,13 +128,11 @@ module.exports = {
             for (let i = 0; i < top.length; i++) {
 
                 const u = top[i];
-                // Restauramos el formato jid para mencionarlo correctamente en el top global
-                const jid = u.id.includes('@') ? u.id : `${u.id}@s.whatsapp.net`;
-                mentions.push(jid);
+                mentions.push(u.id);
 
                 const medal = ['🥇','🥈','🥉'][i] || `${i + 1}.`;
 
-                text += `${medal} @${cleanNumber(u.id)}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
+                text += `${medal} @${u.id.split('@')[0]}\n⭐ Nivel: ${u.level}\n⚡ XP: ${u.xp}\n\n`;
             }
 
             return sock.sendMessage(remoteJid, {
