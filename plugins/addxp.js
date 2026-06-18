@@ -2,11 +2,6 @@
 
 const db = require('../lib/database');
 
-// Función crucial para limpiar los códigos de dispositivo y que la DB lo entienda
-function cleanNumber(jid = '') {
-  return String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
-}
-
 module.exports = {
   commands: ['addxp'],
   description: 'Añadir XP a un usuario o al bot (Owner)',
@@ -15,6 +10,7 @@ module.exports = {
     const {
       sock,
       remoteJid,
+      sender,
       msg,
       args,
       isOwner,
@@ -29,17 +25,19 @@ module.exports = {
 
     let target;
 
-    // 1. Mención (PRIORIDAD: Si mencionas a alguien, ignora a quién le respondes)
-    if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length) {
-      target = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
-    }
-    // 2. Responder mensaje
-    else if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+    // 1. Responder mensaje
+    if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
       target = msg.message.extendedTextMessage.contextInfo.participant;
     }
-    // 3. Atajo directo para darle XP al bot
+    // 2. Mención
+    else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length) {
+      target = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+    }
+    // 3. Atajo para el bot
     else if (args.includes('bot') || args.includes('Bot')) {
-      target = botJid || sock.user?.id;
+      // Extraemos el ID del bot y nos aseguramos de limpiarlo de códigos de dispositivo
+      let botId = botJid || sock.user?.id || '';
+      target = botId.includes(':') ? botId.split(':')[0] + '@s.whatsapp.net' : botId;
     }
 
     if (!target) {
@@ -48,30 +46,29 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    const amount = parseInt(args.find(a => /^\d+$/.test(a)));
+    const amount = parseInt(
+      args.find(a => /^\d+$/.test(a))
+    );
 
     if (!amount || amount <= 0) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Debes indicar una cantidad válida.\n\nEjemplo:\n.addxp @usuario 1000'
+        text: '❌ Debes indicar una cantidad válida.\n\nEjemplos:\n.addxp @usuario 1000\n.addxp bot 1000'
       }, { quoted: msg });
     }
 
-    // LIMPIAMOS EL JID PARA LA BASE DE DATOS
-    const userKey = cleanNumber(target);
-    
-    // 🔥 SOLUCIÓN: Reconstruimos el JID forzosamente limpio para que WhatsApp no se buguee
-    const targetForMention = `${userKey}@s.whatsapp.net`;
+    // Tu lógica original que guardaba correctamente la XP
+    await db.addXP(target, amount);
 
-    // Añadimos la experiencia al número limpio
-    await db.addXP(userKey, amount);
-
-    // Identificamos si se le dio al bot para dar un mensaje personalizado
-    const isBotTarget = userKey === cleanNumber(botJid || sock.user?.id);
-    const nameDisplay = isBotTarget ? 'SiriusBot 🤖' : `@${userKey}`;
+    // Extraemos solo el número limpio para mostrarlo en el texto
+    const number = target.split('@')[0].split(':')[0]; 
+    const isBot = args.includes('bot') || args.includes('Bot');
 
     await sock.sendMessage(remoteJid, {
-      text: `✅ XP añadida correctamente\n\nSe añadieron *${amount} XP* a ${nameDisplay}`,
-      mentions: [targetForMention] // Ahora siempre usará el número limpio
+      text:
+`✅ XP añadida correctamente
+
+Se añadieron ${amount} XP a ${isBot ? 'SiriusBot 🤖' : `@${number}`}`,
+      mentions: [target] // Tu mención original que funcionaba perfecto
     }, { quoted: msg });
   }
 };
