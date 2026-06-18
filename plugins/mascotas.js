@@ -30,10 +30,12 @@ function getTarget(msg, args) {
   return null;
 }
 
-// 🔥 RASTREADOR ACTIVADO: ESTO TE DIRÁ EL ERROR EN LA CONSOLA
+// 🔥 AQUÍ ESTÁ LA SOLUCIÓN: Agregamos .toLowerCase() al tipo
 function getPetVideo(type, state, level) {
   const stage = level >= NIVEL_EVOLUCION ? 'adulto' : 'bebe';
-  const fileName = `${type}_${stage}_${state}.mp4`;
+  
+  // Esto fuerza a que siempre busque "lobo_bebe...", sin importar qué haya en la DB
+  const fileName = `${String(type).toLowerCase()}_${stage}_${state}.mp4`;
   const filePath = path.join(PETS_DIR, fileName);
 
   console.log(`\n========================================`);
@@ -47,7 +49,6 @@ function getPetVideo(type, state, level) {
     return fs.readFileSync(filePath);
   } else {
     console.log(`❌ [ERROR FATAL] El archivo NO EXISTE en el servidor/PC.`);
-    console.log(`💡 Revisa mayúsculas, extensiones ocultas o si actualizaste los archivos en tu hosting.`);
     console.log(`========================================\n`);
     return null; 
   }
@@ -102,7 +103,7 @@ module.exports = {
 
       userData.pet = {
         name: petName,
-        type: randomType,
+        type: randomType, // A partir de ahora se guardará en minúscula
         xp: 0,
         level: 1,
         lastFeed: now,
@@ -145,7 +146,7 @@ module.exports = {
       }
 
       const video = getPetVideo(p.type, estadoActual, p.level);
-      const text = `🐾 *PERFIL DE MASCOTA* 🐾\n\n👤 Dueño: ${pushName}\n🏷️ Nombre: *${p.name}*\n🧬 Tipo: *${p.type.toUpperCase()}*\n📊 Nivel: *${p.level}* (${stage})\n✨ Experiencia: *${p.xp} XP*\n\n💭 Estado: ${notaEstado}`;
+      const text = `🐾 *PERFIL DE MASCOTA* 🐾\n\n👤 Dueño: ${pushName}\n🏷️ Nombre: *${p.name}*\n🧬 Tipo: *${String(p.type).toUpperCase()}*\n📊 Nivel: *${p.level}* (${stage})\n✨ Experiencia: *${p.xp} XP*\n\n💭 Estado: ${notaEstado}`;
 
       if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
@@ -279,3 +280,4 @@ module.exports = {
     }
   }
 };
+                                         
