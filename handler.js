@@ -197,7 +197,6 @@ function cleanNumber(jid = '') {
     .replace(/\D/g, '');
 }
 
-// ✅ DETECCIÓN MEJORADA PARA CONSOLA
 function isObject(value) {
   return value && typeof value === 'object';
 }
@@ -312,7 +311,6 @@ function getReadableMessage(msg) {
   const m = found?.message || message;
   const once = found?.isOnce || hasOnce ? ' de 1 sola vez' : '';
 
-  // ✅ Primero detectar archivos de 1 sola vez, aunque tengan caption/texto
   if (found?.isOnce || hasOnce) {
     if (m.imageMessage) return `[Imagen${once}]`;
     if (m.videoMessage) return m.videoMessage.gifPlayback ? `[GIF${once}]` : `[Video${once}]`;
@@ -349,7 +347,6 @@ async function safeGroupMetadata(sock, jid) {
   }
 }
 
-// ⛓️ SISTEMA DE CÁRCEL
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
 
 function msToTime(ms = 0) {
@@ -480,7 +477,6 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
-    // 🔥 Ejecutar plugins onMessage aunque no sea comando
     if (messagePlugins.length) {
       for (const plugin of messagePlugins) {
         try {
@@ -530,14 +526,11 @@ async function messageHandler(sock, msg, store = {}) {
     const plugin = plugins.get(command);
     if (!plugin) return;
 
-    // 🚫 BLOQUEAR USUARIOS BANEADOS
+    // 🔥 BLOQUEO PARA USUARIOS BANEADOS (AHORA ES SILENCIOSO)
     if (!isOwner) {
       const banned = await db.isBanned(sender);
-
       if (banned) {
-        return sock.sendMessage(remoteJid, {
-          text: '🚫 Estás baneado del bot.\n\nNo puedes usar comandos.'
-        }, { quoted: msg });
+        return; // IGNORA EL COMANDO SIN AVISAR NADA
       }
     }
 
