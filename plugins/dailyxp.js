@@ -33,7 +33,22 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    const reward = Math.floor(Math.random() * 1501) + 500;
+    // 🔥 SISTEMA DE RECOMPENSAS
+    let reward = 0;
+    let mensajeRespuesta = '';
+    
+    // Genera un número aleatorio entre 0 y 1. 
+    // Si es menor a 0.05 (5% de probabilidad), gana el Jackpot.
+    let isLucky = Math.random() < 0.05; 
+
+    if (isLucky) {
+      reward = 10000;
+      mensajeRespuesta = `🎰 *¡JACKPOT!* Hoy los dioses del bot te han sonreído.\n\n🎁 Recompensa diaria espectacular\n⭐ Ganaste: *${reward} XP*`;
+    } else {
+      // Recompensa normal variable: entre 1000 y 3000 XP
+      reward = Math.floor(Math.random() * 2001) + 1000;
+      mensajeRespuesta = `🎁 Recompensa diaria reclamada\n\n⭐ Ganaste: *${reward} XP*`;
+    }
 
     await db.addXP(sender, reward);
     await db.setUser(sender, {
@@ -41,10 +56,7 @@ module.exports = {
     });
 
     await sock.sendMessage(remoteJid, {
-      text:
-`🎁 Recompensa diaria reclamada
-
-⭐ Ganaste: ${reward} XP`
+      text: mensajeRespuesta
     }, { quoted: msg });
   }
 };
