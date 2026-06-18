@@ -1,7 +1,8 @@
 'use strict';
 
 module.exports = {
-  commands: ['bet', 'casino'],
+  // 🔥 Se cambió el nombre del comando
+  commands: ['darxpbotgaaa'],
 
   async execute(ctx) {
     const {
@@ -27,7 +28,7 @@ module.exports = {
 
       if (!Number.isFinite(apuesta) || apuesta <= 0) {
         return sock.sendMessage(remoteJid, {
-          text: '❌ Debes indicar una cantidad válida.\n\nEjemplo:\n.apostar 1000'
+          text: '❌ Debes indicar una cantidad válida.\n\nEjemplo:\n.darxpbotgaaa 50000'
         }, { quoted: msg });
       }
 
@@ -41,7 +42,8 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      const gano = Math.random() < 0.5;
+      // 🔥 PROBABILIDAD CAMBIADA AL 99% (0.99)
+      const gano = Math.random() < 0.99;
 
       if (gano) {
         await db.addXP(sender, apuesta);
@@ -59,13 +61,14 @@ module.exports = {
         }, { quoted: msg });
       }
 
+      // El 1% de las veces perderá
       await db.removeXP(sender, apuesta);
 
       const nuevoUser = await db.getUser(sender);
 
       return sock.sendMessage(remoteJid, {
         text:
-`💀 ¡PERDISTE!
+`💀 ¡PERDISTE! (Ese 1% de mala suerte...)
 
 💸 Apostaste: ${apuesta} XP
 📉 XP perdido: ${apuesta} XP
