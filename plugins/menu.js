@@ -44,6 +44,7 @@ module.exports = {
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}claim* → Recompensa diaria
 ➤ *${p}rank* → Ranking del chat
+➤ *${p}cazar* → Los animales no son tus amigos☠️
 ➤ *${p}pescar* → Ten cuidado⚠️ 
 ➤ *${p}minar* → Minar no es seguro☠️
 ➤ *${p}chambear* → Trabajas
