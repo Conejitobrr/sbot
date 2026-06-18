@@ -122,20 +122,28 @@ antes de volver a robar XP.`
       }, { quoted: msg });
     }
 
-    if ((victim.xp || 0) < 200) {
+    if ((victim.xp || 0) < 2000) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Esa persona no tiene suficiente XP para robar.'
+        text: '❌ Esa persona es demasiado pobre para ser asaltada (Mínimo 2000 XP).'
       }, { quoted: msg });
     }
 
-    let amount = Math.floor(Math.random() * 151) + 50;
+    let amount = 0;
     let jackpot = false;
 
+    // 🔥 Sistema Dinámico basado en porcentajes
     if (Math.random() < 0.05) {
-      amount = 1000;
+      // Jackpot: Roba entre el 40% y el 60% de la XP de la víctima
+      let porcentaje = (Math.random() * 0.20) + 0.40;
+      amount = Math.floor(victim.xp * porcentaje);
       jackpot = true;
+    } else {
+      // Normal: Roba entre el 10% y el 25% de la XP de la víctima
+      let porcentaje = (Math.random() * 0.15) + 0.10;
+      amount = Math.floor(victim.xp * porcentaje);
     }
 
+    // Aseguramos matemáticamente que no exceda lo que tiene
     amount = Math.min(amount, victim.xp);
 
     await db.removeXP(target, amount);
@@ -152,8 +160,8 @@ antes de volver a robar XP.`
     await sock.sendMessage(remoteJid, {
       text:
 jackpot
-? `💎 JACKPOT!\n\nRobaste ${amount} XP a @${number}\n\n🚨 La policía puede atraparte si usan *.policia* en los próximos 5 minutos.`
-: `🦹 Robaste ${amount} XP a @${number}\n\n🚨 La policía puede atraparte si usan *.policia* en los próximos 5 minutos.`,
+? `💎 ¡JACKPOT MAFIOSO!\n\nDiste el golpe del siglo y le robaste *${amount} XP* a @${number} (casi la mitad de su fortuna).\n\n🚨 La policía puede atraparte si usan *.policia* en los próximos 5 minutos.`
+: `🦹 Te metiste en los bolsillos de @${number} y le robaste *${amount} XP*\n\n🚨 La policía puede atraparte si usan *.policia* en los próximos 5 minutos.`,
       mentions: [target]
     }, { quoted: msg });
   }
