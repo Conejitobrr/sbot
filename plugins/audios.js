@@ -120,6 +120,14 @@ module.exports = {
 
     if (!body) return;
 
+    // 🔥 SHADOWBAN: SI ESTÁ BANEADO, NO HACE NADA (Silencioso)
+    try {
+        const isBanned = await db.isBanned(sender);
+        if (isBanned) return;
+    } catch (e) {
+        console.log('❌ Error comprobando ban en audios:', e?.message || e);
+    }
+
     // 🔥 ACTIVADO / DESACTIVADO
     try {
       if (fromGroup) {
