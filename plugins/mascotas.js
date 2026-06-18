@@ -10,7 +10,6 @@ const PETS_DIR = path.resolve(__dirname, '../media/mascotas');
 // 🐾 MASCOTA PARA PRUEBAS: LOBO 🐺
 const TIPOS_MASCOTA = ['lobo'];
 
-// Nivel necesario para que la mascota evolucione a adulta
 const NIVEL_EVOLUCION = 10; 
 
 function cleanJid(jid = '') {
@@ -31,17 +30,29 @@ function getTarget(msg, args) {
   return null;
 }
 
-// 🔥 Función para obtener el VIDEO correcto
+// 🔥 RASTREADOR ACTIVADO: ESTO TE DIRÁ EL ERROR EN LA CONSOLA
 function getPetVideo(type, state, level) {
   const stage = level >= NIVEL_EVOLUCION ? 'adulto' : 'bebe';
   const fileName = `${type}_${stage}_${state}.mp4`;
   const filePath = path.join(PETS_DIR, fileName);
 
-  if (fs.existsSync(filePath)) return fs.readFileSync(filePath);
-  return null; 
+  console.log(`\n========================================`);
+  console.log(`[🔍 MASCOTAS] Buscando animación...`);
+  console.log(`👉 Archivo: ${fileName}`);
+  console.log(`👉 Ruta exacta: ${filePath}`);
+
+  if (fs.existsSync(filePath)) {
+    console.log(`✅ [ÉXITO] Archivo encontrado. Enviando video...`);
+    console.log(`========================================\n`);
+    return fs.readFileSync(filePath);
+  } else {
+    console.log(`❌ [ERROR FATAL] El archivo NO EXISTE en el servidor/PC.`);
+    console.log(`💡 Revisa mayúsculas, extensiones ocultas o si actualizaste los archivos en tu hosting.`);
+    console.log(`========================================\n`);
+    return null; 
+  }
 }
 
-// ⏱️ Helper para ver si pasaron X horas
 function hoursPassed(timestamp, hours) {
   return (Date.now() - (timestamp || 0)) > (hours * 60 * 60 * 1000);
 }
@@ -55,7 +66,6 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, msg, sender, args, command, isOwner, pushName } = ctx;
 
-    // 🛑 BLOQUEO TEMPORAL: SOLO OWNERS
     if (!isOwner) {
       return sock.sendMessage(remoteJid, { 
         text: `🚧 *Módulo en Mantenimiento*\n\nEl sistema de mascotas está en fase de pruebas beta. Por ahora, solo los Owners pueden utilizarlo.` 
@@ -66,9 +76,6 @@ module.exports = {
     const userData = await db.getUser(userKey);
     const now = Date.now();
 
-    // ==========================================
-    // ☠️ VERIFICACIÓN DE MUERTE POR ABANDONO (72h)
-    // ==========================================
     const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar'];
     
     if (userData.pet && petCommands.includes(command)) {
@@ -77,7 +84,7 @@ module.exports = {
         const video = getPetVideo(p.type, 'sacrificada', p.level);
         const txt = `🪦 *Lamentablemente, ${p.name} ha fallecido por abandono.*\n\nPasó más de 3 días sin probar bocado y no resistió. Su alma se ha unido a la manada celestial...`;
         
-        delete userData.pet; // Se elimina de la base de datos
+        delete userData.pet;
         await db.setUser(userKey, userData);
 
         if (video) return sock.sendMessage(remoteJid, { video, caption: txt, gifPlayback: true }, { quoted: msg });
@@ -85,9 +92,6 @@ module.exports = {
       }
     }
 
-    // ==========================================
-    // 1. ADOPTAR
-    // ==========================================
     if (command === 'adoptar') {
       if (userData.pet) {
         return sock.sendMessage(remoteJid, { text: `❌ Ya tienes una mascota llamada *${userData.pet.name}*.` }, { quoted: msg });
@@ -116,9 +120,6 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    // ==========================================
-    // 2. VER MASCOTA (Estados dinámicos)
-    // ==========================================
     if (command === 'mascota') {
       if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes ninguna mascota. Usa *.adoptar [nombre]*` }, { quoted: msg });
 
@@ -126,7 +127,6 @@ module.exports = {
       const stage = p.level >= NIVEL_EVOLUCION ? 'Adulto 🐺' : 'Bebé 🐾';
       const horaActual = new Date().getHours();
 
-      // ESTADO DINÁMICO
       let estadoActual = 'contenta';
       let notaEstado = '¡Está muy feliz y lleno de energía!';
 
@@ -151,9 +151,6 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    // ==========================================
-    // SISTEMA GENERAL DE ACCIONES
-    // ==========================================
     if (!userData.pet && petCommands.includes(command)) {
       return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
     }
@@ -161,7 +158,6 @@ module.exports = {
     const p = userData.pet;
 
     const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
-      // Bloqueo total si está enferma
       if (!isHeal && hoursPassed(p.lastFeed, 24)) {
         const videoEnferma = getPetVideo(p.type, 'enferma', p.level);
         const txt = `🤒 *${p.name}* está demasiado débil y enfermo para hacer eso. Usa *.curar* primero.`;
@@ -192,9 +188,6 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     };
 
-    // ==========================================
-    // 3. ALIMENTAR (Cooldown 2h)
-    // ==========================================
     if (command === 'alimentar') {
       const remaining = (2 * 60 * 60 * 1000) - (now - (p.lastFeed || 0));
       if (remaining > 0 && !hoursPassed(p.lastFeed, 24)) {
@@ -205,9 +198,6 @@ module.exports = {
       return procesarAccion(Math.floor(Math.random() * 50) + 20, 'comiendo', `🍖 Le diste su comida favorita a *${p.name}*.`);
     }
 
-    // ==========================================
-    // 4. JUGAR (Cooldown 30m) + Hambre
-    // ==========================================
     if (command === 'jugar') {
       if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
         const videoEnojada = getPetVideo(p.type, 'enojada', p.level);
@@ -225,9 +215,6 @@ module.exports = {
       return procesarAccion(Math.floor(Math.random() * 20) + 10, 'jugando', `🎾 Lanzaste un disco y jugaste con *${p.name}*.`);
     }
 
-    // ==========================================
-    // 5. ENTRENAR (Cooldown 4h)
-    // ==========================================
     if (command === 'entrenar') {
       if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
         const videoEnojada = getPetVideo(p.type, 'enojada', p.level);
@@ -245,9 +232,6 @@ module.exports = {
       return procesarAccion(Math.floor(Math.random() * 50) + 50, 'entrenando', `⚔️ Entrenaste las habilidades de caza de *${p.name}*.`);
     }
 
-    // ==========================================
-    // 6. PASEAR (Cooldown 1h)
-    // ==========================================
     if (command === 'pasear') {
       const remaining = (60 * 60 * 1000) - (now - (p.lastWalk || 0));
       if (remaining > 0) {
@@ -258,9 +242,6 @@ module.exports = {
       return procesarAccion(Math.floor(Math.random() * 30) + 15, 'paseando', `🌳 Fuiste a pasear con *${p.name}* bajo la luna.`);
     }
 
-    // ==========================================
-    // 7. CURAR
-    // ==========================================
     if (command === 'curar') {
       if (!hoursPassed(p.lastFeed, 24)) {
         return sock.sendMessage(remoteJid, { text: `✅ *${p.name}* goza de buena salud. No necesita medicina.` }, { quoted: msg });
@@ -269,9 +250,6 @@ module.exports = {
       return procesarAccion(5, 'curando', `💊 Le diste medicina a *${p.name}*. ¡Se recuperó satisfactoriamente!`, true);
     }
 
-    // ==========================================
-    // 8. DORMIR
-    // ==========================================
     if (command === 'dormir') {
       const video = getPetVideo(p.type, 'durmiendo', p.level);
       const text = `💤 Mandaste a dormir a *${p.name}*. Aúlla bajito mientras sueña...`;
@@ -279,9 +257,6 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    // ==========================================
-    // 9. SACRIFICAR (SOLO OWNER)
-    // ==========================================
     if (command === 'sacrificar') {
       const target = getTarget(msg, args);
       if (!target) return sock.sendMessage(remoteJid, { text: `❌ Debes mencionar al dueño de la mascota.` }, { quoted: msg });
