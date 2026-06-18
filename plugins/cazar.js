@@ -1,6 +1,7 @@
 'use strict';
 
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const shop = require('../lib/shop'); // 🔥 NECESARIO PARA EL INVENTARIO
 
 // 🔥 CANDADO ANTI-SPAM
 const enUso = new Set();
@@ -21,9 +22,7 @@ function randXP(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// ==========================================
-// DICCIONARIOS DE VARIEDAD (CAZA)
-// ==========================================
+// ... (los diccionarios de caza se mantienen igual)
 const cazaLegendaria = [
     '🐉 ¡MÍTICO! Lograste abatir a un *Dragón Ancestral* que aterrorizaba la región.',
     '🦄 ¡Increíble! Encontraste un *Unicornio Mágico* y te regaló parte de su magia por dejarlo ir.',
@@ -62,7 +61,7 @@ const cazaNormal = [
     '🦝 Cazaste a un *Mapache* que intentaba robarte la comida.',
     '🦎 Atrapaste a una gran *Iguana* escondida en las rocas.',
     '🦔 Atrapaste a un *Puercoespín*, pero te pinchaste un poco.',
-    ' armadillo Atrapaste un *Armadillo* rodando por el desierto.'
+    'Armadillo Atrapaste un *Armadillo* rodando por el desierto.'
 ];
 
 const cazaBasura = [
@@ -103,12 +102,20 @@ module.exports = {
 
         const userKey = cleanJid(sender);
 
-        // 🔥 Bloqueo Anti-Spam: Si el usuario ya está cazando, se ignora el comando
+        // 🔥 VALIDACIÓN DE ARMA
+        const inv = await shop.getInventory(userKey);
+        const tieneArma = (inv.arma || 0) > 0 || (inv.arma_pro || 0) > 0;
+        
+        if (!tieneArma) {
+            return reply('❌ ¡Necesitas un *Arma de Caza* para cazar! Cómprala en la tienda: *.comprar arma*');
+        }
+
+        // 🔥 Bloqueo Anti-Spam
         if (enUso.has(userKey)) return;
 
         const userData = await db.getUser(userKey);
         const now = Date.now();
-        const cooldown = 5 * 60 * 1000; // 5 minutos de espera
+        const cooldown = 5 * 60 * 1000; 
 
         const remaining = cooldown - (now - (userData.lastCazar || 0));
 
@@ -118,67 +125,56 @@ module.exports = {
             return reply(`⏳ Tus presas están escondidas. Debes esperar *${m}m ${s}s* para volver a cazar.`);
         }
 
-        // 🔥 Ponemos el candado y registramos la hora de uso ANTES de animar para evitar abusos
         enUso.add(userKey);
         await db.setUser(userKey, { lastCazar: now });
 
         try {
-            // ==========================================
-            // ANIMACIÓN DE CAZA MÁS LENTA PARA LEER
-            // ==========================================
+            // 🔥 BONO PRO: Si tiene Arma Pro, multiplicador de 1.5x
+            let multiplicador = (inv.arma_pro || 0) > 0 ? 1.5 : 1.0;
+            let avisoPro = multiplicador > 1 ? '\n🏹 *¡Tu Arco de Cacería Pro te da un bono de XP!*' : '';
+
             let msg = await sock.sendMessage(remoteJid, { 
                 text: `🌳 @${number(sender)} se adentra en lo profundo del bosque con su rifle en mano...`, 
                 mentions: [userKey] 
             });
             
-            // 🔥 Espera 3.5 segundos (2 segundos extra añadidos)
             await esperar(3500);
 
             try { 
                 await sock.sendMessage(remoteJid, { 
-                    text: `🐾 *¡CRACK!* Se escucha una rama romperse... @${number(sender)} contiene la respiración y apunta su arma 🎯`, 
+                    text: `🐾 *¡CRACK!* Se escucha una rama romperse... @${number(sender)} apunta su arma 🎯`, 
                     edit: msg.key, 
                     mentions: [userKey] 
                 }); 
             } catch (e) {}
             
-            // 🔥 Espera 4 segundos completos (2 segundos extra añadidos) para el suspenso final
             await esperar(4000);
 
-            // ==========================================
-            // CÁLCULO DE PROBABILIDADES
-            // ==========================================
             let rand = Math.random() * 100;
             let premio = 0;
             let resultadoTxt = '';
 
             if (rand < 5) { 
-                premio = randXP(4000, 6000); // 5% Legendario
-                resultadoTxt = `${pick(cazaLegendaria)}\n💰 Recompensa: *+${premio} XP*.`;
+                premio = Math.floor(randXP(4000, 6000) * multiplicador);
+                resultadoTxt = `${pick(cazaLegendaria)}${avisoPro}\n💰 Recompensa: *+${premio} XP*.`;
             } else if (rand < 20) { 
-                premio = randXP(1500, 2500); // 15% Épico
-                resultadoTxt = `${pick(cazaEpica)}\n💰 Recompensa: *+${premio} XP*.`;
+                premio = Math.floor(randXP(1500, 2500) * multiplicador);
+                resultadoTxt = `${pick(cazaEpica)}${avisoPro}\n💰 Recompensa: *+${premio} XP*.`;
             } else if (rand < 70) { 
-                premio = randXP(400, 1000);  // 50% Normal
-                resultadoTxt = `${pick(cazaNormal)}\n💰 Recompensa: *+${premio} XP*.`;
+                premio = Math.floor(randXP(400, 1000) * multiplicador);
+                resultadoTxt = `${pick(cazaNormal)}${avisoPro}\n💰 Recompensa: *+${premio} XP*.`;
             } else if (rand < 90) { 
-                premio = 0;                  // 20% Basura
+                premio = 0;
                 resultadoTxt = `${pick(cazaBasura)}\n💸 No ganas nada de XP.`;
             } else { 
-                let castigo = randXP(500, 1000); // 10% Mala suerte
+                let castigo = randXP(500, 1000);
                 if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
                 await db.removeXP(userKey, castigo);
                 resultadoTxt = `${pick(cazaCastigo)}\n❌ Perdiste: *-${castigo} XP*.`;
             }
 
-            // Entregar el premio si ganó algo
-            if (premio > 0) {
-                await db.addXP(userKey, premio);
-            }
+            if (premio > 0) await db.addXP(userKey, premio);
 
-            // ==========================================
-            // RESULTADO FINAL
-            // ==========================================
             let finalMsg = `*RESULTADO DE LA CACERÍA* 🏹\n\n${resultadoTxt}\n👤 Cazador: @${number(sender)}`;
             
             try { 
@@ -188,7 +184,6 @@ module.exports = {
             }
 
         } finally {
-            // 🔥 Quitamos el candado SIEMPRE al terminar
             enUso.delete(userKey);
         }
     }
