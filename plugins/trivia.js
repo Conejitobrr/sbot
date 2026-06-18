@@ -37,8 +37,8 @@ module.exports = {
 
     if (current.timeout) clearTimeout(current.timeout);
 
-    // 🔥 MÁS EXPERIENCIA: 150 - 300 XP
-    const xp = Math.floor(Math.random() * 151) + 150;
+    // 🔥 MÁS EXPERIENCIA Y MAYOR VARIANZA: Entre 500 y 2000 XP
+    const xp = Math.floor(Math.random() * 1501) + 500;
     await db.addXP(sender, xp);
 
     await sock.sendMessage(remoteJid, {
@@ -92,7 +92,7 @@ function sendQuestion(sock, jid, game, quotedMsg = null) {
 
 ⏱️ 60 segundos
 💬 Todos pueden responder sin usar punto
-🏆 Premio: *150 - 300 XP*
+🏆 Premio: *500 - 2000 XP*
 
 Ejemplo:
 *lima*
