@@ -42,9 +42,10 @@ module.exports = {
 ━━━━━━━━━━━━━━━━━━━
 💰 *ECONOMÍA*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}xp* → Ver tu experiencia
-➤ *${p}rank* → Ranking del chat
 ➤ *${p}claim* → Recompensa diaria
+➤ *${p}rank* → Ranking del chat
+➤ *${p}pescar* → Ten cuidado⚠️ 
+➤ *${p}minar* → Minar no es seguro☠️
 ➤ *${p}chambear* → Trabajas
 ➤ *${p}robar* → Robar XP
 ➤ *${p}dar* → Transferir XP
@@ -72,6 +73,7 @@ module.exports = {
 ➤ *${p}piropo*
 ➤ *${p}pregunta*
 ➤ *${p}trivia*
+➤ *${p}carrera* → Carrera de 🐎
 ➤ *${p}felizcumple* menciona para felicitar
 ➤ *${p}formarpareja*
 ➤ *${p}formarparejas*
@@ -123,6 +125,7 @@ module.exports = {
 ➤ *${p}toimage* → Sticker a imagen
 ➤ *${p}tovideo* → Sticker a video
 ➤ *${p}toanime* → Estilo anime
+➤ *${p}filtro* → Filtro de voz
 ➤ *${p}tts* → Texto a voz
 ➤ *${p}attp* → Texto a sticker
 ➤ *${p}ver* → Ver archivo de 1 sola vez(premium)
