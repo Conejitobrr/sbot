@@ -20,9 +20,13 @@ function getRole(level) {
 }
 
 function makeBar(progress, total, size = 10) {
-  const filled = Math.round((progress / total) * size);
-  const empty = size - filled;
+  let filled = Math.round((progress / total) * size);
+  
+  // 🛡️ Filtro de seguridad para evitar números negativos o barras sobrecargadas
+  if (filled < 0) filled = 0;
+  if (filled > size) filled = size;
 
+  const empty = size - filled;
   return '█'.repeat(filled) + '░'.repeat(empty);
 }
 
@@ -55,14 +59,17 @@ module.exports = {
     const xp = user.xp || 0;
     const level = user.level || 1;
 
-    const currentBase = (level - 1) * 1000;
-    const nextBase = level * 1000;
+    // 🔥 Cambiado el límite a 10,000 XP
+    const currentBase = (level - 1) * 10000;
+    const nextBase = level * 10000;
 
     const progress = xp - currentBase;
     const needed = nextBase - xp;
 
     const role = getRole(level);
-    const bar = makeBar(progress, 1000);
+    
+    // 🔥 La barra ahora se calcula sobre una meta de 10,000
+    const bar = makeBar(progress, 10000);
 
     const number = target.split('@')[0];
     const displayUser =
@@ -82,7 +89,7 @@ module.exports = {
 ║ 🎭 Rol: ${role}
 ║
 ║ ${bar}
-║ ${progress}/1000 XP
+║ ${progress}/10000 XP
 ║
 ║ ⏳ Faltan: ${needed} XP
 ╚════════════════════╝`,
