@@ -166,5 +166,32 @@ async function animarCarrera(sock, remoteJid, db) {
     let textoFinal = "🏆 *¡LA CARRERA HA TERMINADO!*\n\n";
 
     // Si hubo apuestas
-    if (carrera.apuesta > 0)
-        
+    if (carrera.apuesta > 0) {
+        let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
+
+        if (ganadores.some(g => g.id === 'bot')) {
+            textoFinal += `🤖 ¡SiriusBot ha cruzado la meta y se queda con todo el botín de *${pozoTotal} XP*! Suerte para la próxima.`;
+        } else {
+            let nombresGanadores = ganadores.map(g => g.nombre).join(', ');
+            textoFinal += `🎉 ¡Felicidades a *${nombresGanadores}*!\n💰 Has ganado *${premioPorGanador} XP*.`;
+
+            for (let g of ganadores) {
+                if (g.id !== 'bot') {
+                    await db.addXP(g.userKey, premioPorGanador);
+                }
+            }
+        }
+    } 
+    // Si fue una carrera amistosa
+    else {
+        let nombresGanadores = ganadores.map(g => g.nombre).join(', ');
+        if (ganadores.some(g => g.id === 'bot')) {
+            textoFinal += `🤖 ¡SiriusBot ha cruzado la meta en primer lugar! Nadie me puede ganar.`;
+        } else {
+            textoFinal += `🎉 ¡Felicidades a *${nombresGanadores}* por ganar la carrera!`;
+        }
+    }
+
+    await sock.sendMessage(remoteJid, { text: textoFinal });
+    delete carreras[remoteJid];
+}
