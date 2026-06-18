@@ -4,11 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../lib/database');
 
-// 📂 RUTA DE TUS VIDEOS
+// 📂 RUTA DE TUS VIDEOS (media/mascotas)
 const PETS_DIR = path.resolve(__dirname, '../media/mascotas');
 
-// 🐾 POR AHORA SOLO HAY 1 TIPO PARA PRUEBAS (Puedes añadir más luego)
-const TIPOS_MASCOTA = ['Lobo'];
+// 🐾 MASCOTA PARA PRUEBAS: LOBO 🐺
+const TIPOS_MASCOTA = ['lobo'];
 
 // Nivel necesario para que la mascota evolucione a adulta
 const NIVEL_EVOLUCION = 10; 
@@ -35,18 +35,26 @@ function getTarget(msg, args) {
 function getPetVideo(type, state, level) {
   const stage = level >= NIVEL_EVOLUCION ? 'adulto' : 'bebe';
   
-  // Ej: media/mascotas/dragon_bebe_comiendo.mp4
+  // Ej: media/mascotas/lobo_bebe_jugando.mp4
   const fileName = `${type}_${stage}_${state}.mp4`;
   const filePath = path.join(PETS_DIR, fileName);
 
   if (fs.existsSync(filePath)) {
     return fs.readFileSync(filePath);
   }
-  return null; // Si no tienes el video, el bot no crashea, solo manda texto
+  return null; // Si no existe, no crashea, solo manda texto
+}
+
+// ⏱️ Helper para ver si pasaron X horas
+function hoursPassed(timestamp, hours) {
+  return (Date.now() - (timestamp || 0)) > (hours * 60 * 60 * 1000);
 }
 
 module.exports = {
-  commands: ['adoptar', 'mascota', 'alimentar', 'sacrificar'],
+  commands: [
+    'adoptar', 'mascota', 'alimentar', 'jugar', 
+    'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar'
+  ],
   
   async execute(ctx) {
     const { sock, remoteJid, msg, sender, args, command, isOwner, pushName } = ctx;
@@ -63,13 +71,11 @@ module.exports = {
     const now = Date.now();
 
     // ==========================================
-    // 1. COMANDO: .adoptar [nombre]
+    // 1. ADOPTAR
     // ==========================================
     if (command === 'adoptar') {
       if (userData.pet) {
-        return sock.sendMessage(remoteJid, { 
-          text: `❌ Ya tienes una mascota llamada *${userData.pet.name}*. No puedes tener dos.` 
-        }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: `❌ Ya tienes una mascota llamada *${userData.pet.name}*.` }, { quoted: msg });
       }
 
       const petName = args.join(' ') || 'Sin Nombre';
@@ -80,117 +86,189 @@ module.exports = {
         type: randomType,
         xp: 0,
         level: 1,
-        lastFeed: 0
+        lastFeed: now,
+        lastPlay: now,
+        lastTrain: 0,
+        lastWalk: 0
       };
 
       await db.setUser(userKey, userData);
 
-      // Usamos el estado "naciendo"
       const video = getPetVideo(randomType, 'naciendo', 1);
-      const text = `🎉 ¡Milagro de vida!\n\nAcaba de nacer tu *${randomType.toUpperCase()}* bebé.\nLe has puesto de nombre: *${petName}*\n\nUsa *.mascota* para ver cómo está y *.alimentar* para que crezca.`;
+      const text = `🎉 ¡Milagro de vida!\n\nAcaba de nacer tu *${randomType.toUpperCase()}* bebé.\nLe has puesto de nombre: *${petName}*\n\nUsa *.mascota* para ver cómo está.`;
 
-      if (video) {
-        // gifPlayback: true lo envía como un video en bucle y sin sonido (estilo GIF)
-        return sock.sendMessage(remoteJid, { video: video, caption: text, gifPlayback: true }, { quoted: msg });
-      }
+      if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
     // ==========================================
-    // 2. COMANDO: .mascota
+    // 2. VER MASCOTA (Estados dinámicos)
     // ==========================================
     if (command === 'mascota') {
-      if (!userData.pet) {
-        return sock.sendMessage(remoteJid, { 
-          text: `❌ No tienes ninguna mascota. Usa *.adoptar [nombre]* para conseguir una.` 
-        }, { quoted: msg });
-      }
+      if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes ninguna mascota. Usa *.adoptar [nombre]*` }, { quoted: msg });
 
       const p = userData.pet;
-      const stage = p.level >= NIVEL_EVOLUCION ? 'Adulto 🐉' : 'Bebé 🐣';
-      
-      // Usamos el estado "contenta"
-      const video = getPetVideo(p.type, 'contenta', p.level);
-      const text = `🐾 *PERFIL DE MASCOTA* 🐾\n\n👤 Dueño: ${pushName}\n🏷️ Nombre: *${p.name}*\n🧬 Tipo: *${p.type.toUpperCase()}*\n📊 Nivel: *${p.level}* (${stage})\n✨ Experiencia: *${p.xp} XP*`;
+      const stage = p.level >= NIVEL_EVOLUCION ? 'Adulto 🐺' : 'Bebé 🐾';
+      const horaActual = new Date().getHours();
 
-      if (video) {
-        return sock.sendMessage(remoteJid, { video: video, caption: text, gifPlayback: true }, { quoted: msg });
+      // ESTADO DINÁMICO
+      let estadoActual = 'contenta';
+      let notaEstado = '¡Está muy feliz y lleno de energía!';
+
+      if (hoursPassed(p.lastFeed, 24)) {
+        estadoActual = 'enferma';
+        notaEstado = '🤒 Está enfermo por no comer. Usa *.curar* y luego *.alimentar*.';
+      } else if (hoursPassed(p.lastPlay, 24)) {
+        estadoActual = 'triste';
+        notaEstado = '😢 Está muy triste porque lo ignoras. Usa *.jugar*.';
+      } else if (horaActual < 6 || horaActual >= 22) {
+        estadoActual = 'durmiendo';
+        notaEstado = '💤 Está durmiendo profundamente. Shhh...';
       }
+
+      const video = getPetVideo(p.type, estadoActual, p.level);
+      const text = `🐾 *PERFIL DE MASCOTA* 🐾\n\n👤 Dueño: ${pushName}\n🏷️ Nombre: *${p.name}*\n🧬 Tipo: *${p.type.toUpperCase()}*\n📊 Nivel: *${p.level}* (${stage})\n✨ Experiencia: *${p.xp} XP*\n\n💭 Estado: ${notaEstado}`;
+
+      if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
     // ==========================================
-    // 3. COMANDO: .alimentar
+    // SISTEMA GENERAL DE ACCIONES (Alimentar, Jugar, etc)
     // ==========================================
-    if (command === 'alimentar') {
-      if (!userData.pet) {
-        return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota para alimentar.` }, { quoted: msg });
+    if (!userData.pet && ['alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar'].includes(command)) {
+      return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
+    }
+
+    const p = userData.pet;
+
+    // Función interna para manejar la subida de XP y evolución
+    const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
+      if (!isHeal && hoursPassed(p.lastFeed, 24)) {
+        const videoEnferma = getPetVideo(p.type, 'enferma', p.level);
+        const txt = `🤒 *${p.name}* está demasiado débil y enfermo para hacer eso. Usa *.curar* primero.`;
+        if (videoEnferma) return sock.sendMessage(remoteJid, { video: videoEnferma, caption: txt, gifPlayback: true }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
       }
 
-      const p = userData.pet;
-      const cooldown = 2 * 60 * 60 * 1000; // 2 horas entre comidas
-
-      const remaining = cooldown - (now - (p.lastFeed || 0));
-      if (remaining > 0) {
-        const m = Math.floor(remaining / 60000);
-        return sock.sendMessage(remoteJid, { 
-          text: `⏳ *${p.name}* está lleno. Tienes que esperar *${m} minuto(s)* para volver a darle de comer.` 
-        }, { quoted: msg });
-      }
-
-      const gainXP = Math.floor(Math.random() * 50) + 20; 
       p.xp += gainXP;
-      p.lastFeed = now;
-
       const newLevel = Math.floor(p.xp / 200) + 1;
       let evoluciono = false;
 
       if (newLevel > p.level) {
-        if (p.level < NIVEL_EVOLUCION && newLevel >= NIVEL_EVOLUCION) {
-          evoluciono = true; 
-        }
+        if (p.level < NIVEL_EVOLUCION && newLevel >= NIVEL_EVOLUCION) evoluciono = true;
         p.level = newLevel;
       }
 
       await db.setUser(userKey, userData);
 
-      // Usamos el estado "comiendo"
-      const video = getPetVideo(p.type, 'comiendo', p.level);
-      let text = `🍖 Le diste su comida favorita a *${p.name}*.\n⭐ Ganó *+${gainXP} XP*.`;
+      const estadoFinal = evoluciono ? 'evolucionando' : newState;
+      let text = `${actionText}\n⭐ Ganó *+${gainXP} XP*.`;
 
       if (evoluciono) {
-        text += `\n\n✨ ¡WOW! *${p.name}* ha crecido y ahora es un *Adulto*. Su apariencia ha cambiado por completo. Usa *.mascota* para verlo.`;
+        text += `\n\n✨ ¡WOW! *${p.name}* ha envuelto su cuerpo en un destello de luz y ha crecido.\n¡Ahora es un *Lobo Adulto*!`;
       }
 
-      if (video) {
-        return sock.sendMessage(remoteJid, { video: video, caption: text, gifPlayback: true }, { quoted: msg });
+      const video = getPetVideo(p.type, estadoFinal, p.level);
+      if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text }, { quoted: msg });
+    };
+
+    // ==========================================
+    // 3. ALIMENTAR (Cooldown 2h)
+    // ==========================================
+    if (command === 'alimentar') {
+      const remaining = (2 * 60 * 60 * 1000) - (now - (p.lastFeed || 0));
+      if (remaining > 0 && !hoursPassed(p.lastFeed, 24)) {
+        const m = Math.floor(remaining / 60000);
+        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* no tiene hambre. Espera *${m} min*.` }, { quoted: msg });
       }
+      p.lastFeed = now;
+      return procesarAccion(Math.floor(Math.random() * 50) + 20, 'comiendo', `🍖 Le diste su comida favorita a *${p.name}*.`);
+    }
+
+    // ==========================================
+    // 4. JUGAR (Cooldown 30m)
+    // ==========================================
+    if (command === 'jugar') {
+      const remaining = (30 * 60 * 1000) - (now - (p.lastPlay || 0));
+      if (remaining > 0) {
+        const m = Math.floor(remaining / 60000);
+        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* está cansado. Espera *${m} min*.` }, { quoted: msg });
+      }
+      p.lastPlay = now;
+      return procesarAccion(Math.floor(Math.random() * 20) + 10, 'jugando', `🎾 Lanzaste un disco y jugaste con *${p.name}*.`);
+    }
+
+    // ==========================================
+    // 5. ENTRENAR (Cooldown 4h)
+    // ==========================================
+    if (command === 'entrenar') {
+      const remaining = (4 * 60 * 60 * 1000) - (now - (p.lastTrain || 0));
+      if (remaining > 0) {
+        const m = Math.floor(remaining / 60000);
+        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* está exhausto. Espera *${m} min*.` }, { quoted: msg });
+      }
+      p.lastTrain = now;
+      return procesarAccion(Math.floor(Math.random() * 50) + 50, 'entrenando', `⚔️ Entrenaste las habilidades de caza de *${p.name}*.`);
+    }
+
+    // ==========================================
+    // 6. PASEAR (Cooldown 1h)
+    // ==========================================
+    if (command === 'pasear') {
+      const remaining = (60 * 60 * 1000) - (now - (p.lastWalk || 0));
+      if (remaining > 0) {
+        const m = Math.floor(remaining / 60000);
+        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* ya caminó suficiente. Espera *${m} min*.` }, { quoted: msg });
+      }
+      p.lastWalk = now;
+      return procesarAccion(Math.floor(Math.random() * 30) + 15, 'paseando', `🌳 Fuiste a pasear con *${p.name}* bajo la luna.`);
+    }
+
+    // ==========================================
+    // 7. CURAR
+    // ==========================================
+    if (command === 'curar') {
+      if (!hoursPassed(p.lastFeed, 24)) {
+        return sock.sendMessage(remoteJid, { text: `✅ *${p.name}* goza de buena salud. No necesita medicina.` }, { quoted: msg });
+      }
+      p.lastFeed = now - (23 * 60 * 60 * 1000); 
+      return procesarAccion(5, 'curando', `💊 Le diste medicina a *${p.name}*. ¡Se recuperó satisfactoriamente!`, true);
+    }
+
+    // ==========================================
+    // 8. DORMIR
+    // ==========================================
+    if (command === 'dormir') {
+      const video = getPetVideo(p.type, 'durmiendo', p.level);
+      const text = `💤 Mandaste a dormir a *${p.name}*. Aúlla bajito mientras sueña...`;
+      if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
     // ==========================================
-    // 4. COMANDO: .sacrificar @usuario (SOLO OWNER)
+    // 9. SACRIFICAR (SOLO OWNER)
     // ==========================================
     if (command === 'sacrificar') {
       const target = getTarget(msg, args);
-      if (!target) {
-        return sock.sendMessage(remoteJid, { text: `❌ Debes mencionar al dueño de la mascota.` }, { quoted: msg });
-      }
+      if (!target) return sock.sendMessage(remoteJid, { text: `❌ Debes mencionar al dueño de la mascota.` }, { quoted: msg });
 
       const targetData = await db.getUser(target);
-      if (!targetData.pet) {
-        return sock.sendMessage(remoteJid, { text: `❌ Ese usuario no tiene ninguna mascota.` }, { quoted: msg });
-      }
+      if (!targetData.pet) return sock.sendMessage(remoteJid, { text: `❌ Ese usuario no tiene ninguna mascota.` }, { quoted: msg });
 
       const nombreMascota = targetData.pet.name;
-      delete targetData.pet; 
+      const level = targetData.pet.level;
+      const type = targetData.pet.type;
       
+      delete targetData.pet; 
       await db.setUser(target, targetData);
 
-      return sock.sendMessage(remoteJid, { 
-        text: `☠️ La mascota *${nombreMascota}* de @${cleanNumber(target)} ha sido enviada al más allá por orden tuya.\n\nEl usuario tiene su espacio libre para adoptar otra.`,
-        mentions: [`${cleanNumber(target)}@s.whatsapp.net`]
-      }, { quoted: msg });
+      const video = getPetVideo(type, 'sacrificada', level);
+      const text = `☠️ El lobo *${nombreMascota}* de @${cleanNumber(target)} fue sacrificado y regresó con la manada celestial...`;
+
+      if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true, mentions: [`${cleanNumber(target)}@s.whatsapp.net`] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text, mentions: [`${cleanNumber(target)}@s.whatsapp.net`] }, { quoted: msg });
     }
   }
 };
