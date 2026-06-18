@@ -34,15 +34,11 @@ function getTarget(msg, args) {
 // 🔥 Función para obtener el VIDEO correcto
 function getPetVideo(type, state, level) {
   const stage = level >= NIVEL_EVOLUCION ? 'adulto' : 'bebe';
-  
-  // Ej: media/mascotas/lobo_bebe_jugando.mp4
   const fileName = `${type}_${stage}_${state}.mp4`;
   const filePath = path.join(PETS_DIR, fileName);
 
-  if (fs.existsSync(filePath)) {
-    return fs.readFileSync(filePath);
-  }
-  return null; // Si no existe, no crashea, solo manda texto
+  if (fs.existsSync(filePath)) return fs.readFileSync(filePath);
+  return null; 
 }
 
 // ⏱️ Helper para ver si pasaron X horas
@@ -69,6 +65,25 @@ module.exports = {
     const userKey = cleanJid(sender);
     const userData = await db.getUser(userKey);
     const now = Date.now();
+
+    // ==========================================
+    // ☠️ VERIFICACIÓN DE MUERTE POR ABANDONO (72h)
+    // ==========================================
+    const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar'];
+    
+    if (userData.pet && petCommands.includes(command)) {
+      if (hoursPassed(userData.pet.lastFeed, 72)) {
+        const p = userData.pet;
+        const video = getPetVideo(p.type, 'sacrificada', p.level);
+        const txt = `🪦 *Lamentablemente, ${p.name} ha fallecido por abandono.*\n\nPasó más de 3 días sin probar bocado y no resistió. Su alma se ha unido a la manada celestial...`;
+        
+        delete userData.pet; // Se elimina de la base de datos
+        await db.setUser(userKey, userData);
+
+        if (video) return sock.sendMessage(remoteJid, { video, caption: txt, gifPlayback: true }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
+      }
+    }
 
     // ==========================================
     // 1. ADOPTAR
@@ -118,6 +133,9 @@ module.exports = {
       if (hoursPassed(p.lastFeed, 24)) {
         estadoActual = 'enferma';
         notaEstado = '🤒 Está enfermo por no comer. Usa *.curar* y luego *.alimentar*.';
+      } else if (hoursPassed(p.lastFeed, 12)) {
+        estadoActual = 'enojada';
+        notaEstado = '💢 Está de mal humor y con mucha hambre. Usa *.alimentar*.';
       } else if (hoursPassed(p.lastPlay, 24)) {
         estadoActual = 'triste';
         notaEstado = '😢 Está muy triste porque lo ignoras. Usa *.jugar*.';
@@ -134,16 +152,16 @@ module.exports = {
     }
 
     // ==========================================
-    // SISTEMA GENERAL DE ACCIONES (Alimentar, Jugar, etc)
+    // SISTEMA GENERAL DE ACCIONES
     // ==========================================
-    if (!userData.pet && ['alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar'].includes(command)) {
+    if (!userData.pet && petCommands.includes(command)) {
       return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
     }
 
     const p = userData.pet;
 
-    // Función interna para manejar la subida de XP y evolución
     const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
+      // Bloqueo total si está enferma
       if (!isHeal && hoursPassed(p.lastFeed, 24)) {
         const videoEnferma = getPetVideo(p.type, 'enferma', p.level);
         const txt = `🤒 *${p.name}* está demasiado débil y enfermo para hacer eso. Usa *.curar* primero.`;
@@ -188,9 +206,16 @@ module.exports = {
     }
 
     // ==========================================
-    // 4. JUGAR (Cooldown 30m)
+    // 4. JUGAR (Cooldown 30m) + Hambre
     // ==========================================
     if (command === 'jugar') {
+      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
+        const videoEnojada = getPetVideo(p.type, 'enojada', p.level);
+        const txt = `💢 *${p.name}* te gruñe y rechaza el juguete. ¡Está furioso porque tiene hambre! Usa *.alimentar*.`;
+        if (videoEnojada) return sock.sendMessage(remoteJid, { video: videoEnojada, caption: txt, gifPlayback: true }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
+      }
+
       const remaining = (30 * 60 * 1000) - (now - (p.lastPlay || 0));
       if (remaining > 0) {
         const m = Math.floor(remaining / 60000);
@@ -204,6 +229,13 @@ module.exports = {
     // 5. ENTRENAR (Cooldown 4h)
     // ==========================================
     if (command === 'entrenar') {
+      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
+        const videoEnojada = getPetVideo(p.type, 'enojada', p.level);
+        const txt = `💢 *${p.name}* se niega a entrenar. ¡Tiene hambre y está de mal humor! Usa *.alimentar*.`;
+        if (videoEnojada) return sock.sendMessage(remoteJid, { video: videoEnojada, caption: txt, gifPlayback: true }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
+      }
+
       const remaining = (4 * 60 * 60 * 1000) - (now - (p.lastTrain || 0));
       if (remaining > 0) {
         const m = Math.floor(remaining / 60000);
@@ -265,7 +297,7 @@ module.exports = {
       await db.setUser(target, targetData);
 
       const video = getPetVideo(type, 'sacrificada', level);
-      const text = `☠️ El lobo *${nombreMascota}* de @${cleanNumber(target)} fue sacrificado y regresó con la manada celestial...`;
+      const text = `☠️ El lobo *${nombreMascota}* de @${cleanNumber(target)} fue sacrificado por los Dioses...\n\nEl usuario tiene su espacio libre para adoptar.`;
 
       if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true, mentions: [`${cleanNumber(target)}@s.whatsapp.net`] }, { quoted: msg });
       return sock.sendMessage(remoteJid, { text, mentions: [`${cleanNumber(target)}@s.whatsapp.net`] }, { quoted: msg });
