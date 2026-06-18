@@ -33,12 +33,6 @@ function beats(a, b) {
   );
 }
 
-function winnerMove(move) {
-  if (move === 'piedra') return 'papel';
-  if (move === 'papel') return 'tijera';
-  return 'piedra';
-}
-
 module.exports = {
   commands: ['ppt'],
 
@@ -91,16 +85,9 @@ module.exports = {
 
       await db.removeXP(sender, bet);
 
-      const botWins = Math.random() < 0.66;
-
-      let botMove;
-
-      if (botWins) {
-        botMove = winnerMove(move);
-      } else {
-        const moves = ['piedra', 'papel', 'tijera'];
-        botMove = moves[Math.floor(Math.random() * moves.length)];
-      }
+      // 🔥 CAMBIO: Bot elige al azar (Probabilidad justa)
+      const moves = ['piedra', 'papel', 'tijera'];
+      const botMove = moves[Math.floor(Math.random() * moves.length)];
 
       let text =
 `🎮 PIEDRA PAPEL O TIJERA
