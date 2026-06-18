@@ -3,6 +3,9 @@
 // Función para pausar y crear el efecto de animación
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// 🔥 CANDADO ANTI-SPAM (Evita que saturen el bot mientras se reproduce la animación)
+const enUso = new Set();
+
 function cleanJid(jid = '') {
     return String(jid).split(':')[0];
 }
@@ -105,6 +108,10 @@ module.exports = {
         }
 
         const userKey = cleanJid(sender);
+
+        // 🔥 Si el usuario ya está pescando o minando, ignoramos el comando para evitar spam
+        if (enUso.has(userKey)) return;
+
         const userData = await db.getUser(userKey);
         const now = Date.now();
         const cooldown = 5 * 60 * 1000; // 5 minutos
@@ -121,42 +128,50 @@ module.exports = {
                 return reply(`⏳ Tus peces se asustaron. Debes esperar *${m}m ${s}s* para volver a pescar.`);
             }
 
-            // Animación Inicial
-            let msg = await sock.sendMessage(remoteJid, { text: `🎣 @${number(sender)} ha lanzado la caña al agua...`, mentions: [userKey] });
-            await esperar(1500);
-            try { await sock.sendMessage(remoteJid, { text: `🎣 @${number(sender)} siente un fuerte tirón... *¡Algo picó!*`, edit: msg.key, mentions: [userKey] }); } catch (e) {}
-            await esperar(2000);
-
-            // Calcular probabilidad
-            let rand = Math.random() * 100;
-            let premio = 0;
-            let resultadoTxt = '';
-
-            if (rand < 5) { 
-                premio = randXP(4000, 6000); // 5% Legendario
-                resultadoTxt = `${pick(pescaLegendaria)}\n💰 Ganaste *${premio} XP*.`;
-            } else if (rand < 20) { 
-                premio = randXP(1500, 2500); // 15% Épico
-                resultadoTxt = `${pick(pescaEpica)}\n💰 Ganaste *${premio} XP*.`;
-            } else if (rand < 70) { 
-                premio = randXP(400, 1000);  // 50% Normal
-                resultadoTxt = `${pick(pescaNormal)}\n💰 Ganaste *${premio} XP*.`;
-            } else if (rand < 90) { 
-                premio = 0;                  // 20% Basura
-                resultadoTxt = `${pick(pescaBasura)}\n💸 No ganas nada de XP.`;
-            } else { 
-                let castigo = randXP(500, 1000); // 10% Mala suerte
-                if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
-                await db.removeXP(userKey, castigo);
-                resultadoTxt = `${pick(pescaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
-            }
-
-            if (premio > 0) await db.addXP(userKey, premio);
+            // 🔥 Bloqueamos al usuario y guardamos su tiempo ANTES de la animación
+            enUso.add(userKey);
             await db.setUser(userKey, { lastPescar: now });
 
-            let finalMsg = `*RESULTADO DE PESCA* 🎣\n\n${resultadoTxt}\n👤 @${number(sender)}`;
-            try { await sock.sendMessage(remoteJid, { text: finalMsg, edit: msg.key, mentions: [userKey] }); } 
-            catch (e) { await sock.sendMessage(remoteJid, { text: finalMsg, mentions: [userKey] }); }
+            try {
+                // Animación Inicial
+                let msg = await sock.sendMessage(remoteJid, { text: `🎣 @${number(sender)} ha lanzado la caña al agua...`, mentions: [userKey] });
+                await esperar(1500);
+                try { await sock.sendMessage(remoteJid, { text: `🎣 @${number(sender)} siente un fuerte tirón... *¡Algo picó!*`, edit: msg.key, mentions: [userKey] }); } catch (e) {}
+                await esperar(2000);
+
+                // Calcular probabilidad
+                let rand = Math.random() * 100;
+                let premio = 0;
+                let resultadoTxt = '';
+
+                if (rand < 5) { 
+                    premio = randXP(4000, 6000); // 5% Legendario
+                    resultadoTxt = `${pick(pescaLegendaria)}\n💰 Ganaste *${premio} XP*.`;
+                } else if (rand < 20) { 
+                    premio = randXP(1500, 2500); // 15% Épico
+                    resultadoTxt = `${pick(pescaEpica)}\n💰 Ganaste *${premio} XP*.`;
+                } else if (rand < 70) { 
+                    premio = randXP(400, 1000);  // 50% Normal
+                    resultadoTxt = `${pick(pescaNormal)}\n💰 Ganaste *${premio} XP*.`;
+                } else if (rand < 90) { 
+                    premio = 0;                  // 20% Basura
+                    resultadoTxt = `${pick(pescaBasura)}\n💸 No ganas nada de XP.`;
+                } else { 
+                    let castigo = randXP(500, 1000); // 10% Mala suerte
+                    if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
+                    await db.removeXP(userKey, castigo);
+                    resultadoTxt = `${pick(pescaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
+                }
+
+                if (premio > 0) await db.addXP(userKey, premio);
+
+                let finalMsg = `*RESULTADO DE PESCA* 🎣\n\n${resultadoTxt}\n👤 @${number(sender)}`;
+                try { await sock.sendMessage(remoteJid, { text: finalMsg, edit: msg.key, mentions: [userKey] }); } 
+                catch (e) { await sock.sendMessage(remoteJid, { text: finalMsg, mentions: [userKey] }); }
+            } finally {
+                // 🔥 Liberamos al usuario pase lo que pase
+                enUso.delete(userKey);
+            }
         }
 
         // ==========================================
@@ -171,42 +186,50 @@ module.exports = {
                 return reply(`⏳ Tus brazos están cansados. Debes esperar *${m}m ${s}s* para volver a minar.`);
             }
 
-            // Animación Inicial
-            let msg = await sock.sendMessage(remoteJid, { text: `⛏️ @${number(sender)} encendió su antorcha y entró a la cueva oscura...`, mentions: [userKey] });
-            await esperar(1500);
-            try { await sock.sendMessage(remoteJid, { text: `⛏️ @${number(sender)} está picando una pared de piedra...\n\n*¡Clank! ¡Clank! ¡Clank!*`, edit: msg.key, mentions: [userKey] }); } catch (e) {}
-            await esperar(2000);
-
-            // Calcular probabilidad
-            let rand = Math.random() * 100;
-            let premio = 0;
-            let resultadoTxt = '';
-
-            if (rand < 5) { 
-                premio = randXP(4000, 6000); // 5% Legendario
-                resultadoTxt = `${pick(minaLegendaria)}\n💰 Ganaste *${premio} XP*.`;
-            } else if (rand < 20) { 
-                premio = randXP(1500, 2500); // 15% Épico
-                resultadoTxt = `${pick(minaEpica)}\n💰 Ganaste *${premio} XP*.`;
-            } else if (rand < 70) { 
-                premio = randXP(400, 1000);  // 50% Normal
-                resultadoTxt = `${pick(minaNormal)}\n💰 Ganaste *${premio} XP*.`;
-            } else if (rand < 90) { 
-                premio = 0;                  // 20% Basura
-                resultadoTxt = `${pick(minaBasura)}\n💸 No ganas nada de XP.`;
-            } else { 
-                let castigo = randXP(500, 1000); // 10% Mala suerte
-                if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
-                await db.removeXP(userKey, castigo);
-                resultadoTxt = `${pick(minaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
-            }
-
-            if (premio > 0) await db.addXP(userKey, premio);
+            // 🔥 Bloqueamos al usuario y guardamos su tiempo ANTES de la animación
+            enUso.add(userKey);
             await db.setUser(userKey, { lastMinar: now });
 
-            let finalMsg = `*RESULTADO DE MINERÍA* ⛏️\n\n${resultadoTxt}\n👤 @${number(sender)}`;
-            try { await sock.sendMessage(remoteJid, { text: finalMsg, edit: msg.key, mentions: [userKey] }); } 
-            catch (e) { await sock.sendMessage(remoteJid, { text: finalMsg, mentions: [userKey] }); }
+            try {
+                // Animación Inicial
+                let msg = await sock.sendMessage(remoteJid, { text: `⛏️ @${number(sender)} encendió su antorcha y entró a la cueva oscura...`, mentions: [userKey] });
+                await esperar(1500);
+                try { await sock.sendMessage(remoteJid, { text: `⛏️ @${number(sender)} está picando una pared de piedra...\n\n*¡Clank! ¡Clank! ¡Clank!*`, edit: msg.key, mentions: [userKey] }); } catch (e) {}
+                await esperar(2000);
+
+                // Calcular probabilidad
+                let rand = Math.random() * 100;
+                let premio = 0;
+                let resultadoTxt = '';
+
+                if (rand < 5) { 
+                    premio = randXP(4000, 6000); // 5% Legendario
+                    resultadoTxt = `${pick(minaLegendaria)}\n💰 Ganaste *${premio} XP*.`;
+                } else if (rand < 20) { 
+                    premio = randXP(1500, 2500); // 15% Épico
+                    resultadoTxt = `${pick(minaEpica)}\n💰 Ganaste *${premio} XP*.`;
+                } else if (rand < 70) { 
+                    premio = randXP(400, 1000);  // 50% Normal
+                    resultadoTxt = `${pick(minaNormal)}\n💰 Ganaste *${premio} XP*.`;
+                } else if (rand < 90) { 
+                    premio = 0;                  // 20% Basura
+                    resultadoTxt = `${pick(minaBasura)}\n💸 No ganas nada de XP.`;
+                } else { 
+                    let castigo = randXP(500, 1000); // 10% Mala suerte
+                    if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
+                    await db.removeXP(userKey, castigo);
+                    resultadoTxt = `${pick(minaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
+                }
+
+                if (premio > 0) await db.addXP(userKey, premio);
+
+                let finalMsg = `*RESULTADO DE MINERÍA* ⛏️\n\n${resultadoTxt}\n👤 @${number(sender)}`;
+                try { await sock.sendMessage(remoteJid, { text: finalMsg, edit: msg.key, mentions: [userKey] }); } 
+                catch (e) { await sock.sendMessage(remoteJid, { text: finalMsg, mentions: [userKey] }); }
+            } finally {
+                // 🔥 Liberamos al usuario pase lo que pase
+                enUso.delete(userKey);
+            }
         }
     }
 };
