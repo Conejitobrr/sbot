@@ -59,7 +59,23 @@ const trabajos = [
   '🚿 Arreglaste una ducha eléctrica',
   '🚌 Fuiste cobrador de combi',
   '📚 Ordenaste libros en una biblioteca',
-  '🧑‍🚀 Simulaste ser astronauta por TikTok'
+  '🧑‍🚀 Simulaste ser astronauta por TikTok',
+  // 🔥 NUEVOS TRABAJOS
+  '🥑 Vendiste paltas carísimas en el mercado',
+  '🥤 Preparaste emoliente en la esquina en pleno frío',
+  '🛺 Manejaste mototaxi sorteando el tráfico',
+  '🎤 Fuiste cómico ambulante en la plaza y diste risa',
+  '💻 Programaste un bot para WhatsApp sin errores',
+  '👻 Fuiste cazafantasmas en una casa abandonada',
+  '🐕 Bañaste perros que no querían bañarse en una veterinaria',
+  '🎸 Tocaste guitarra en los micros y te dieron propina',
+  '👕 Vendiste ropa en Gamarra como todo un experto',
+  '⚽ Fuiste árbitro en una pichanga de barrio picante',
+  '🤡 Fuiste payaso en una fiesta infantil agotadora',
+  '👨‍🔧 Arreglaste la licuadora de la vecina',
+  '📱 Fuiste tiktoker por un día y tu video se hizo viral',
+  '🛒 Fuiste jalador en el centro comercial a puro pulmón',
+  '🚲 Repartiste comida en bicicleta bajo la lluvia'
 ];
 
 const fracasos = [
@@ -68,7 +84,13 @@ const fracasos = [
   '🐀 Saliste corriendo por una rata gigante',
   '📉 Invertiste tu sueldo en una mala idea',
   '🫠 Te estafaron con un trabajo falso',
-  '🚓 Te confundieron con el ladrón y perdiste tiempo'
+  '🚓 Te confundieron con el ladrón y perdiste tiempo',
+  // 🔥 NUEVOS FRACASOS
+  '🤦‍♂️ Te equivocaste de pedido y te descontaron de tu sueldo',
+  '🐕 Un perro callejero te persiguió y perdiste la mercancía',
+  '🌧️ Llovió fortísimo y se arruinó lo que estabas vendiendo',
+  '📱 Te distrajiste viendo TikToks y tu jefe te despidió',
+  '💸 Te pagaron con billetes falsos y no te diste cuenta'
 ];
 
 function pick(arr) {
@@ -100,7 +122,8 @@ module.exports = {
     const fail = Math.random() < 0.12;
 
     if (fail) {
-      const lost = Math.floor(Math.random() * 41) + 20;
+      // 🔥 Ajustado: Pierden entre 200 y 500 XP
+      const lost = Math.floor(Math.random() * 301) + 200; 
 
       await db.removeXP(sender, lost);
       await db.setUser(sender, { lastWorkXp: now });
@@ -119,7 +142,8 @@ ${pick(fracasos)}
       }, { quoted: msg });
     }
 
-    let xp = Math.floor(Math.random() * 171) + 80; // 80 - 250 XP
+    // 🔥 Ajustado: Ganan entre 400 y 1200 XP
+    let xp = Math.floor(Math.random() * 801) + 400; 
 
     if (events?.isActive?.('double')) {
       xp *= events.getMultiplier?.() || 2;
