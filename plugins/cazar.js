@@ -30,7 +30,11 @@ const cazaLegendaria = [
     '🦖 Viajaste en el tiempo y cazaste a un mismísimo *T-Rex*.',
     '🦍 Te adentraste en la nieve y lograste capturar al *Yeti*.',
     '🦇 ¡Sobreviviste a la noche! Cazaste al temible *Chupacabras*.',
-    '🦅 En lo alto de la montaña, lograste atrapar a un *Grifo Mitológico*.'
+    '🦅 En lo alto de la montaña, lograste atrapar a un *Grifo Mitológico*.',
+    '🐙 Viajaste a mar abierto y lograste arponear a las crías de un *Kraken*.',
+    '🐍 Sobreviviste a la mirada de un *Basilisco* y lograste derrotarlo.',
+    '🔥 Encontraste las plumas de un *Ave Fénix* recién renacido.',
+    '🐺 Cazaste a un legendario *Hombre Lobo* durante la luna llena.'
 ];
 
 const cazaEpica = [
@@ -39,7 +43,11 @@ const cazaEpica = [
     '🦁 Te convertiste en el rey de la selva al cazar a un *León Africano*.',
     '🐊 Te metiste al pantano y cazaste a un *Cocodrilo del Nilo* gigante.',
     '🐆 Fuiste más rápido que un *Leopardo* y te quedaste con su piel.',
-    '🦏 Lograste derribar a un pesado *Rinoceronte Negro*.'
+    '🦏 Lograste derribar a un pesado *Rinoceronte Negro*.',
+    '🦍 Derrotaste en su territorio a un *Gorila Espalda Plateada*.',
+    '🐍 Tuviste que luchar por horas para cazar una *Anaconda Gigante*.',
+    '🐺 Rastreaste a la manada y lograste cazar al *Lobo Alfa*.',
+    '🐘 Sobreviviste a la estampida y atrapaste a un *Elefante Salvaje*.'
 ];
 
 const cazaNormal = [
@@ -50,7 +58,11 @@ const cazaNormal = [
     '🦃 Tuviste suerte y cazaste un *Pavo Gordo* para la cena.',
     '🦊 Viste un movimiento rápido y lograste cazar a un *Zorro Escurridizo*.',
     '🦡 Tuviste una pelea difícil, pero lograste cazar un *Tejón*.',
-    '🐿️ Solo conseguiste cazar unas cuantas *Ardillas Gordas*.'
+    '🐿️ Solo conseguiste cazar unas cuantas *Ardillas Gordas*.',
+    '🦝 Cazaste a un *Mapache* que intentaba robarte la comida.',
+    '🦎 Atrapaste a una gran *Iguana* escondida en las rocas.',
+    '🦔 Atrapaste a un *Puercoespín*, pero te pinchaste un poco.',
+    ' armadillo Atrapaste un *Armadillo* rodando por el desierto.'
 ];
 
 const cazaBasura = [
@@ -59,7 +71,11 @@ const cazaBasura = [
     '💨 Ibas a disparar, pero te dio alergia, *estornudaste*, y todos los animales huyeron.',
     '🔫 Tu presa estaba en la mira, pero tu *arma se atascó*.',
     '🏃‍♂️ Pisaste una rama seca, el animal te vio y *salió corriendo a toda velocidad*.',
-    '📸 En lugar de disparar tu rifle, por error sacaste tu celular y le *tomaste una foto*.'
+    '📸 En lugar de disparar tu rifle, por error sacaste tu celular y le *tomaste una foto*.',
+    '🐶 Apuntaste con fiereza pero resultó ser el *perro callejero* del vecindario.',
+    '🎃 Disparaste a lo lejos y destruiste un *espantapájaros* de un granjero.',
+    '🐿️ Te asustó una *ardilla* que te saltó a la cara y tiraste el arma.',
+    '💩 Pisaste estiércol de oso, resbalaste y ahuyentaste a toda la fauna.'
 ];
 
 const cazaCastigo = [
@@ -68,7 +84,11 @@ const cazaCastigo = [
     '🕳️ Ibas caminando hacia atrás y *caíste en una trampa de cazadores*.',
     '🦌 Un venado que creías muerto se levantó y *te dio una patada en la cara*.',
     '🐝 Te apoyaste en un árbol equivocado y *pateaste un panal de abejas asesinas*.',
-    '🐗 Un jabalí te embistió por la espalda y *rompió todo tu equipo de caza*.'
+    '🐗 Un jabalí te embistió por la espalda y *rompió todo tu equipo de caza*.',
+    '🐒 Un mono bajó de un árbol, te golpeó y *se robó tu billetera*.',
+    '🦨 Un zorrillo te roció. Apestabas tanto que *pagaste una fortuna en jabones especiales*.',
+    '🕷️ Te picó una enorme *Viuda Negra*. Los gastos médicos te dejaron pobre.',
+    '🚁 Te perdiste en medio del bosque y *tuviste que pagar un helicóptero de rescate*.'
 ];
 
 module.exports = {
@@ -83,7 +103,7 @@ module.exports = {
 
         const userKey = cleanJid(sender);
 
-        // 🔥 Bloqueo Anti-Spam
+        // 🔥 Bloqueo Anti-Spam: Si el usuario ya está cazando, se ignora el comando
         if (enUso.has(userKey)) return;
 
         const userData = await db.getUser(userKey);
@@ -98,28 +118,32 @@ module.exports = {
             return reply(`⏳ Tus presas están escondidas. Debes esperar *${m}m ${s}s* para volver a cazar.`);
         }
 
-        // 🔥 Ponemos el candado y registramos la hora de uso ANTES de animar
+        // 🔥 Ponemos el candado y registramos la hora de uso ANTES de animar para evitar abusos
         enUso.add(userKey);
         await db.setUser(userKey, { lastCazar: now });
 
         try {
             // ==========================================
-            // ANIMACIÓN DE CAZA
+            // ANIMACIÓN DE CAZA MÁS LENTA PARA LEER
             // ==========================================
             let msg = await sock.sendMessage(remoteJid, { 
                 text: `🌳 @${number(sender)} se adentra en lo profundo del bosque con su rifle en mano...`, 
                 mentions: [userKey] 
             });
-            await esperar(1500);
+            
+            // 🔥 Espera 3.5 segundos (2 segundos extra añadidos)
+            await esperar(3500);
 
             try { 
                 await sock.sendMessage(remoteJid, { 
-                    text: `🐾 *¡CRACK!* Se escucha una rama romperse... @${number(sender)} apunta su arma 🎯`, 
+                    text: `🐾 *¡CRACK!* Se escucha una rama romperse... @${number(sender)} contiene la respiración y apunta su arma 🎯`, 
                     edit: msg.key, 
                     mentions: [userKey] 
                 }); 
             } catch (e) {}
-            await esperar(2000);
+            
+            // 🔥 Espera 4 segundos completos (2 segundos extra añadidos) para el suspenso final
+            await esperar(4000);
 
             // ==========================================
             // CÁLCULO DE PROBABILIDADES
@@ -164,7 +188,7 @@ module.exports = {
             }
 
         } finally {
-            // 🔥 Quitamos el candado SIEMPRE (incluso si hay un error de red)
+            // 🔥 Quitamos el candado SIEMPRE al terminar
             enUso.delete(userKey);
         }
     }
