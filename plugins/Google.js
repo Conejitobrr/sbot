@@ -1,10 +1,8 @@
 'use strict';
 
-// Cargamos la versión "extra" con esteroides y el plugin Stealth
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
-// Activamos el modo sigilo
 puppeteer.use(StealthPlugin());
 
 const processingChats = new Set();
@@ -31,7 +29,7 @@ module.exports = {
       const query = args.join(' ');
 
       await sock.sendMessage(remoteJid, {
-        text: '🔍 *Navegando en modo sigilo...* evadiendo seguridad.'
+        text: '🔍 *Hackeando la seguridad de Google...* simulando ser humano.'
       }, { quoted: msg });
 
       processingChats.add(remoteJid);
@@ -43,21 +41,22 @@ module.exports = {
           '--no-sandbox', 
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-blink-features=AutomationControlled', // Evita que Google sepa que es un script
+          '--disable-blink-features=AutomationControlled',
           '--start-maximized'
         ],
-        ignoreDefaultArgs: ['--enable-automation'] // Oculta la barra de "Chrome está siendo controlado"
+        ignoreDefaultArgs: ['--enable-automation']
       });
 
       const page = await browser.newPage();
 
-      // Disfrazamos al bot como un humano usando Google Chrome en Windows 10
+      // Fingimos ser una computadora con Windows 10 e idioma en Español
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      
-      // Ajustamos el tamaño a una laptop estándar
-      await page.setViewport({ width: 1366, height: 768 });
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
+      });
+      await page.setViewport({ width: 1280, height: 800 });
 
-      // Inyectar cookie para evitar el cartel de "Aceptar Cookies"
+      // Inyectamos la cookie para saltar el aviso legal de Google
       const cookies = [{
         name: 'SOCS',
         value: 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmVzIAEaBgiA_LyaBg',
@@ -65,13 +64,22 @@ module.exports = {
       }];
       await page.setCookie(...cookies);
 
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=es-419`;
-      
-      // Entramos a Google simulando la conexión humana
-      await page.goto(searchUrl, { waitUntil: 'networkidle2' });
+      // 1. VAMOS A LA PÁGINA PRINCIPAL PRIMERO (Como un humano)
+      await page.goto('https://www.google.com/?hl=es-419', { waitUntil: 'networkidle2' });
 
-      // Pequeña pausa natural para que carguen las imágenes
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // 2. SIMULAMOS ESCRIBIR LETRA POR LETRA
+      await page.waitForSelector('[name="q"]', { timeout: 5000 });
+      // "delay: 60" hace que el bot tarde 60 milisegundos entre cada letra que escribe
+      await page.type('[name="q"]', query, { delay: 60 }); 
+
+      // 3. PRESIONAMOS ENTER Y ESPERAMOS
+      await Promise.all([
+        page.keyboard.press('Enter'),
+        page.waitForNavigation({ waitUntil: 'networkidle2' })
+      ]);
+
+      // Le damos 2 segundos extras para que carguen bien las imágenes de los resultados
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const screenshotBuffer = await page.screenshot({ 
         type: 'jpeg', 
@@ -91,7 +99,7 @@ module.exports = {
       console.log('❌ Error en google.js:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Hubo un error. Puede que Google se haya puesto muy pesado, intenta de nuevo.'
+        text: '❌ Google se puso muy terco y bloqueó el acceso. Intenta con otra búsqueda.'
       }, { quoted: msg });
 
     } finally {
