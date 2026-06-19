@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  commands: ['imagina', 'dibujar', 'imagen'],
+  commands: ['imagina', 'dibujar'],
 
   async execute(ctx) {
     const { sock, remoteJid, args, msg, sender } = ctx;
