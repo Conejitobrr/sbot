@@ -1,6 +1,12 @@
 'use strict';
+
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+
+// Proxy para evadir bloqueos de ISP (Puedes cambiar la IP si esta se pone lenta)
+const PROXY_SERVER = 'http://201.217.49.182:8080'; // IP de Chile/Colombia para evitar el bloqueo peruano
+const agent = new HttpsProxyAgent(PROXY_SERVER);
 
 const sesionesAnime = new Map();
 
@@ -11,7 +17,7 @@ module.exports = {
     const { sock, remoteJid, args, msg, command } = ctx;
 
     // ==========================================
-    // 🗂️ COMANDO: .opcion
+    // 🗂️ COMANDO: .opcion (Detalles y Código)
     // ==========================================
     if (command === 'opcion') {
       if (!sesionesAnime.has(remoteJid)) return sock.sendMessage(remoteJid, { text: '❌ Usa *.buscaranime* primero.' }, { quoted: msg });
@@ -24,10 +30,14 @@ module.exports = {
       }
 
       const anime = sesion[opcionIndex];
-      await sock.sendMessage(remoteJid, { text: `🔍 *Analizando:* ${anime.title}...` }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: `🔍 *Analizando mediante VPN:* ${anime.title}...` }, { quoted: msg });
 
       try {
-        const { data } = await axios.get(`https://www3.animeflv.net${anime.link}`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const { data } = await axios.get(`https://www3.animeflv.net${anime.link}`, {
+          httpsAgent: agent,
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 15000
+        });
         
         const match = data.match(/var episodes = (\[.*?\]);/);
         let totalCapitulos = '?';
@@ -44,27 +54,32 @@ module.exports = {
 🔢 *Capítulos Disponibles:* ${totalCapitulos}
 
 📥 *¿CÓMO DESCARGAR?*
-Copia el código exacto de abajo y cambia el "1" por el capítulo que quieras:
+Copia el código exacto de abajo y cambia el "1" por el número de capítulo:
 
 *.anime ${anime.slug} - 1*`;
 
         return sock.sendMessage(remoteJid, { text: detalleTexto }, { quoted: msg });
       } catch (error) {
-        return sock.sendMessage(remoteJid, { text: '❌ Error al leer los detalles.' }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: '❌ La conexión VPN tardó demasiado. Intenta la opción de nuevo.' }, { quoted: msg });
       }
     }
 
     // ==========================================
-    // 🔍 COMANDO: .buscaranime
+    // 🔍 COMANDO: .buscaranime (Listado)
     // ==========================================
     if (command === 'buscaranime' || command === 'animes') {
       if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ Pon el nombre.\nEjemplo: .buscaranime naruto' }, { quoted: msg });
 
       const query = args.join(' ');
-      await sock.sendMessage(remoteJid, { text: `🔍 Buscando "${query}" directamente en AnimeFLV...` }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: `🌐 *Iniciando VPN...*\nBuscando "${query}" en servidores internacionales...` }, { quoted: msg });
 
       try {
-        const { data } = await axios.get(`https://www3.animeflv.net/browse?q=${encodeURIComponent(query)}`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const { data } = await axios.get(`https://www3.animeflv.net/browse?q=${encodeURIComponent(query)}`, { 
+          httpsAgent: agent,
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          timeout: 15000
+        });
+        
         const $ = cheerio.load(data);
         const resultados = [];
 
@@ -73,29 +88,21 @@ Copia el código exacto de abajo y cambia el "1" por el capítulo que quieras:
             const title = $(el).find('h3.Title').text().trim();
             const link = $(el).find('a').attr('href'); 
             if (title && link) {
-              // Extraemos el código oculto (Slug) que usa AnimeFLV para sus links
               const slug = link.split('/anime/')[1];
               resultados.push({ title, link, slug });
             }
           }
         });
 
-        if (!resultados.length) return sock.sendMessage(remoteJid, { text: '❌ AnimeFLV no tiene ese anime registrado.' }, { quoted: msg });
+        if (!resultados.length) return sock.sendMessage(remoteJid, { text: '❌ No se encontró ese anime en la base de datos.' }, { quoted: msg });
 
         sesionesAnime.set(remoteJid, resultados);
 
-        let respuesta = `🎌 *RESULTADOS EXACTOS* 🎌\n\n`;
+        let respuesta = `🎌 *CATÁLOGO LIBERADO* 🎌\n\n`;
         resultados.forEach((anime, i) => {
           const marcaLatino = anime.title.toLowerCase().includes('latino') ? ' 🇲🇽(Latino)' : '';
           respuesta += `*${i + 1}.* ${anime.title}${marcaLatino}\n`;
         });
         
-        respuesta += `\n💡 *Para ver capítulos y descargar:*\nEscribe *.opcion [número]*\nEjemplo: .opcion 1`;
-
-        return sock.sendMessage(remoteJid, { text: respuesta }, { quoted: msg });
-      } catch (error) {
-        return sock.sendMessage(remoteJid, { text: '❌ Error al conectar con AnimeFLV.' }, { quoted: msg });
-      }
-    }
-  }
-};
+        respuesta += `\n💡 *Para ver
+        
