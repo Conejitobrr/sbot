@@ -6,27 +6,29 @@ const cheerio = require('cheerio');
 // Memoria para guardar las búsquedas de cada grupo
 const busquedasActivas = new Map();
 
-// Función rápida para raspar imágenes de Bing sin abrir navegadores
+// Función rápida para raspar imágenes forzando la región a Perú (es-PE)
 async function buscarImagenes(query) {
   try {
-    const url = `https://www.bing.com/images/search?q=${encodeURIComponent(query)}`;
+    // Le decimos a Bing: Idioma Español (setlang=es), Mercado Perú (es-PE) y País Perú (cc=PE)
+    const url = `https://www.bing.com/images/search?q=${encodeURIComponent(query)}&setmkt=es-PE&setlang=es&cc=PE`;
     const { data } = await axios.get(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        // Esto le confirma al servidor que somos de Latinoamérica
+        'Accept-Language': 'es-PE,es;q=0.9,en;q=0.8'
       }
     });
 
     const $ = cheerio.load(data);
     const resultados = [];
 
-    // Bing guarda los links directos dentro de un atributo llamado "m"
     $('.iusc').each((i, el) => {
       const m = $(el).attr('m');
       if (m) {
         try {
           const jsonData = JSON.parse(m);
           if (jsonData.murl) {
-            resultados.push(jsonData.murl); // murl = URL directa de la imagen
+            resultados.push(jsonData.murl);
           }
         } catch (e) {}
       }
@@ -50,7 +52,7 @@ module.exports = {
     if (command === 'siguiente') {
       if (!busquedasActivas.has(remoteJid)) {
         return sock.sendMessage(remoteJid, { 
-          text: '❌ No hay ninguna búsqueda activa. Usa *.imagen [texto]* primero.' 
+          text: '❌ No hay ninguna búsqueda activa o ya caducó. Usa *.imagen [texto]* primero.' 
         }, { quoted: msg });
       }
 
@@ -58,11 +60,19 @@ module.exports = {
       sesion.currentIndex++; 
 
       if (sesion.currentIndex >= sesion.images.length) {
+        // Limpiamos la RAM si llegamos al final
+        clearTimeout(sesion.timer);
         busquedasActivas.delete(remoteJid);
         return sock.sendMessage(remoteJid, { 
           text: '⚠️ Ya vimos todas las imágenes disponibles. Busca otra cosa.' 
         }, { quoted: msg });
       }
+
+      // Reiniciamos el reloj de 5 minutos de inactividad
+      clearTimeout(sesion.timer);
+      sesion.timer = setTimeout(() => {
+        busquedasActivas.delete(remoteJid);
+      }, 5 * 60 * 1000);
 
       const imageUrl = sesion.images[sesion.currentIndex];
 
@@ -73,7 +83,7 @@ module.exports = {
         }, { quoted: msg });
       } catch (err) {
         return sock.sendMessage(remoteJid, { 
-          text: `⚠️ La imagen #${sesion.currentIndex + 1} está protegida o borrada de su servidor.\n\nEscribe *.siguiente* de nuevo para saltarla.` 
+          text: `⚠️ La imagen #${sesion.currentIndex + 1} está protegida.\n\nEscribe *.siguiente* de nuevo para saltarla.` 
         }, { quoted: msg });
       }
     }
@@ -84,7 +94,7 @@ module.exports = {
     if (command === 'imagen' || command === 'img') {
       if (!args.length) {
         return sock.sendMessage(remoteJid, { 
-          text: '❌ Dime qué imagen buscar.\n\nEjemplo:\n.imagen Rata Blanca banda' 
+          text: '❌ Dime qué imagen buscar.\n\nEjemplo:\n.imagen ceviche mixto' 
         }, { quoted: msg });
       }
 
@@ -94,20 +104,29 @@ module.exports = {
         text: `🔍 *Buscando:* ${query}...` 
       }, { quoted: msg });
 
-      // Ejecutamos la búsqueda en Bing
       const results = await buscarImagenes(query);
 
       if (!results || results.length === 0) {
         return sock.sendMessage(remoteJid, { 
-          text: '❌ No se encontró ninguna imagen o hubo un error de conexión.' 
+          text: '❌ No se encontró ninguna imagen.' 
         }, { quoted: msg });
       }
 
-      // Guardamos la lista en la memoria
+      // Si había una búsqueda anterior en este grupo, borramos su temporizador viejo
+      if (busquedasActivas.has(remoteJid)) {
+        clearTimeout(busquedasActivas.get(remoteJid).timer);
+      }
+
+      // Guardamos la lista en la memoria con un reloj de autodestrucción (5 min = 300,000 ms)
+      const timerDestruccion = setTimeout(() => {
+        busquedasActivas.delete(remoteJid);
+      }, 5 * 60 * 1000);
+
       busquedasActivas.set(remoteJid, {
         query: query,
         images: results,
-        currentIndex: 0
+        currentIndex: 0,
+        timer: timerDestruccion // Guardamos el reloj en la sesión
       });
 
       const imageUrl = results[0];
@@ -120,7 +139,7 @@ module.exports = {
         }, { quoted: msg });
       } catch (err) {
         await sock.sendMessage(remoteJid, { 
-          text: '⚠️ La primera imagen está protegida por derechos de autor.\n\nEscribe *.siguiente* para cargar la número 2.' 
+          text: '⚠️ La primera imagen está protegida o el link caducó.\n\nEscribe *.siguiente* para cargar la número 2.' 
         }, { quoted: msg });
       }
     }
