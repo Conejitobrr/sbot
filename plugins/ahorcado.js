@@ -46,22 +46,22 @@ const ahorcadoASCII = [
 `  +---+
   |   |
   O   |
- /|\\  |
+ /|\  |
       |
       |
 =========`,
 `  +---+
   |   |
   O   |
- /|\\  |
+ /|\  |
  /    |
       |
 =========`,
 `  +---+
   |   |
   O   |
- /|\\  |
- / \\  |
+ /|\  |
+ / \  |
       |
 =========`
 ];
@@ -99,7 +99,7 @@ module.exports = {
       if (input === juego.palabra) {
         // GANÓ POR PALABRA COMPLETA
         sesiones.delete(remoteJid);
-        const xp = 150; // Premio mayor por adivinar la palabra entera
+        const xp = 1200; // Premio mayor por adivinar la palabra entera
         await db.addXP(sender, xp);
         return sock.sendMessage(remoteJid, { 
             text: `🎉 *¡INCREÍBLE!* @${sender.split('@')[0]} adivinó la palabra completa: *${juego.palabra}*.\n\n🎁 Ganaste *${xp} XP*.`, 
