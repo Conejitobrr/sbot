@@ -399,6 +399,41 @@ function checkJail(jid) {
   return jail;
 }
 
+// ==========================================
+// 🔥 SISTEMA ANTI-SPAM (NUEVO)
+// ==========================================
+const spamCache = new Map();
+
+function checkSpam(sender) {
+  const now = Date.now();
+  let user = spamCache.get(sender) || { timestamps: [], bannedUntil: 0 };
+
+  // 1. Si está mini-baneado
+  if (user.bannedUntil > now) return 'BANNED';
+  
+  // 2. Limpiar el historial (Solo contamos los mensajes de los últimos 10 segundos)
+  user.timestamps = user.timestamps.filter(t => now - t < 10000);
+  user.timestamps.push(now);
+
+  // 3. Advertencia al 5to mensaje rápido
+  if (user.timestamps.length === 5) {
+    spamCache.set(sender, user);
+    return 'WARN';
+  }
+
+  // 4. Baneo silencioso al 6to mensaje rápido (Mini-ban de 60 segundos)
+  if (user.timestamps.length >= 6) {
+    user.bannedUntil = now + 60000; // 60 segundos
+    user.timestamps = []; // Limpiamos su historial
+    spamCache.set(sender, user);
+    return 'BANNED';
+  }
+
+  spamCache.set(sender, user);
+  return false;
+}
+// ==========================================
+
 async function messageHandler(sock, msg, store = {}) {
   try {
     attachSendLogger(sock);
@@ -526,13 +561,28 @@ async function messageHandler(sock, msg, store = {}) {
     const plugin = plugins.get(command);
     if (!plugin) return;
 
-    // 🔥 BLOQUEO PARA USUARIOS BANEADOS (AHORA ES SILENCIOSO)
+    // ==========================================
+    // 🔥 CORTAFUEGOS: BANEOS Y ANTI-SPAM
+    // ==========================================
     if (!isOwner) {
+      // 1. Verificación de ban global
       const banned = await db.isBanned(sender);
-      if (banned) {
-        return; // IGNORA EL COMANDO SIN AVISAR NADA
+      if (banned) return; // Silencioso
+
+      // 2. Verificación Anti-Spam
+      const spamStatus = checkSpam(sender);
+      
+      if (spamStatus === 'WARN') {
+        return sock.sendMessage(remoteJid, {
+          text: `⚠️ *¡ALTO AHÍ!*\n\nEstás enviando comandos demasiado rápido.\nSi sigues haciendo spam, te silenciaré por 1 minuto de forma automática para proteger el sistema.`
+        }, { quoted: msg });
+      }
+
+      if (spamStatus === 'BANNED') {
+        return; // Silencioso (ignora el comando completamente)
       }
     }
+    // ==========================================
 
     // ⛓️ BLOQUEAR COMANDOS SI ESTÁ ARRESTADO
     const jail = checkJail(sender);
