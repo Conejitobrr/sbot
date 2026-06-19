@@ -3,7 +3,6 @@
 const db = require('../lib/database');
 const sesiones = new Map();
 
-// Lista expandida: más de 60 palabras variadas y comunes
 const palabras = [
   'AVION', 'ZAPATO', 'LINTERNA', 'MONTAÑA', 'PELOTA', 'DORMITORIO', 'HELICOPTERO',
   'TELEVISION', 'CANGREJO', 'CASCADA', 'ESCORPION', 'BICICLETA', 'GUITARRA', 'CALABAZA',
@@ -15,7 +14,6 @@ const palabras = [
   'MALETA', 'PARAGUAS', 'ESCULTURA', 'FOTOGRAFIA', 'BICICLETA', 'CENICERO', 'BANCO'
 ];
 
-// Dibujos ASCII integrados
 const ahorcadoASCII = [
 `  +---+
   |   |
@@ -75,7 +73,6 @@ module.exports = {
     const { sock, remoteJid, args, sender, msg } = ctx;
     const input = args.join(' ').toUpperCase().trim();
 
-    // 1. INICIAR O BUSCAR JUEGO
     if (!sesiones.has(remoteJid)) {
       const palabra = palabras[Math.floor(Math.random() * palabras.length)];
       sesiones.set(remoteJid, {
@@ -85,70 +82,68 @@ module.exports = {
         vidas: new Map() 
       });
       return sock.sendMessage(remoteJid, { 
-          text: `🎮 *¡Nuevo Ahorcado!* \n\n${ahorcadoASCII[0]}\n\nPalabra: ${Array(palabra.length).fill('_').join(' ')}\n\n💡 Escribe *.ahorcado [letra]* para participar.` 
+          text: `🎮 *¡Nuevo Ahorcado!* \n\n${ahorcadoASCII[0]}\n\nPalabra: ${Array(palabra.length).fill('_').join(' ')}\n\n💡 Escribe *.ahorcado [letra]* o adivina la palabra completa.` 
       }, { quoted: msg });
     }
 
     const juego = sesiones.get(remoteJid);
-
-    // Inicializar vidas del jugador (6 intentos)
-    if (!juego.vidas.has(sender)) {
-      juego.vidas.set(sender, 6);
-    }
-
+    if (!juego.vidas.has(sender)) juego.vidas.set(sender, 6);
     let vidasJugador = juego.vidas.get(sender);
 
     if (vidasJugador <= 0) {
-      return sock.sendMessage(remoteJid, { text: '❌ Ya te quedaste sin vidas en esta partida. ¡Espera a la siguiente!', mentions: [sender] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: '❌ Estás eliminado de esta partida.', mentions: [sender] }, { quoted: msg });
     }
 
-    // 2. LÓGICA DE JUEGO (LETRAS)
-    if (input.length === 1 && /^[A-Z]$/.test(input)) {
-      if (juego.letrasUsadas.includes(input)) {
-        return sock.sendMessage(remoteJid, { text: `⚠️ La letra *${input}* ya se usó.` });
+    // --- NUEVA LÓGICA: ADIVINAR PALABRA COMPLETA ---
+    if (input.length > 1) {
+      if (input === juego.palabra) {
+        // GANÓ POR PALABRA COMPLETA
+        sesiones.delete(remoteJid);
+        const xp = 150; // Premio mayor por adivinar la palabra entera
+        await db.addXP(sender, xp);
+        return sock.sendMessage(remoteJid, { 
+            text: `🎉 *¡INCREÍBLE!* @${sender.split('@')[0]} adivinó la palabra completa: *${juego.palabra}*.\n\n🎁 Ganaste *${xp} XP*.`, 
+            mentions: [sender] 
+        });
+      } else {
+        // FALLÓ LA PALABRA COMPLETA -> PENALIZACIÓN
+        vidasJugador = vidasJugador - 2; // Pierdes 2 vidas por arriesgarte y fallar
+        juego.vidas.set(sender, vidasJugador);
+        await sock.sendMessage(remoteJid, { text: `❌ *${input}* no es la palabra. ¡Pierdes 2 vidas por arriesgarte! Te quedan ${vidasJugador}.`, mentions: [sender] });
       }
+    } 
+    // --- LÓGICA DE LETRAS ---
+    else if (input.length === 1 && /^[A-Z]$/.test(input)) {
+      if (juego.letrasUsadas.includes(input)) return sock.sendMessage(remoteJid, { text: `⚠️ Ya usaste la letra *${input}*.` });
 
       juego.letrasUsadas.push(input);
-
       if (juego.palabra.includes(input)) {
-        // Acierto
         for (let i = 0; i < juego.palabra.length; i++) {
           if (juego.palabra[i] === input) juego.oculta[i] = input;
         }
       } else {
-        // Fallo
         juego.vidas.set(sender, vidasJugador - 1);
         vidasJugador--;
       }
     } else {
-      return sock.sendMessage(remoteJid, { text: '❌ Por favor, escribe solo una letra.' });
+      return sock.sendMessage(remoteJid, { text: '❌ Escribe una letra o la palabra completa.' });
     }
 
-    // 3. CALCULAR FALLOS (6 - vidas = índice del dibujo)
-    const fallos = 6 - vidasJugador;
-    const dibujo = ahorcadoASCII[fallos] || ahorcadoASCII[6];
+    // Comprobar estado final
+    const fallos = Math.max(0, 6 - vidasJugador);
+    const dibujo = ahorcadoASCII[fallos];
 
-    // 4. RESULTADOS
-    const palabraActual = juego.oculta.join('');
-    
-    if (palabraActual === juego.palabra) {
+    if (juego.oculta.join('') === juego.palabra) {
       sesiones.delete(remoteJid);
       const xp = 100;
       await db.addXP(sender, xp);
-      return sock.sendMessage(remoteJid, { 
-          text: `🏆 *¡VICTORIA!* \n\nLa palabra era: *${juego.palabra}*\nGanador: @${sender.split('@')[0]}\n\n🎁 Ganaste *${xp} XP*.`, 
-          mentions: [sender] 
-      });
+      return sock.sendMessage(remoteJid, { text: `🏆 *¡Victoria!* La palabra era: *${juego.palabra}*. Ganador: @${sender.split('@')[0]}. 🎁 Ganaste *${xp} XP*.`, mentions: [sender] });
     }
 
-    if (vidasJugador === 0) {
-      return sock.sendMessage(remoteJid, { 
-          text: `💀 *¡ESTÁS AHORCADO!*\n\n${dibujo}\n\nPerdiste, @${sender.split('@')[0]}. La palabra era: *${juego.palabra}*.`, 
-          mentions: [sender] 
-      });
+    if (vidasJugador <= 0) {
+      return sock.sendMessage(remoteJid, { text: `💀 *¡ESTÁS AHORCADO!*\n\n${dibujo}\n\nPerdiste @${sender.split('@')[0]}. La palabra era: *${juego.palabra}*.`, mentions: [sender] });
     }
 
-    // 5. MOSTRAR ESTADO
     await sock.sendMessage(remoteJid, { 
       text: `${dibujo}\n\nPalabra: ${juego.oculta.join(' ')}\n\n📝 Usadas: ${juego.letrasUsadas.join(', ')}\n❤️ Tus vidas: ${vidasJugador}`
     });
