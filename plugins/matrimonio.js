@@ -22,9 +22,7 @@ function ensureDB() {
   }
 
   if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({
-      marriages: {}
-    }, null, 2));
+    fs.writeFileSync(DB_PATH, JSON.stringify({ marriages: {} }, null, 2));
   }
 }
 
@@ -68,6 +66,11 @@ function formatDate(ms) {
   return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
+// Genera un ID falso para darle realismo a los documentos
+function generateID() {
+  return Math.floor(100000 + Math.random() * 900000);
+}
+
 module.exports = {
   commands: ['proponer', 'aceptar', 'rechazar', 'divorcio', 'pareja', 'matrimonio'],
 
@@ -76,86 +79,72 @@ module.exports = {
     sender = cleanJid(sender);
 
     // ==========================================
-    // 💒 MENÚ PRINCIPAL
+    // 🏛️ MENÚ PRINCIPAL DEL REGISTRO CIVIL
     // ==========================================
     if (command === 'matrimonio') {
       const menu = 
-`┏━━━━━━━━━━━━━━━━━━━━━━━┓
-┃   💒 *REGISTRO CIVIL* 💒   
-┗━━━━━━━━━━━━━━━━━━━━━━━┛
+`🏛️ *PORTAL DEL REGISTRO CIVIL VIRTUAL* 🏛️
+TRAMITACIÓN DE UNIONES Y SEPARACIONES
 
-¿Buscando al amor de tu vida o 
-solo quieres los papeles? 📄
+Bienvenido al sistema automatizado. 
+Seleccione el trámite que desea realizar:
 
-Comandos disponibles:
-➤ *.proponer @usuario* 💍 (Arrodíllate)
-➤ *.aceptar* ✅ (Di que sí)
-➤ *.rechazar* ❌ (Mándal@ a la friendzone)
-➤ *.pareja* 💑 (Mira tu certificado)
-➤ *.divorcio* 💔 (Llama a los abogados)`;
+📄 *TRAMITES DISPONIBLES:*
+➤ *.proponer @usuario* » Solicitud de Unión Civil
+➤ *.aceptar* » Firma de Acta Matrimonial
+➤ *.rechazar* » Denegación de Solicitud
+➤ *.pareja* » Emitir Certificado Vigente
+➤ *.divorcio* » Juicio de Separación Legal
+
+_Atención las 24 hrs. No se aceptan sobornos._`;
 
       return sock.sendMessage(remoteJid, { text: menu }, { quoted: msg });
     }
 
     // ==========================================
-    // 💍 PROPUESTA DE MATRIMONIO
+    // 💍 PETICIÓN FORMAL (PROPONER)
     // ==========================================
     if (command === 'proponer') {
       const mentioned = getMentioned(msg)[0];
 
-      if (!mentioned) {
-        return sock.sendMessage(remoteJid, { text: '❌ Oye, no puedes casarte con el aire. \nDebes mencionar a alguien.\n\nEjemplo: *.proponer @usuario*' }, { quoted: msg });
-      }
-
+      if (!mentioned) return sock.sendMessage(remoteJid, { text: '⚠️ [ERROR DE SISTEMA]\nFalta el destinatario. Use: *.proponer @usuario*' }, { quoted: msg });
+      
       const target = cleanJid(mentioned);
 
-      if (target === sender) {
-        return sock.sendMessage(remoteJid, { text: '❌ No puedes casarte contigo mismo. Ve a terapia 😹' }, { quoted: msg });
-      }
+      if (target === sender) return sock.sendMessage(remoteJid, { text: '⚠️ [ERROR PSICOLÓGICO]\nNo es posible emitir un acta para casarse consigo mismo.' }, { quoted: msg });
+      if (isMarried(data, sender)) return sock.sendMessage(remoteJid, { text: '⚠️ [FRAUDE DETECTADO]\nEl sistema indica que usted ya está casado. Tramite su *.divorcio* primero.' }, { quoted: msg });
+      if (isMarried(data, target)) return sock.sendMessage(remoteJid, { text: '⚠️ [SOLICITUD DENEGADA]\nEl ciudadano solicitado ya se encuentra legalmente unido a otra persona.' }, { quoted: msg });
 
-      if (isMarried(data, sender)) {
-        return sock.sendMessage(remoteJid, { text: '💍 ¡Ey, infiel! Ya estás casado/a. Primero usa *.divorcio*.' }, { quoted: msg });
-      }
-
-      if (isMarried(data, target)) {
-        return sock.sendMessage(remoteJid, { text: '💔 Llegaste tarde, esa persona ya le pertenece a alguien más.' }, { quoted: msg });
-      }
-
-      PROPOSALS.set(target, {
-        from: sender,
-        to: target,
-        chat: remoteJid,
-        time: Date.now()
-      });
+      PROPOSALS.set(target, { from: sender, to: target, chat: remoteJid, time: Date.now() });
 
       const propuestaText = 
-`🔔 *¡TENEMOS UNA DECLARACIÓN!* 🔔
+`📄 *EXPEDIENTE DE SOLICITUD N° ${generateID()}*
+TIPO: Petición de Unión Civil
 
-🤵/👰 *@${number(sender)}* se ha puesto de rodillas, ha sacado un anillo de plástico y le ha propuesto matrimonio a *@${number(target)}*.
+👤 *SOLICITANTE:* @${number(sender)}
+👤 *DESTINATARIO:* @${number(target)}
 
-¿Qué dices, @${number(target)}? Tienes la última palabra:
-✅ Escribe *.aceptar* para vivir felices.
-❌ Escribe *.rechazar* para romperle el corazón.`;
+*NOTIFICACIÓN OFICIAL:*
+Se le notifica al destinatario que se ha puesto un anillo a su disposición. Para proceder con el registro legal, por favor emita su respuesta:
 
-      return sock.sendMessage(remoteJid, {
-        text: propuestaText,
-        mentions: [sender, target]
-      }, { quoted: msg });
+✅ Emitir firma: *.aceptar*
+❌ Denegar firma: *.rechazar*
+
+_Este documento expira si no es respondido._`;
+
+      return sock.sendMessage(remoteJid, { text: propuestaText, mentions: [sender, target] }, { quoted: msg });
     }
 
     // ==========================================
-    // ✅ ACEPTAR PROPUESTA
+    // ✅ RESOLUCIÓN DE APROBACIÓN (ACEPTAR)
     // ==========================================
     if (command === 'aceptar') {
       const proposal = PROPOSALS.get(sender);
 
-      if (!proposal || proposal.chat !== remoteJid) {
-        return sock.sendMessage(remoteJid, { text: '❌ Nadie te ha propuesto matrimonio últimamente. Sigue esperando.' }, { quoted: msg });
-      }
-
+      if (!proposal || proposal.chat !== remoteJid) return sock.sendMessage(remoteJid, { text: '⚠️ No se encontraron solicitudes pendientes a su nombre en la base de datos.' }, { quoted: msg });
       if (isMarried(data, sender) || isMarried(data, proposal.from)) {
         PROPOSALS.delete(sender);
-        return sock.sendMessage(remoteJid, { text: '❌ Esta propuesta se canceló porque alguien decidió casarse con otra persona a escondidas.' }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: '⚠️ El trámite fue anulado por conflicto de estado civil (alguien ya se casó).' }, { quoted: msg });
       }
 
       data.marriages[sender] = { partner: proposal.from, since: Date.now() };
@@ -163,110 +152,120 @@ Comandos disponibles:
       saveDB(data);
       PROPOSALS.delete(sender);
 
-      // Regalo de bodas en XP si existe la base de datos
       let recompensaTexto = '';
       if (db && typeof db.addXP === 'function') {
-        const regalo = 500; // XP por casarse
+        const regalo = 500;
         await db.addXP(sender, regalo);
         await db.addXP(proposal.from, regalo);
-        recompensaTexto = `\n🎁 *Regalo de bodas:* ¡Ambos han recibido ${regalo} XP!`;
+        recompensaTexto = `\n💰 *SUBVENCIÓN DEL ESTADO:* ${regalo} XP a cada uno.`;
       }
 
       const aceptadoText = 
-`✨💖 *¡VIVAN LOS NOVIOS!* 💖✨
+`✅ *RESOLUCIÓN MATRIMONIAL APROBADA*
+──────────────────────
+Por el poder conferido por este servidor, los ciudadanos han firmado oficialmente el acta.
 
-@${number(proposal.from)} y @${number(sender)} acaban de dar el sí en el altar virtual. 
+🤵/👰 **CÓNYUGE 1:** @${number(proposal.from)}
+🤵/👰 **CÓNYUGE 2:** @${number(sender)}
 
-Que el amor, la paciencia y el internet nunca les falte. ¡Felicidades! 🎉🥂${recompensaTexto}`;
+*ESTADO LEGAL:* CASADOS 💍
+_A partir de este momento, comparten bienes, stickers y traumas._${recompensaTexto}
 
-      return sock.sendMessage(remoteJid, {
-        text: aceptadoText,
-        mentions: [proposal.from, sender]
-      }, { quoted: msg });
+SELLO DEL REGISTRO:
+💮 [ A P R O B A D O ]`;
+
+      return sock.sendMessage(remoteJid, { text: aceptadoText, mentions: [proposal.from, sender] }, { quoted: msg });
     }
 
     // ==========================================
-    // ❌ RECHAZAR PROPUESTA
+    // ❌ RESOLUCIÓN DE RECHAZO (RECHAZAR)
     // ==========================================
     if (command === 'rechazar') {
       const proposal = PROPOSALS.get(sender);
 
-      if (!proposal || proposal.chat !== remoteJid) {
-        return sock.sendMessage(remoteJid, { text: '❌ No hay ninguna propuesta para rechazar. Estás a salvo.' }, { quoted: msg });
-      }
+      if (!proposal || proposal.chat !== remoteJid) return sock.sendMessage(remoteJid, { text: '⚠️ No hay ninguna solicitud pendiente a su nombre.' }, { quoted: msg });
 
       PROPOSALS.delete(sender);
 
       const rechazoText = 
-`🌧️ *SOLDADO CAÍDO* 🌧️
+`❌ *RESOLUCIÓN DE RECHAZO*
+EXPEDIENTE N° ${generateID()} ARCHIVADO
 
-Uff... *@${number(sender)}* acaba de rechazar fríamente la propuesta de *@${number(proposal.from)}*.
+El ciudadano @${number(sender)} ha declinado formalmente la solicitud de unión civil impuesta por @${number(proposal.from)}.
 
-Un minuto de silencio por ese corazón roto. Directo a la friendzone 😿💔.`;
+*MOTIVO DE RECHAZO:* Enviado a la Friendzone.
+*DAÑOS:* Perjuicio psicológico severo.
 
-      return sock.sendMessage(remoteJid, {
-        text: rechazoText,
-        mentions: [sender, proposal.from]
-      }, { quoted: msg });
+_Se recomienda al solicitante no rogar y mantener su dignidad intacta._`;
+
+      return sock.sendMessage(remoteJid, { text: rechazoText, mentions: [sender, proposal.from] }, { quoted: msg });
     }
 
     // ==========================================
-    // 💑 VER PAREJA (CERTIFICADO)
+    // 💑 EMISIÓN DE CERTIFICADO (PAREJA)
     // ==========================================
     if (command === 'pareja') {
       const partner = getPartner(data, sender);
 
-      if (!partner) {
-        return sock.sendMessage(remoteJid, { text: '💔 Estás más soltero/a que el número 1. Usa *.proponer* para buscar pareja.' }, { quoted: msg });
-      }
+      if (!partner) return sock.sendMessage(remoteJid, { text: '⚠️ *BÚSQUEDA SIN RESULTADOS:* Usted figura como SOLTERO/A en nuestra base de datos.' }, { quoted: msg });
 
       const since = data.marriages[sender]?.since;
 
       const certificado = 
-`╔════════════════════════╗
-      📜 *CERTIFICADO DE BODA* 📜      
-╚════════════════════════╝
+`╔═════════════════════════════════╗
+║   🏛️ REGISTRO NACIONAL VIRTUAL  ║
+╠═════════════════════════════════╣
+║    📜 CERTIFICADO DE UNIÓN 📜   ║
+╚═════════════════════════════════╝
 
-💍 **Cónyuge 1:** @${number(sender)}
-💍 **Cónyuge 2:** @${number(partner)}
+*FOLIO:* ${generateID()}-A
+*FECHA DE INSCRIPCIÓN:* ${formatDate(since)}
 
-📅 **Felizmente casados desde:** _${formatDate(since)}_
+Se certifica la unión legal y oficial de:
+🔸 @${number(sender)}
+🔸 @${number(partner)}
 
-💞 _"Hasta que un baneo los separe"_ 💞`;
+*NOTAS:*
+Este documento es válido en todos los grupos de la jurisdicción del Bot.
+_Hasta que un baneo o el .divorcio los separe._
 
-      return sock.sendMessage(remoteJid, {
-        text: certificado,
-        mentions: [sender, partner]
-      }, { quoted: msg });
+█║▌│█│║▌║││█║▌║▌
+   VERIFICADO ✓`;
+
+      return sock.sendMessage(remoteJid, { text: certificado, mentions: [sender, partner] }, { quoted: msg });
     }
 
     // ==========================================
-    // 💔 DIVORCIO
+    // ⚖️ ACTA DE DIVORCIO FORMAL (DIVORCIO)
     // ==========================================
     if (command === 'divorcio') {
       const partner = getPartner(data, sender);
 
-      if (!partner) {
-        return sock.sendMessage(remoteJid, { text: '❌ Ni siquiera estás casado/a. ¿De quién te vas a divorciar, de tu sombra?' }, { quoted: msg });
-      }
+      if (!partner) return sock.sendMessage(remoteJid, { text: '⚠️ *ERROR JURÍDICO:* No puede divorciarse si no existe un matrimonio previo registrado.' }, { quoted: msg });
 
       delete data.marriages[sender];
       delete data.marriages[partner];
       saveDB(data);
 
       const divorcioText = 
-`⚖️ *PAPELES DE DIVORCIO FIRMADOS* ⚖️
+`🏛️ *JUZGADO DE FAMILIA VIRTUAL* 🏛️
+📄 ACTA DE DIVORCIO Y SEPARACIÓN DE BIENES
 
-@${number(sender)} ha decidido terminar su matrimonio con @${number(partner)}.
+*NÚMERO DE EXPEDIENTE:* #${generateID()}-ROTO
 
-Se acabó el amor. Ahora toca contactar a los abogados, dividir los terrenos y pelear por la custodia de las wawas 🐶🐾.
+Por la presente, se declara la disolución irrevocable del vínculo matrimonial entre:
+👤 *Demandante:* @${number(sender)}
+👤 *Demandado/a:* @${number(partner)}
 
-¡Vuelven a la soltería! 🍾`;
+*RESOLUCIÓN JUDICIAL:*
+1. Se aprueba la separación definitiva.
+2. Queda pendiente la división de los terrenos virtuales y la economía (XP).
+3. Se inicia el juicio por la custodia compartida de las wawas 🐶🐾 y los gastos de su comida.
 
-      return sock.sendMessage(remoteJid, {
-        text: divorcioText,
-        mentions: [sender, partner]
-      }, { quoted: msg });
+⛔ *NUEVO ESTADO CIVIL:* SOLTEROS
+✍️ _Firma del Juez: SiriusBot_`;
+
+      return sock.sendMessage(remoteJid, { text: divorcioText, mentions: [sender, partner] }, { quoted: msg });
     }
   }
 };
