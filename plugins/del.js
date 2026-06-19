@@ -285,16 +285,18 @@ Uso:
         deleteKey.participant = quotedParticipant;
       }
 
+      // 1. Borrar el mensaje al que se respondió
       await tryDeleteMessage(sock, remoteJid, deleteKey, isOwnMessage);
 
-      // borrar también el mensaje que ejecutó el comando
+      // 2. Borrar también el mensaje que ejecutó el comando (.del)
       try {
         await new Promise(resolve => setTimeout(resolve, 500));
 
+        // 🔥 CORRECCIÓN AQUÍ: Se usa dinámicamente si el comando lo envió el bot o un usuario
         const commandDeleteKey = {
           remoteJid: msg.key.remoteJid,
           id: msg.key.id,
-          fromMe: true
+          fromMe: !!msg.key.fromMe 
         };
 
         if (msg.key.participant) {
@@ -305,7 +307,7 @@ Uso:
           sock,
           remoteJid,
           commandDeleteKey,
-          true
+          !!msg.key.fromMe // 🔥 CORRECCIÓN AQUÍ TAMBIÉN
         );
 
       } catch (e) {
