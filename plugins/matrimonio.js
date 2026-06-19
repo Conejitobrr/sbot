@@ -13,6 +13,7 @@ try {
 
 const DB_PATH = path.join(process.cwd(), 'lib', 'marriages.json');
 const PROPOSALS = new Map();
+const CEREMONIES = new Map(); // 🔥 Nuevo mapa para rastrear bodas en vivo
 
 function ensureDB() {
   const dir = path.dirname(DB_PATH);
@@ -38,8 +39,12 @@ function getPartner(data, user) { const clean = cleanJid(user); return data.marr
 function isMarried(data, user) { return !!getPartner(data, user); }
 function formatDate(ms) { return new Date(ms).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' }); }
 
+// Función para pausar el tiempo
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 module.exports = {
-  commands: ['proponer', 'aceptar', 'rechazar', 'divorcio', 'pareja', 'matrimonio'],
+  // 🔥 Se añadió el comando "oponerse"
+  commands: ['proponer', 'aceptar', 'rechazar', 'divorcio', 'pareja', 'matrimonio', 'oponerse'],
 
   async execute({ sock, msg, remoteJid, sender, command }) {
     const data = loadDB();
@@ -50,33 +55,34 @@ module.exports = {
     // ==========================================
     if (command === 'matrimonio') {
       const menu = 
-`⛪ *PARROQUIA DE SAN SIRIUS* ⛪
+`⛪ *PARROQUIA DE SAN SIRIUSBOT* ⛪
 "Donde dos almas se unen por WiFi"
 
 Hermanos, bienvenidos a la sagrada capilla del grupo. ¿Qué sacramento desean recibir hoy?
 
 🕊️ *OPCIONES:*
 ➤ *.proponer @usuario* » Arrodillarse en el altar
-➤ *.aceptar* » Dar el "Sí, acepto"
+➤ *.aceptar* » Empezar la ceremonia
 ➤ *.rechazar* » Huir de la iglesia
+➤ *.oponerse* » Arruinar una boda en vivo 😈
 ➤ *.pareja* » Ver el acta bendecida
-➤ *.divorcio* » Llamar al Juez Sirius`;
+➤ *.divorcio* » Llamar al Juez SiriusBot`;
 
       return sock.sendMessage(remoteJid, { text: menu }, { quoted: msg });
     }
 
     // ==========================================
-    // 💍 LA PROPUESTA (EL PADRE HABLA)
+    // 💍 LA PROPUESTA
     // ==========================================
     if (command === 'proponer') {
       const mentioned = getMentioned(msg)[0];
-      if (!mentioned) return sock.sendMessage(remoteJid, { text: 'Padre Sirius: "Hijo mío, debes mencionar a la persona que amas. No puedo casarte con el viento.\nUsa: *.proponer @usuario*"' }, { quoted: msg });
+      if (!mentioned) return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "Hijo mío, debes mencionar a la persona que amas. No puedo casarte con el viento.\nUsa: *.proponer @usuario*"' }, { quoted: msg });
       
       const target = cleanJid(mentioned);
 
-      if (target === sender) return sock.sendMessage(remoteJid, { text: 'Padre Sirius: "El amor propio es importante, pero no te puedo casar contigo mismo. Ve a confesarte 😹"' }, { quoted: msg });
-      if (isMarried(data, sender)) return sock.sendMessage(remoteJid, { text: 'Padre Sirius: "¡Pecador! Ya tienes una pareja en sagrado matrimonio. ¡Usa *.divorcio* primero!"' }, { quoted: msg });
-      if (isMarried(data, target)) return sock.sendMessage(remoteJid, { text: 'Padre Sirius: "Llegas tarde, hijo. Esa oveja ya pertenece a otro rebaño (ya está casada)."' }, { quoted: msg });
+      if (target === sender) return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "El amor propio es importante, pero no te puedo casar contigo mismo. Ve a confesarte 😹"' }, { quoted: msg });
+      if (isMarried(data, sender)) return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "¡Pecador! Ya tienes una pareja en sagrado matrimonio. ¡Usa *.divorcio* primero!"' }, { quoted: msg });
+      if (isMarried(data, target)) return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "Llegas tarde, hijo. Esa oveja ya pertenece a otro rebaño (ya está casada)."' }, { quoted: msg });
 
       PROPOSALS.set(target, { from: sender, to: target, chat: remoteJid, time: Date.now() });
 
@@ -85,10 +91,9 @@ Hermanos, bienvenidos a la sagrada capilla del grupo. ¿Qué sacramento desean r
 
 Hermanos y hermanas, estamos aquí reunidos porque *@${number(sender)}* se ha puesto su mejor traje, se ha arrodillado en el altar y le está ofreciendo su corazón a *@${number(target)}*.
 
-El Padre Sirius se acomoda los lentes y pregunta:
+El Padre SiriusBot se acomoda los lentes y pregunta:
 *"Dime, @${number(target)}, ¿aceptas tomar a esta persona para amarla y respetarla, incluso cuando no haya internet?"*
 
-Responde para continuar la ceremonia:
 👰/🤵 Di *.aceptar*
 🏃💨 Di *.rechazar*`;
 
@@ -96,21 +101,48 @@ Responde para continuar la ceremonia:
     }
 
     // ==========================================
-    // ✅ LA BODA (ACEPTAR)
+    // ✅ LA BODA (DINÁMICA CON TIEMPO)
     // ==========================================
     if (command === 'aceptar') {
       const proposal = PROPOSALS.get(sender);
 
-      if (!proposal || proposal.chat !== remoteJid) return sock.sendMessage(remoteJid, { text: 'Padre Sirius: "Hijo, nadie te está esperando en el altar. Vuelve a sentarte."' }, { quoted: msg });
+      if (!proposal || proposal.chat !== remoteJid) return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "Hijo, nadie te está esperando en el altar. Vuelve a sentarte."' }, { quoted: msg });
       if (isMarried(data, sender) || isMarried(data, proposal.from)) {
         PROPOSALS.delete(sender);
-        return sock.sendMessage(remoteJid, { text: 'Padre Sirius: "¡Se cancela la boda! Alguien ha cometido adulterio y se casó con otra persona."' }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "¡Se cancela la boda! Alguien ha cometido adulterio y se casó con otra persona."' }, { quoted: msg });
       }
 
+      // 1. ELIMINAR PROPUESTA Y EMPEZAR CEREMONIA EN VIVO
+      PROPOSALS.delete(sender);
+      CEREMONIES.set(remoteJid, { activo: true, novia: sender, novio: proposal.from });
+
+      const inicioCeremonia = 
+`✨🕊️ *LA CEREMONIA HA COMENZADO* 🕊️✨
+
+@${number(sender)} ha dicho: *¡SÍ, ACEPTO!*
+
+El Padre SiriusBot alza las manos hacia el cielo, mira a todos los presentes en el grupo y dice con voz solemne:
+
+🗣️ _"Si hay alguien en este grupo que se oponga a este matrimonio... que escriba **.oponerse** AHORA MISMO, o que calle y sea baneado para siempre."_
+
+⏳ *Tienen 8 segundos...*`;
+
+      await sock.sendMessage(remoteJid, { text: inicioCeremonia, mentions: [sender, proposal.from] });
+
+      // 2. EL SUSPENSO: PAUSAR EL BOT 8 SEGUNDOS
+      await sleep(8000);
+
+      // 3. VERIFICAR SI ALGUIEN ARRUINÓ LA BODA
+      const ceremoniaActual = CEREMONIES.get(remoteJid);
+      
+      // Si la ceremonia ya no está o 'activo' es falso, alguien se opuso
+      if (!ceremoniaActual || !ceremoniaActual.activo) return; 
+
+      // 4. SI NADIE SE OPUSO, SE CASAN OFICIALMENTE
       data.marriages[sender] = { partner: proposal.from, since: Date.now() };
       data.marriages[proposal.from] = { partner: sender, since: Date.now() };
       saveDB(data);
-      PROPOSALS.delete(sender);
+      CEREMONIES.delete(remoteJid); // Termina la ceremonia
 
       let recompensaTexto = '';
       if (db && typeof db.addXP === 'function') {
@@ -120,20 +152,47 @@ Responde para continuar la ceremonia:
         recompensaTexto = `\n\n✉️ *Lluvia de sobres:* Los padrinos les han regalado *${regalo} XP* a cada uno.`;
       }
 
-      const aceptadoText = 
-`✨🕊️ *LA CEREMONIA HA CONCLUIDO* 🕊️✨
+      const finalCeremonia = 
+`*(Silencio total en la iglesia...)* 🦗
 
-El Padre Sirius alza las manos hacia el cielo:
-_"Si hay alguien en este grupo que se oponga a este matrimonio, que hable ahora o sea baneado para siempre..."_
-
-*(Silencio en la sala)*
+Nadie ha dicho nada. El Padre SiriusBot sonríe y cierra la Biblia.
 
 _"Entonces, por el poder que me confiere el código fuente, ¡yo los declaro unidos en sagrado matrimonio!"_
 
 🎊 ¡Lluvia de arroz para @${number(proposal.from)} y @${number(sender)}! 🎊
 Ya pueden besarse (o mandarse un sticker romántico).${recompensaTexto}`;
 
-      return sock.sendMessage(remoteJid, { text: aceptadoText, mentions: [proposal.from, sender] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: finalCeremonia, mentions: [proposal.from, sender] });
+    }
+
+    // ==========================================
+    // 😈 OPONERSE (ARRUINAR LA BODA)
+    // ==========================================
+    if (command === 'oponerse') {
+      const ceremonia = CEREMONIES.get(remoteJid);
+
+      if (!ceremonia || !ceremonia.activo) {
+        return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "Tranquilo, rebelde. No hay ninguna boda celebrándose en este momento."' }, { quoted: msg });
+      }
+
+      // Destruir la boda
+      ceremonia.activo = false;
+      CEREMONIES.set(remoteJid, ceremonia); // Actualizar estado
+      CEREMONIES.delete(remoteJid); // Limpiar memoria
+
+      const dramaText = 
+`🚪💥 *¡PATEAN LA PUERTA DE LA IGLESIA!* 💥🚪
+
+¡ALTO AHÍ! 🛑
+@${number(sender)} ha entrado corriendo, tirando las flores y gritando:
+*"¡YO ME OPONGO! ¡ESA BODA ES UNA MENTIRA!"* 😱
+
+El Padre SiriusBot se desmaya. @${number(ceremonia.novia)} y @${number(ceremonia.novio)} se quedan en shock. 
+
+💔 *LA BODA HA SIDO CANCELADA OFICIALMENTE.*
+Necesitaremos mucho chisme para procesar lo que acaba de pasar...`;
+
+      return sock.sendMessage(remoteJid, { text: dramaText, mentions: [sender, ceremonia.novia, ceremonia.novio] });
     }
 
     // ==========================================
@@ -148,7 +207,7 @@ Ya pueden besarse (o mandarse un sticker romántico).${recompensaTexto}`;
       const rechazoText = 
 `🏃💨 *¡DRAMA EN EL ALTAR!* 🏃💨
 
-El Padre Sirius se persigna: _"¡Dios Santo!"_
+El Padre SiriusBot se persigna: _"¡Dios Santo!"_
 
 @${number(sender)} ha gritado "¡NO!" y ha salido corriendo por la puerta principal de la iglesia, dejando a @${number(proposal.from)} llorando con el anillo en la mano.
 
@@ -162,7 +221,7 @@ Alguien traiga tequila, tenemos a un soldado en la friendzone 😿💔.`;
     // ==========================================
     if (command === 'pareja') {
       const partner = getPartner(data, sender);
-      if (!partner) return sock.sendMessage(remoteJid, { text: 'Padre Sirius: "Aún eres un alma libre y soltera. Ve y usa *.proponer* para encontrar la luz."' }, { quoted: msg });
+      if (!partner) return sock.sendMessage(remoteJid, { text: 'Padre SiriusBot: "Aún eres un alma libre y soltera. Ve y usa *.proponer* para encontrar la luz."' }, { quoted: msg });
 
       const since = data.marriages[sender]?.since;
 
@@ -171,7 +230,7 @@ Alguien traiga tequila, tenemos a un soldado en la friendzone 😿💔.`;
       📜 *LIBRETA DE FAMILIA BENDITA* 📜      
 ╚════════════════════════════╝
 
-Con la bendición del Padre Sirius, se certifica el amor de:
+Con la bendición del Padre SiriusBot, se certifica el amor de:
 💞 @${number(sender)}
 💞 @${number(partner)}
 
@@ -184,11 +243,11 @@ _"Lo que el bot ha unido, que no lo separe un admin"_ 🕊️`;
     }
 
     // ==========================================
-    // ⚖️ EL DIVORCIO (EL JUEZ SIRIUS)
+    // ⚖️ EL DIVORCIO (EL JUEZ SIRIUSBOT)
     // ==========================================
     if (command === 'divorcio') {
       const partner = getPartner(data, sender);
-      if (!partner) return sock.sendMessage(remoteJid, { text: 'Juez Sirius: "Señor/a, no puedo divorciarlo si no está casado. Deje de hacer perder el tiempo a la corte."' }, { quoted: msg });
+      if (!partner) return sock.sendMessage(remoteJid, { text: 'Juez SiriusBot: "Señor/a, no puedo divorciarlo si no está casado. Deje de hacer perder el tiempo a la corte."' }, { quoted: msg });
 
       delete data.marriages[sender];
       delete data.marriages[partner];
@@ -196,7 +255,7 @@ _"Lo que el bot ha unido, que no lo separe un admin"_ 🕊️`;
 
       const divorcioText = 
 `⚖️ *TRIBUNAL DE FAMILIA VIRTUAL* ⚖️
-_(El Padre Sirius se quita la sotana y se pone la toga de Juez)_
+_(El Padre SiriusBot se quita la sotana y se pone la toga de Juez)_
 
 Silencio en la sala. Por solicitud de @${number(sender)}, se declara oficialmente ROTO el sagrado vínculo matrimonial con @${number(partner)}.
 
