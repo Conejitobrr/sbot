@@ -18,51 +18,50 @@ module.exports = {
     const capitulo = partes.pop().trim();
     const nombreAnime = partes.join(' ').trim();
 
-    await sock.sendMessage(remoteJid, { text: `🔍 *Rastreador en Modo Sigilo...*\nUsando motores de búsqueda para encontrar "${nombreAnime}" Ep ${capitulo} sin ser detectados.` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 *Motor Bing Activado...*\nRastreando los servidores de TokyVideo para "${nombreAnime}" Ep ${capitulo}.` }, { quoted: msg });
 
     try {
-      // Forzamos a DuckDuckGo a buscar solo dentro de TokyVideo
-      const query = `site:tokyvideo.com "${nombreAnime}" "capitulo ${capitulo}" (latino OR sub)`;
-      const urlBusqueda = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      // 🌐 Cambiamos DuckDuckGo por Bing (Mucho más amigable con los bots)
+      const query = `site:tokyvideo.com "${nombreAnime}" capitulo ${capitulo} latino OR sub`;
+      const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
 
-      const { data } = await axios.get(urlBusqueda, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      const { data } = await axios.get(searchUrl, {
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'es-ES,es;q=0.9'
+        }
       });
 
       const $ = cheerio.load(data);
       let links = [];
 
-      // Extraemos los links reales de los resultados
-      $('.result__snippet').each((i, el) => {
-        if (i < 2) { // Tomamos las 2 mejores opciones
-          const href = $(el).parent().find('.result__url').attr('href');
-          if (href && href.includes('uddg=')) {
-            const urlParams = new URLSearchParams(href.split('?')[1]);
-            const cleanLink = decodeURIComponent(urlParams.get('uddg'));
-            if (cleanLink.includes('tokyvideo.com/video/')) links.push(cleanLink);
-          }
+      // Bing guarda los resultados en etiquetas con la clase .b_algo
+      $('.b_algo h2 a').each((i, el) => {
+        const href = $(el).attr('href');
+        if (href && href.includes('tokyvideo.com/video/') && links.length < 3) {
+          links.push(href);
         }
       });
 
       if (!links.length) {
-        return sock.sendMessage(remoteJid, { text: '❌ No se encontraron resultados.\n\n💡 *Tip:* Asegúrate de escribir el nombre bien. (Ej: .buscaranime naruto - 5)' }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: '❌ Bing no encontró resultados.\n\n💡 *Tip:* Intenta buscar solo el nombre corto. (Ej: .buscaranime naruto - 5)' }, { quoted: msg });
       }
 
-      let respuestaFinal = `🎌 *RESULTADOS ENCONTRADOS* 🎌\n\n`;
+      let respuestaFinal = `🎌 *RESULTADOS EN TOKYVIDEO* 🎌\n\n`;
 
       links.forEach((link, i) => {
-        // Limpiamos la URL para crear un título improvisado
-        const tituloLimpio = link.split('/video/')[1].replace(/-/g, ' ').toUpperCase();
+        // Creamos un título limpio a partir de la URL
+        const tituloLimpio = decodeURIComponent(link.split('/video/')[1]).replace(/-/g, ' ').toUpperCase();
         respuestaFinal += `🎬 *Opción ${i + 1}:* ${tituloLimpio}\n`;
-        respuestaFinal += `📥 *Copia y pega esto para descargar:*\n.descargar ${link}\n`;
+        respuestaFinal += `📥 *Copia para descargar:*\n.descargar ${link}\n`;
         respuestaFinal += `━━━━━━━━━━━━━━━━━━\n\n`;
       });
 
       return sock.sendMessage(remoteJid, { text: respuestaFinal.trim() }, { quoted: msg });
 
     } catch (e) {
-      console.log('Error en buscador DDG:', e.message);
-      return sock.sendMessage(remoteJid, { text: '❌ Error al buscar en los motores de internet.' }, { quoted: msg });
+      console.log('❌ Error en buscador Bing:', e.message);
+      return sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error al conectar con el motor de búsqueda.' }, { quoted: msg });
     }
   }
 };
