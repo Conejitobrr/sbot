@@ -22,14 +22,14 @@ module.exports = {
 
       if (processingChats.has(remoteJid)) {
         return sock.sendMessage(remoteJid, {
-          text: '⏳ Aguanta, estoy procesando otra captura para el grupo.'
+          text: '⏳ Aguanta, el bot está procesando otra búsqueda pesada en este momento.'
         }, { quoted: msg });
       }
 
       const query = args.join(' ');
 
       await sock.sendMessage(remoteJid, {
-        text: '🔍 *Buscando información...* esperando a la IA y tomando captura.'
+        text: '🤖 *Iniciando asistente IA...* leyendo resultados y tomando captura.'
       }, { quoted: msg });
 
       processingChats.add(remoteJid);
@@ -46,50 +46,52 @@ module.exports = {
 
       const page = await browser.newPage();
       
-      // Tamaño de pantalla de PC
-      await page.setViewport({ width: 1280, height: 800 });
+      // Tamaño de pantalla amplio para que el cuadro de IA entre perfectamente
+      await page.setViewport({ width: 1366, height: 800 });
 
-      // Usamos el tema oscuro que tenías antes (kae=d) y en español
+      // Tema oscuro (kae=d) y en español
       const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es&kae=d`;
       
       await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
-      // 🔥 TRUCO 1: Borramos los anuncios usando CSS directo (No rompe la página)
-      await page.addStyleTag({
-        content: `
-          [data-testid="ads"], 
-          .js-ads-wrap, 
-          .module--ad { 
-            display: none !important; 
-          }
-        `
-      });
-
-      // 🔥 TRUCO 2: Borrado Quirúrgico del cartel de "Upgrade"
+      // 🔥 LIMPIEZA EXTREMA Y AUTO-CLICK EN LA IA
       await page.evaluate(() => {
-        // Buscamos solo textos específicos
-        const textos = document.querySelectorAll('h1, h2, h3, p, span, strong');
-        for (let t of textos) {
-          if (t.textContent.includes('Upgrade to our browser') || t.textContent.includes('Try the DuckDuckGo Browser')) {
-            // Buscamos la caja pequeña que lo contiene y la ocultamos, sin borrar todo el sitio
-            let padre = t.parentElement;
-            while (padre && padre.tagName !== 'BODY') {
-              if (padre.clientWidth < 600 || padre.style.position === 'fixed') {
-                padre.style.display = 'none';
+        // 1. Destruir cualquier rastro de Anuncios (Ads)
+        const ads = document.querySelectorAll('[data-testid*="ad"], .js-ads-wrap, .result--ad');
+        ads.forEach(ad => ad.remove());
+
+        // 2. Destruir popups flotantes (como la caja blanca de "Free")
+        const allDivs = document.querySelectorAll('div');
+        for (let div of allDivs) {
+          const text = div.innerText || '';
+          if (text.includes('Upgrade to our browser') || text === 'Free' || text.includes('Try the DuckDuckGo')) {
+            let parent = div;
+            // Buscamos el contenedor que flota y lo borramos completo
+            while (parent && parent.tagName !== 'BODY') {
+              if (window.getComputedStyle(parent).position === 'fixed' || window.getComputedStyle(parent).position === 'absolute') {
+                parent.remove();
                 break;
               }
-              padre = padre.parentElement;
+              parent = parent.parentElement;
             }
           }
         }
+
+        // 3. AUTO-CLICK en el botón de la Inteligencia Artificial
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const assistBtn = buttons.find(b => b.innerText && b.innerText.includes('Search Assist'));
+        if (assistBtn) {
+          assistBtn.click();
+        }
       });
 
-      // ⏳ TRUCO 3: Le damos 5 segundos exactos para que la Inteligencia artificial termine de escribir en pantalla
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // ⏳ Le damos 8 segundos al bot. 
+      // Este tiempo es crucial para que la IA de DuckDuckGo termine de "tipear" su respuesta antes de la foto.
+      await new Promise(resolve => setTimeout(resolve, 8000));
 
       const screenshotBuffer = await page.screenshot({ 
         type: 'jpeg', 
-        quality: 80, 
+        quality: 85, // Subimos un pelín la calidad para leer mejor a la IA
         fullPage: false 
       });
 
@@ -97,7 +99,7 @@ module.exports = {
 
       await sock.sendMessage(remoteJid, {
         image: screenshotBuffer,
-        caption: `🔍 *Búsqueda:* ${query}\n👤 *Pedido por:* @${sender.split('@')[0]}`,
+        caption: `🔍 *Búsqueda:* ${query}\n🤖 *Asistente IA Activado*\n👤 *Pedido por:* @${sender.split('@')[0]}`,
         mentions: [sender]
       }, { quoted: msg });
 
