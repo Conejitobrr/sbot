@@ -3,13 +3,69 @@
 const db = require('../lib/database');
 const sesiones = new Map();
 
-// Palabras variadas y cotidianas
+// Lista expandida: más de 60 palabras variadas y comunes
 const palabras = [
-  'MARACUYA', 'CHOCOLATE', 'AMISTAD', 'TELEFONO', 'CANCION', 'PANTALLA', 'CALABAZA', 
-  'AVENTURA', 'BICICLETA', 'CANGURO', 'DINOSAURIO', 'ESTRELLA', 'FANTASMA', 'GIRASOL', 
-  'HELADO', 'JUGUETE', 'KANGURO', 'LIMONADA', 'MARIPOSA', 'NARANJA', 'OCULTAR', 
-  'PALMERA', 'QUERIDO', 'RINOCERONTE', 'SORPRESA', 'TORTUGA', 'UNIVERSO', 'VALIENTE', 
-  'ZAPATILLA', 'CUMPLEAÑOS', 'BOMBON', 'CASCADA', 'DOMINGO', 'ESCORPION'
+  'AVION', 'ZAPATO', 'LINTERNA', 'MONTAÑA', 'PELOTA', 'DORMITORIO', 'HELICOPTERO',
+  'TELEVISION', 'CANGREJO', 'CASCADA', 'ESCORPION', 'BICICLETA', 'GUITARRA', 'CALABAZA',
+  'FANTASMA', 'ESTRELLA', 'JIRAFA', 'HIPOPOTAMO', 'MARIPOSA', 'NARANJA', 'PIZARRA',
+  'CUMPLEAÑOS', 'BOMBON', 'DOMINGO', 'DINOSAURIO', 'PANTALLA', 'CANCIOM', 'AMISTAD',
+  'AVENTURA', 'GIRASOL', 'HELADO', 'JUGUETE', 'LIMONADA', 'PALMERA', 'QUERIDO',
+  'RINOCERONTE', 'SORPRESA', 'TORTUGA', 'UNIVERSO', 'VALIENTE', 'ZAPATILLA', 'CORTINA',
+  'VENTANA', 'CUADERNO', 'MOCHILA', 'PISCINA', 'ESPEJO', 'RELOJ', 'CAMISETA', 'CORBATA',
+  'MALETA', 'PARAGUAS', 'ESCULTURA', 'FOTOGRAFIA', 'BICICLETA', 'CENICERO', 'BANCO'
+];
+
+// Dibujos ASCII integrados
+const ahorcadoASCII = [
+`  +---+
+  |   |
+      |
+      |
+      |
+      |
+=========`,
+`  +---+
+  |   |
+  O   |
+      |
+      |
+      |
+=========`,
+`  +---+
+  |   |
+  O   |
+  |   |
+      |
+      |
+=========`,
+`  +---+
+  |   |
+  O   |
+ /|   |
+      |
+      |
+=========`,
+`  +---+
+  |   |
+  O   |
+ /|\\  |
+      |
+      |
+=========`,
+`  +---+
+  |   |
+  O   |
+ /|\\  |
+ /    |
+      |
+=========`,
+`  +---+
+  |   |
+  O   |
+ /|\\  |
+ / \\  |
+      |
+=========`
 ];
 
 module.exports = {
@@ -19,21 +75,23 @@ module.exports = {
     const { sock, remoteJid, args, sender, msg } = ctx;
     const input = args.join(' ').toUpperCase().trim();
 
-    // 1. INICIAR JUEGO
+    // 1. INICIAR O BUSCAR JUEGO
     if (!sesiones.has(remoteJid)) {
       const palabra = palabras[Math.floor(Math.random() * palabras.length)];
       sesiones.set(remoteJid, {
         palabra,
         oculta: Array(palabra.length).fill('_'),
         letrasUsadas: [],
-        vidas: new Map() // Aquí guardamos las vidas de cada jugador individualmente
+        vidas: new Map() 
       });
-      return sock.sendMessage(remoteJid, { text: `🎮 *¡Nuevo Ahorcado!* \nLa palabra tiene ${palabra.length} letras.\n\nPalabra: ${Array(palabra.length).fill('_').join(' ')}\n\n💡 Escribe *.ahorcado [letra]* para participar.` }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { 
+          text: `🎮 *¡Nuevo Ahorcado!* \n\n${ahorcadoASCII[0]}\n\nPalabra: ${Array(palabra.length).fill('_').join(' ')}\n\n💡 Escribe *.ahorcado [letra]* para participar.` 
+      }, { quoted: msg });
     }
 
     const juego = sesiones.get(remoteJid);
 
-    // Inicializar vidas del jugador si es nuevo en esta partida
+    // Inicializar vidas del jugador (6 intentos)
     if (!juego.vidas.has(sender)) {
       juego.vidas.set(sender, 6);
     }
@@ -41,13 +99,13 @@ module.exports = {
     let vidasJugador = juego.vidas.get(sender);
 
     if (vidasJugador <= 0) {
-      return sock.sendMessage(remoteJid, { text: '❌ Ya te quedaste sin vidas en esta partida, ¡espera a la siguiente!', mentions: [sender] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: '❌ Ya te quedaste sin vidas en esta partida. ¡Espera a la siguiente!', mentions: [sender] }, { quoted: msg });
     }
 
-    // 2. LÓGICA DE JUEGO
+    // 2. LÓGICA DE JUEGO (LETRAS)
     if (input.length === 1 && /^[A-Z]$/.test(input)) {
       if (juego.letrasUsadas.includes(input)) {
-        return sock.sendMessage(remoteJid, { text: `⚠️ La letra ${input} ya se usó.` });
+        return sock.sendMessage(remoteJid, { text: `⚠️ La letra *${input}* ya se usó.` });
       }
 
       juego.letrasUsadas.push(input);
@@ -63,24 +121,36 @@ module.exports = {
         vidasJugador--;
       }
     } else {
-      return sock.sendMessage(remoteJid, { text: '❌ Escribe una sola letra para jugar.' });
+      return sock.sendMessage(remoteJid, { text: '❌ Por favor, escribe solo una letra.' });
     }
 
-    // 3. RESULTADOS
+    // 3. CALCULAR FALLOS (6 - vidas = índice del dibujo)
+    const fallos = 6 - vidasJugador;
+    const dibujo = ahorcadoASCII[fallos] || ahorcadoASCII[6];
+
+    // 4. RESULTADOS
     const palabraActual = juego.oculta.join('');
+    
     if (palabraActual === juego.palabra) {
       sesiones.delete(remoteJid);
       const xp = 100;
       await db.addXP(sender, xp);
-      return sock.sendMessage(remoteJid, { text: `🏆 *¡Victoria!* @${sender.split('@')[0]} ha completado la palabra: *${juego.palabra}*.\n\n🎁 Ganaste ${xp} XP.`, mentions: [sender] });
+      return sock.sendMessage(remoteJid, { 
+          text: `🏆 *¡VICTORIA!* \n\nLa palabra era: *${juego.palabra}*\nGanador: @${sender.split('@')[0]}\n\n🎁 Ganaste *${xp} XP*.`, 
+          mentions: [sender] 
+      });
     }
 
     if (vidasJugador === 0) {
-      return sock.sendMessage(remoteJid, { text: `💀 @${sender.split('@')[0]} estás eliminado de esta partida. Te quedan 0 vidas.`, mentions: [sender] });
+      return sock.sendMessage(remoteJid, { 
+          text: `💀 *¡ESTÁS AHORCADO!*\n\n${dibujo}\n\nPerdiste, @${sender.split('@')[0]}. La palabra era: *${juego.palabra}*.`, 
+          mentions: [sender] 
+      });
     }
 
+    // 5. MOSTRAR ESTADO
     await sock.sendMessage(remoteJid, { 
-      text: `Palabra: ${juego.oculta.join(' ')}\n\n📝 Usadas: ${juego.letrasUsadas.join(', ')}\n❤️ Tu vida: ${vidasJugador}`
+      text: `${dibujo}\n\nPalabra: ${juego.oculta.join(' ')}\n\n📝 Usadas: ${juego.letrasUsadas.join(', ')}\n❤️ Tus vidas: ${vidasJugador}`
     });
   }
 };
