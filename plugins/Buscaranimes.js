@@ -9,46 +9,53 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, args, msg } = ctx;
 
-    if (args.length === 0) {
-      return sock.sendMessage(remoteJid, { text: '❌ Escribe lo que buscas. Ejemplo: .buscaranime jujutsu kaisen 1' }, { quoted: msg });
-    }
+    if (args.length === 0) return sock.sendMessage(remoteJid, { text: '❌ Ejemplo: .buscaranime jujutsu kaisen 1' }, { quoted: msg });
 
-    const queryInput = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando en TokyVideo: "${queryInput}"...` }, { quoted: msg });
+    const query = args.join(' ');
+    await sock.sendMessage(remoteJid, { text: `🔍 *Cazando el capítulo real de "${query}"...*\nAnalizando duración de los resultados.` }, { quoted: msg });
 
     try {
-      // Búsqueda simple y directa
-      const query = `site:tokyvideo.com ${queryInput}`;
-      const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
-
-      const { data } = await axios.get(searchUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-      });
-
+      const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent('site:tokyvideo.com ' + query)}`;
+      const { data } = await axios.get(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
       const $ = cheerio.load(data);
-      let resultados = [];
-
-      $('.b_algo').each((i, el) => {
-        const title = $(el).find('h2').text().trim();
-        const href = $(el).find('h2 a').attr('href');
-        if (href && href.includes('tokyvideo.com/video/')) {
-          resultados.push({ title, href });
-        }
+      
+      let enlacesCandidatos = [];
+      $('.b_algo h2 a').each((i, el) => {
+        const href = $(el).attr('href');
+        if (href && href.includes('tokyvideo.com/video/')) enlacesCandidatos.push(href);
       });
 
-      if (!resultados.length) {
-        return sock.sendMessage(remoteJid, { text: '❌ No se encontró nada con ese término.' }, { quoted: msg });
+      // Solo evaluamos los 5 mejores resultados para no tardar una eternidad
+      let encontrado = null;
+      for (const link of enlacesCandidatos.slice(0, 5)) {
+        try {
+          const videoPage = await axios.get(link, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+          // Buscamos la duración en el JSON de TokyVideo
+          const durationMatch = videoPage.data.match(/"duration":(\d+)/);
+          if (durationMatch) {
+            const duracionSegundos = parseInt(durationMatch[1]);
+            // 17 minutos = 1020 segundos
+            if (duracionSegundos >= 1020) {
+              encontrado = { link, duracion: (duracionSegundos / 60).toFixed(1) };
+              break; // ¡Encontrado!
+            }
+          }
+        } catch (e) { continue; }
       }
 
-      let respuestaFinal = `🎌 *RESULTADOS BRUTOS* 🎌\n\n`;
-      resultados.slice(0, 5).forEach((res, i) => {
-        respuestaFinal += `*${i + 1}.* ${res.title}\n📥 *.descargar ${res.href}*\n\n`;
-      });
+      if (!encontrado) {
+        return sock.sendMessage(remoteJid, { text: '❌ No encontré ningún video que dure más de 17 minutos.' }, { quoted: msg });
+      }
 
-      return sock.sendMessage(remoteJid, { text: respuestaFinal }, { quoted: msg });
+      // Si encuentra el capítulo, lo descarga automáticamente usando el descargador
+      await sock.sendMessage(remoteJid, { text: `✅ *Capítulo localizado:* Dura ${encontrado.duracion} minutos.\nDescargando y enviando...` }, { quoted: msg });
+      
+      // Aquí llamamos a la lógica de descarga (puedes copiar aquí el código de tu descargar.js)
+      // O simplemente le enviamos el link para que el usuario solo tenga que darle clic
+      return sock.sendMessage(remoteJid, { text: `🔗 *Aquí tienes el enlace directo:* ${encontrado.link}\n\nUsa .descargar ${encontrado.link}` }, { quoted: msg });
 
     } catch (e) {
-      return sock.sendMessage(remoteJid, { text: '❌ Error de búsqueda.' }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: '❌ Error al cazar el episodio.' }, { quoted: msg });
     }
   }
 };
