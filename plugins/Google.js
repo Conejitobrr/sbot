@@ -29,7 +29,7 @@ module.exports = {
       const query = args.join(' ');
 
       await sock.sendMessage(remoteJid, {
-        text: '🔍 *Buscando información...* limpiando anuncios y tomando captura.'
+        text: '🔍 *Buscando información...* esperando a la IA y tomando captura.'
       }, { quoted: msg });
 
       processingChats.add(remoteJid);
@@ -46,33 +46,46 @@ module.exports = {
 
       const page = await browser.newPage();
       
+      // Tamaño de pantalla de PC
       await page.setViewport({ width: 1280, height: 800 });
 
-      // kl=es-es (Español) | kae=c (Tema Claro para que parezca Google)
-      const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es&kae=c`;
+      // Usamos el tema oscuro que tenías antes (kae=d) y en español
+      const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es&kae=d`;
       
       await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
-      // 🔥 TRUCO MÁGICO: Inyectar código para destruir la publicidad
-      await page.evaluate(() => {
-        // 1. Borrar el popup gigante de "Upgrade to our browser"
-        const popups = document.querySelectorAll('[class*="badge"], [class*="promo"]');
-        popups.forEach(p => p.remove());
-
-        const divs = document.querySelectorAll('div');
-        for (let div of divs) {
-          if (div.innerText && div.innerText.includes('Upgrade to our browser')) {
-            div.remove();
+      // 🔥 TRUCO 1: Borramos los anuncios usando CSS directo (No rompe la página)
+      await page.addStyleTag({
+        content: `
+          [data-testid="ads"], 
+          .js-ads-wrap, 
+          .module--ad { 
+            display: none !important; 
           }
-        }
-
-        // 2. Borrar los anuncios patrocinados de arriba (Ads)
-        const ads = document.querySelectorAll('.js-ads-wrap, [data-testid="ads"], .module--ad');
-        ads.forEach(ad => ad.remove());
+        `
       });
 
-      // Le damos 1.5 segundos extras para que la página se acomode tras borrar la basura
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // 🔥 TRUCO 2: Borrado Quirúrgico del cartel de "Upgrade"
+      await page.evaluate(() => {
+        // Buscamos solo textos específicos
+        const textos = document.querySelectorAll('h1, h2, h3, p, span, strong');
+        for (let t of textos) {
+          if (t.textContent.includes('Upgrade to our browser') || t.textContent.includes('Try the DuckDuckGo Browser')) {
+            // Buscamos la caja pequeña que lo contiene y la ocultamos, sin borrar todo el sitio
+            let padre = t.parentElement;
+            while (padre && padre.tagName !== 'BODY') {
+              if (padre.clientWidth < 600 || padre.style.position === 'fixed') {
+                padre.style.display = 'none';
+                break;
+              }
+              padre = padre.parentElement;
+            }
+          }
+        }
+      });
+
+      // ⏳ TRUCO 3: Le damos 5 segundos exactos para que la Inteligencia artificial termine de escribir en pantalla
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const screenshotBuffer = await page.screenshot({ 
         type: 'jpeg', 
