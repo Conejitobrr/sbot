@@ -1,7 +1,6 @@
 'use strict';
 
 const axios = require('axios');
-const cheerio = require('cheerio');
 
 const cooldowns = new Map();
 const COOLDOWN_TIME = 1 * 60 * 1000; 
@@ -12,60 +11,67 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, args, msg, sender, isOwner } = ctx;
 
-    // 🔥 DETECCIÓN AUTOMÁTICA DE OWNER
-    // 'isOwner' viene del contexto de tu bot (debería estar definido en tu archivo principal/config)
-    // Si tu bot usa una variable global, cámbiala por 'global.owner.includes(sender)'
-    const esCreador = isOwner || sender.includes('TU_NUMERO_AQUI'); // Pon tu número aquí por seguridad extra
+    // 👑 ZONA VIP: El bot detecta si eres el creador
+    const esCreador = isOwner || sender.includes('TU_NUMERO_AQUI'); // Opcional: pon tu número
 
     if (!esCreador && cooldowns.has(sender)) {
       const tiempoPasado = Date.now() - cooldowns.get(sender);
       if (tiempoPasado < COOLDOWN_TIME) {
-        return sock.sendMessage(remoteJid, { text: '⏳ *Sistema Anti-Spam:* Espera 1 minuto.' }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: '⏳ *Anti-Spam:* Espera 1 minuto antes de buscar otro anime.' }, { quoted: msg });
       }
     }
 
     const input = args.join(' ');
-    if (!input.includes('-')) return sock.sendMessage(remoteJid, { text: '❌ Formato: .anime nombre - capitulo' }, { quoted: msg });
+    if (!input.includes('-')) return sock.sendMessage(remoteJid, { text: '❌ Formato: .anime jujutsu kaisen - 1' }, { quoted: msg });
 
     const partes = input.split('-');
     const capitulo = partes.pop().trim();
     const nombreAnime = partes.join(' ').trim();
 
-    await sock.sendMessage(remoteJid, { text: `🔍 *Rastreador Buscando:* "${nombreAnime}" - Ep ${capitulo}...` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 *Explorando TokyVideo...*\nBuscando "${nombreAnime}" Capítulo ${capitulo} en servidores sin restricción...` }, { quoted: msg });
 
     try {
-      // Usamos DuckDuckGo para encontrar links públicos (Google Drive, carpetas abiertas, etc.)
-      const query = `site:drive.google.com "${nombreAnime}" "capitulo ${capitulo}" latino OR sub`;
-      const urlBusqueda = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      // Creamos la búsqueda exacta para la plataforma
+      const query = encodeURIComponent(`${nombreAnime} capitulo ${capitulo} latino`);
+      const searchUrl = `https://www.tokyvideo.com/es/search?q=${query}`;
 
-      const { data } = await axios.get(urlBusqueda, { 
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } 
+      const { data } = await axios.get(searchUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
       });
 
-      const $ = cheerio.load(data);
-      let linksDrive = '';
-
-      $('.result__snippet').each((i, el) => {
-        if (i < 3) {
-          const href = $(el).parent().find('.result__url').attr('href');
-          if (href && href.includes('uddg=')) {
-            const urlParams = new URLSearchParams(href.split('?')[1]);
-            const cleanLink = urlParams.get('uddg');
-            if (cleanLink) linksDrive += `*Drive:* ${decodeURIComponent(cleanLink)}\n\n`;
-          }
-        }
-      });
+      // Extraemos los links directos a los videos usando Regex (más rápido que Cheerio)
+      const links = data.match(/https:\/\/www\.tokyvideo\.com\/video\/[^"']+/g);
 
       if (!esCreador) cooldowns.set(sender, Date.now());
 
-      if (!linksDrive) {
-        return sock.sendMessage(remoteJid, { text: `❌ No encontré enlaces directos para este capítulo.` }, { quoted: msg });
+      if (!links || links.length === 0) {
+        return sock.sendMessage(remoteJid, { text: `❌ No encontré el capítulo en la base de datos de TokyVideo.\n\n💡 *Tip:* Asegúrate de escribir el nombre correctamente. (Ej: .anime dragon ball super - 5)` }, { quoted: msg });
       }
 
-      await sock.sendMessage(remoteJid, { text: `✅ *Enlaces encontrados (Libres de Bloqueo):*\n\n${linksDrive}` }, { quoted: msg });
+      // Filtramos para quitar links repetidos y tomamos los 3 primeros resultados
+      const linksUnicos = [...new Set(links)].slice(0, 3);
+
+      let respuestaFinal = 
+`✅ *CAPÍTULOS ENCONTRADOS* ✅
+
+🎬 *Anime:* ${nombreAnime}
+🔢 *Episodio:* ${capitulo}
+
+Aquí tienes las mejores opciones disponibles:
+
+`;
+      
+      linksUnicos.forEach((link, i) => {
+        respuestaFinal += `*Opción ${i + 1}:* ${link}\n\n`;
+      });
+
+      respuestaFinal += `📺 *Tip:* Abre cualquiera de estos enlaces. Son compatibles con tu app *Web Video Caster* para enviarlos directo a tu TV sin bloqueos.`;
+
+      return sock.sendMessage(remoteJid, { text: respuestaFinal }, { quoted: msg });
 
     } catch (e) {
-      return sock.sendMessage(remoteJid, { text: '❌ Error de red.' }, { quoted: msg });
+      console.log('❌ Error en rastreo TokyVideo:', e.message);
+      return sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error al conectar con los servidores de video.' }, { quoted: msg });
     }
   }
 };
