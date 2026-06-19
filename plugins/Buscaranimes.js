@@ -1,5 +1,7 @@
 'use strict';
+
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 const sesionesAnime = new Map();
 
@@ -23,24 +25,16 @@ module.exports = {
       }
 
       const anime = sesion[opcionIndex];
-      await sock.sendMessage(remoteJid, { text: `🔍 *Generando código de descarga para:* ${anime.title}...` }, { quoted: msg });
-
-      // Convertimos el nombre a formato Slug de AnimeFLV (ej: "Naruto Shippuden" -> "naruto-shippuden")
-      let slug = anime.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
       const detalleTexto = 
-`📺 *INFO DEL ANIME* 📺
+`📺 *INFO DEL ANIME (TioAnime)* 📺
 
 🎬 *Título:* ${anime.title}
-🔢 *Capítulos:* ${anime.episodes || 'Desconocido'}
-⭐ *Puntuación:* ${anime.score || 'N/A'}
 
 📥 *¿CÓMO DESCARGAR?*
-Copia el código exacto de abajo y cambia el "1" por el número de capítulo:
+Copia el código exacto de abajo y cambia el "1" por el número de capítulo que deseas ver:
 
-*.anime ${slug} - 1*
-
-_Nota: Si el código tiene un error, borra palabras extra como "tv" o "season"._`;
+*.anime ${anime.slug} - 1*`;
 
       return sock.sendMessage(remoteJid, { text: detalleTexto }, { quoted: msg });
     }
@@ -52,29 +46,43 @@ _Nota: Si el código tiene un error, borra palabras extra como "tv" o "season"._
       if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ Pon el nombre.\nEjemplo: .buscaranime naruto' }, { quoted: msg });
 
       const query = args.join(' ');
-      await sock.sendMessage(remoteJid, { text: `🔍 *Buscando:* "${query}" en la base de datos global...` }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: `🔍 Buscando "${query}" en los servidores de TioAnime...` }, { quoted: msg });
 
       try {
-        // Usamos la API de Jikan (MyAnimeList) que no está bloqueada en Perú
-        const { data } = await axios.get(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}`);
-        
-        if (!data || !data.data || data.data.length === 0) {
-          return sock.sendMessage(remoteJid, { text: '❌ No se encontró ese anime.' }, { quoted: msg });
-        }
-
-        const resultados = data.data.slice(0, 10);
-        sesionesAnime.set(remoteJid, resultados);
-
-        let respuesta = `🎌 *CATÁLOGO GLOBAL* 🎌\n\n`;
-        resultados.forEach((anime, i) => {
-          respuesta += `*${i + 1}.* ${anime.title} (${anime.year || 'N/A'})\n`;
+        const { data } = await axios.get(`https://tioanime.com/directorio?q=${encodeURIComponent(query)}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
         });
         
-        respuesta += `\n💡 *Para ver detalles y obtener código:*\nEscribe *.opcion [número]*\nEjemplo: .opcion 1`;
+        const $ = cheerio.load(data);
+        const resultados = [];
+
+        // Raspamos el catálogo de TioAnime
+        $('.animes .anime').each((i, el) => {
+          if (i < 10) {
+            const title = $(el).find('h3.title').text().trim();
+            const link = $(el).find('a').attr('href'); 
+            if (title && link) {
+              const slug = link.split('/anime/')[1];
+              resultados.push({ title, link, slug });
+            }
+          }
+        });
+
+        if (!resultados.length) return sock.sendMessage(remoteJid, { text: '❌ TioAnime no tiene ese anime registrado o lo escribiste mal.' }, { quoted: msg });
+
+        sesionesAnime.set(remoteJid, resultados);
+
+        let respuesta = `🎌 *CATÁLOGO TIOANIME* 🎌\n\n`;
+        resultados.forEach((anime, i) => {
+          respuesta += `*${i + 1}.* ${anime.title}\n`;
+        });
+        
+        respuesta += `\n💡 *Para obtener el código de descarga:*\nEscribe *.opcion [número]*\nEjemplo: .opcion 1`;
 
         return sock.sendMessage(remoteJid, { text: respuesta }, { quoted: msg });
       } catch (error) {
-        return sock.sendMessage(remoteJid, { text: '❌ Error de conexión con la base de datos global.' }, { quoted: msg });
+        console.log(error.message);
+        return sock.sendMessage(remoteJid, { text: '❌ Error al conectar con TioAnime.' }, { quoted: msg });
       }
     }
   }
