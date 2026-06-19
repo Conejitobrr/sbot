@@ -2,23 +2,44 @@
 
 const db = require('../lib/database');
 
+// 🔥 Limpieza idéntica a la de tu admin.js para evitar números raros
 function cleanJid(jid = '') {
-  return String(jid).split(':')[0];
+  const value = String(jid || '');
+  if (!value) return '';
+
+  if (value.includes('@')) {
+    const [user, server] = value.split('@');
+    return `${user.split(':')[0]}@${server}`;
+  }
+  return value.split(':')[0];
 }
 
-function cleanNumber(jid = '') {
-  return String(jid)
-    .split('@')[0]
-    .split(':')[0]
-    .replace(/\D/g, '');
+function number(jid = '') {
+  return cleanJid(jid).split('@')[0].replace(/\D/g, '');
 }
 
-function getTarget(msg) {
-  const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
-  if (quoted) return cleanJid(quoted);
+function getTarget(msg, args) {
+  const ctxInfo = msg.message?.extendedTextMessage?.contextInfo || 
+                  msg.message?.imageMessage?.contextInfo || 
+                  msg.message?.videoMessage?.contextInfo;
 
-  const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-  if (mentioned) return cleanJid(mentioned);
+  // 1. Respondiendo a un mensaje
+  if (ctxInfo?.participant) {
+    return cleanJid(ctxInfo.participant);
+  }
+
+  // 2. Mención directa
+  if (ctxInfo?.mentionedJid?.length > 0) {
+    return cleanJid(ctxInfo.mentionedJid[0]);
+  }
+
+  // 3. Número escrito
+  if (args && args.length > 0) {
+    const textNum = args.join('').replace(/\D/g, '');
+    if (textNum.length >= 8) {
+      return `${textNum}@s.whatsapp.net`;
+    }
+  }
 
   return null;
 }
@@ -33,7 +54,8 @@ module.exports = {
       remoteJid,
       msg,
       command,
-      isOwner
+      isOwner,
+      args
     } = ctx;
 
     try {
@@ -44,18 +66,19 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      const target = getTarget(msg);
+      const targetJid = getTarget(msg, args);
 
-      if (!target) {
+      if (!targetJid) {
         return sock.sendMessage(remoteJid, {
-          text: `❌ Debes mencionar o responder a un usuario.\n\nEjemplos:\n.${command} @usuario`
+          text: `❌ Debes mencionar, responder o escribir el número del usuario.\n\nEjemplos:\n.${command} @usuario`
         }, { quoted: msg });
       }
 
-      const targetNumber = cleanNumber(target);
+      const targetNumber = number(targetJid);
+      const senderNumber = number(ctx.sender);
       
-      // No puedes advertirte a ti mismo ni a otros Owners (opcional, pero buena práctica)
-      if (targetNumber === cleanNumber(ctx.sender)) {
+      // No puedes advertirte a ti mismo
+      if (targetNumber === senderNumber) {
         return sock.sendMessage(remoteJid, {
           text: '❌ No puedes darte advertencias a ti mismo.'
         }, { quoted: msg });
@@ -72,10 +95,10 @@ module.exports = {
 
         // Si llega a 3 advertencias
         if (userData.botWarns >= 3) {
-          // Usamos la misma función de tu banuser.js para banearlo de verdad
+          // Lo baneamos
           await db.banUser(targetNumber);
           
-          // Reiniciamos las advertencias por si alguna vez lo desbaneas con .unbanuser
+          // Reiniciamos las advertencias por si lo desbaneas luego
           userData.botWarns = 0; 
           await db.setUser(targetNumber, userData);
 
