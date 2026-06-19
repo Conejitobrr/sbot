@@ -18,11 +18,11 @@ module.exports = {
     const capitulo = partes.pop().trim();
     const nombreAnime = partes.join(' ').trim();
 
-    await sock.sendMessage(remoteJid, { text: `🔍 *Motor Bing Activado...*\nRastreando los servidores de TokyVideo para "${nombreAnime}" Ep ${capitulo}.` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 *Búsqueda Inteligente...*\nRastreando TokyVideo para: ${nombreAnime} (Cap/Ep ${capitulo})` }, { quoted: msg });
 
     try {
-      // 🌐 Cambiamos DuckDuckGo por Bing (Mucho más amigable con los bots)
-      const query = `site:tokyvideo.com "${nombreAnime}" capitulo ${capitulo} latino OR sub`;
+      // Búsqueda relajada (sin comillas) para que encuentre "ep1", "Cap 1", "episodio 1", etc.
+      const query = `site:tokyvideo.com ${nombreAnime} ${capitulo} latino OR sub`;
       const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
 
       const { data } = await axios.get(searchUrl, {
@@ -33,27 +33,30 @@ module.exports = {
       });
 
       const $ = cheerio.load(data);
-      let links = [];
+      let resultados = [];
 
-      // Bing guarda los resultados en etiquetas con la clase .b_algo
-      $('.b_algo h2 a').each((i, el) => {
-        const href = $(el).attr('href');
-        if (href && href.includes('tokyvideo.com/video/') && links.length < 3) {
-          links.push(href);
+      // Extraemos el título real y el enlace, tal como se ve en tu captura de Google
+      $('.b_algo').each((i, el) => {
+        const title = $(el).find('h2').text().trim();
+        const href = $(el).find('h2 a').attr('href');
+        
+        if (href && href.includes('tokyvideo.com/video/') && resultados.length < 3) {
+          // Filtramos un poco para que no traiga basura
+          if (title.toLowerCase().includes(nombreAnime.toLowerCase().split(' ')[0])) {
+            resultados.push({ title, href });
+          }
         }
       });
 
-      if (!links.length) {
-        return sock.sendMessage(remoteJid, { text: '❌ Bing no encontró resultados.\n\n💡 *Tip:* Intenta buscar solo el nombre corto. (Ej: .buscaranime naruto - 5)' }, { quoted: msg });
+      if (!resultados.length) {
+        return sock.sendMessage(remoteJid, { text: '❌ No encontré coincidencias.\n\n💡 *Tip:* Intenta buscar solo una palabra clave. (Ej: .buscaranime jujutsu - 1)' }, { quoted: msg });
       }
 
       let respuestaFinal = `🎌 *RESULTADOS EN TOKYVIDEO* 🎌\n\n`;
 
-      links.forEach((link, i) => {
-        // Creamos un título limpio a partir de la URL
-        const tituloLimpio = decodeURIComponent(link.split('/video/')[1]).replace(/-/g, ' ').toUpperCase();
-        respuestaFinal += `🎬 *Opción ${i + 1}:* ${tituloLimpio}\n`;
-        respuestaFinal += `📥 *Copia para descargar:*\n.descargar ${link}\n`;
+      resultados.forEach((res, i) => {
+        respuestaFinal += `🎬 *Opción ${i + 1}:* ${res.title}\n`;
+        respuestaFinal += `📥 *Copia para descargar:*\n.descargar ${res.href}\n`;
         respuestaFinal += `━━━━━━━━━━━━━━━━━━\n\n`;
       });
 
