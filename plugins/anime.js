@@ -23,51 +23,75 @@ module.exports = {
     const capitulo = partes.pop().trim();
     const slug = partes.join(' - ').trim(); 
     
-    await sock.sendMessage(remoteJid, { text: `💻 *Conectando a TioAnime...*\nExtrayendo video de: ${slug} - Ep ${capitulo}` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `💻 *Conectando a TioAnime...*\nHackeando servidores rusos para extraer: ${slug} - Ep ${capitulo}` }, { quoted: msg });
 
     try {
       const episodeUrl = `https://tioanime.com/ver/${slug}-${capitulo}`;
       const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' };
 
-      // 1. Entramos a la página del capítulo
+      // 1. Entramos a la página del capítulo en TioAnime
       const { data } = await axios.get(episodeUrl, { headers }).catch(() => ({ data: null }));
 
       if (!data) return sock.sendMessage(remoteJid, { text: '❌ El capítulo no existe. Asegúrate de haber escrito el número correctamente.' }, { quoted: msg });
 
-      // 2. TioAnime guarda los videos en una variable llamada "videos"
+      // 2. Extraemos el bloque de servidores de TioAnime
       const videoMatch = data.match(/var videos = (\[.*?\]);/);
       if (!videoMatch) return sock.sendMessage(remoteJid, { text: '❌ No pude encontrar los enlaces de video en el código.' }, { quoted: msg });
 
       const videos = JSON.parse(videoMatch[1]);
 
-      // Buscamos Mp4Upload o YourUpload
-      const mp4Server = videos.find(s => s[0].toLowerCase() === 'mp4upload');
-      const yuServer = videos.find(s => s[0].toLowerCase() === 'yourupload');
+      // 3. Cazamos los servidores específicos que usa TioAnime (Ok.ru y Uqload)
+      const okruServer = videos.find(s => s[0].toLowerCase() === 'okru');
+      const uqloadServer = videos.find(s => s[0].toLowerCase() === 'uqload');
 
       let finalMp4Url = null;
 
-      if (mp4Server) {
-        let embedUrl = mp4Server[1];
-        const mp4Res = await axios.get(embedUrl, { headers: { ...headers, Referer: 'https://tioanime.com/' } }).catch(() => ({ data: '' }));
-        const match = mp4Res.data.match(/src:\s*"([^"]+\.mp4)"/i);
-        if (match) finalMp4Url = match[1];
+      // 🔥 HACKEO DE OK.RU (Servidor Ruso)
+      if (okruServer) {
+        let okruUrl = okruServer[1];
+        if (okruUrl.startsWith('//')) okruUrl = 'https:' + okruUrl;
+        
+        try {
+          const okRes = await axios.get(okruUrl, { headers });
+          // Ok.ru esconde los videos dentro de un atributo "data-options" en formato JSON
+          const match = okRes.data.match(/data-options="([^"]+)"/);
+          if (match) {
+            // Limpiamos el texto para convertirlo en JSON real
+            const jsonStr = match[1].replace(/&quot;/g, '"');
+            const options = JSON.parse(jsonStr);
+            const metadata = JSON.parse(options.flashvars.metadata);
+            
+            // Buscamos la calidad HD o SD
+            const hdVideo = metadata.videos.find(v => v.name === 'hd' || v.name === 'sd' || v.name === 'mobile');
+            if (hdVideo) finalMp4Url = hdVideo.url;
+          }
+        } catch (err) {
+          console.log('Fallo al extraer Ok.ru');
+        }
       } 
-      else if (yuServer && !finalMp4Url) {
-        let embedUrl = yuServer[1];
-        const yuRes = await axios.get(embedUrl, { headers: { ...headers, Referer: 'https://tioanime.com/' } }).catch(() => ({ data: '' }));
-        const match = yuRes.data.match(/property="og:video"\s+content="([^"]+)"/);
-        if (match) finalMp4Url = match[1];
+      // 🔥 HACKEO DE UQLOAD (Servidor Alternativo)
+      else if (uqloadServer && !finalMp4Url) {
+        let uqUrl = uqloadServer[1];
+        if (uqUrl.startsWith('//')) uqUrl = 'https:' + uqUrl;
+        
+        try {
+          const uqRes = await axios.get(uqUrl, { headers });
+          const match = uqRes.data.match(/sources:\s*\["([^"]+)"\]/);
+          if (match) finalMp4Url = match[1];
+        } catch (err) {
+          console.log('Fallo al extraer Uqload');
+        }
       }
 
       if (!finalMp4Url) {
-        return sock.sendMessage(remoteJid, { text: `⚠️ *Seguridad Alta:* Los servidores bloquearon la extracción del MP4.\nÁbrelo manualmente en tu navegador para verlo:\n${episodeUrl}` }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: `⚠️ *Seguridad Alta:* Los servidores secundarios ocultaron el archivo.\nÁbrelo manualmente en tu navegador para verlo:\n${episodeUrl}` }, { quoted: msg });
       }
 
       cooldowns.set(sender, Date.now());
 
-      await sock.sendMessage(remoteJid, { text: `✅ *Extracción Exitosa.*\nEnviando capítulo. Esto tomará unos minutos dependiendo del peso...` }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: `✅ *Enlace vulnerado (Servidor Ok.ru / Uqload).*\nDescargando archivo completo a WhatsApp. Esto tomará un par de minutos...` }, { quoted: msg });
 
-      // Enviamos el video
+      // 4. Enviamos el video directamente a WhatsApp
       await sock.sendMessage(remoteJid, {
         document: { url: finalMp4Url },
         mimetype: 'video/mp4',
@@ -77,7 +101,7 @@ module.exports = {
       }, { quoted: msg });
 
     } catch (e) {
-      console.log('❌ Error en scraping:', e.message);
+      console.log('❌ Error en scraping de TioAnime:', e.message);
       await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error al intentar descargar este episodio.' }, { quoted: msg });
     }
   }
