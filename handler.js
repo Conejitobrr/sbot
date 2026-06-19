@@ -225,9 +225,7 @@ function hasViewOnceDeep(node, depth = 0, seen = new Set()) {
 
   const keys = Object.keys(node);
 
-  if (keys.some(k => String(k).toLowerCase().includes('viewonce'))) {
-    return true;
-  }
+  if (keys.some(k => String(k).toLowerCase().includes('viewonce'))) return true;
 
   if (
     node.imageMessage?.viewOnce === true ||
@@ -240,7 +238,6 @@ function hasViewOnceDeep(node, depth = 0, seen = new Set()) {
 
   for (const key of keys) {
     const value = node[key];
-
     if (isObject(value)) {
       if (hasViewOnceDeep(value, depth + 1, seen)) return true;
     }
@@ -275,16 +272,9 @@ function findMediaDeep(node, isOnce = false, depth = 0, seen = new Set()) {
 
   for (const key of keys) {
     const value = node[key];
-
     if (!isObject(value)) continue;
 
-    const found = findMediaDeep(
-      value,
-      nowOnce || key.toLowerCase().includes('viewonce'),
-      depth + 1,
-      seen
-    );
-
+    const found = findMediaDeep(value, nowOnce || key.toLowerCase().includes('viewonce'), depth + 1, seen);
     if (found) return found;
   }
 
@@ -294,9 +284,7 @@ function findMediaDeep(node, isOnce = false, depth = 0, seen = new Set()) {
 function getMessageKeysPreview(message = {}) {
   try {
     const keys = Object.keys(message || {});
-
     if (!keys.length) return 'sin keys';
-
     return keys.slice(0, 8).join(', ');
   } catch {
     return 'error leyendo keys';
@@ -318,7 +306,6 @@ function getReadableMessage(msg) {
     if (m.stickerMessage) return `[Sticker${once}]`;
     if (m.audioMessage) return m.audioMessage.ptt ? `[Nota de voz${once}]` : `[Audio${once}]`;
     if (m.documentMessage) return `[Documento${once}]`;
-
     return '[Archivo de 1 sola vez]';
   }
 
@@ -340,11 +327,7 @@ function getReadableMessage(msg) {
 }
 
 async function safeGroupMetadata(sock, jid) {
-  try {
-    return await sock.groupMetadata(jid);
-  } catch {
-    return null;
-  }
+  try { return await sock.groupMetadata(jid); } catch { return null; }
 }
 
 const JAIL_PATH = path.join(process.cwd(), 'lib', 'jail.json');
@@ -358,10 +341,7 @@ function msToTime(ms = 0) {
 
 function loadJailDB() {
   try {
-    if (!fs.existsSync(JAIL_PATH)) {
-      return { jailed: {}, fame: {} };
-    }
-
+    if (!fs.existsSync(JAIL_PATH)) return { jailed: {}, fame: {} };
     return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{}');
   } catch {
     return { jailed: {}, fame: {} };
@@ -371,23 +351,16 @@ function loadJailDB() {
 function saveJailDB(data) {
   try {
     const dir = path.dirname(JAIL_PATH);
-
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(JAIL_PATH, JSON.stringify(data, null, 2));
   } catch {}
 }
 
 function checkJail(jid) {
   const data = loadJailDB();
-
   data.jailed = data.jailed || {};
-
   const clean = String(jid || '').split(':')[0];
   const jail = data.jailed[clean];
-
   if (!jail) return null;
 
   if (Number(jail.until || 0) <= Date.now()) {
@@ -395,36 +368,28 @@ function checkJail(jid) {
     saveJailDB(data);
     return null;
   }
-
   return jail;
 }
 
-// ==========================================
-// 🔥 SISTEMA ANTI-SPAM (NUEVO)
-// ==========================================
 const spamCache = new Map();
 
 function checkSpam(sender) {
   const now = Date.now();
   let user = spamCache.get(sender) || { timestamps: [], bannedUntil: 0 };
 
-  // 1. Si está mini-baneado
   if (user.bannedUntil > now) return 'BANNED';
   
-  // 2. Limpiar el historial (Solo contamos los mensajes de los últimos 10 segundos)
   user.timestamps = user.timestamps.filter(t => now - t < 10000);
   user.timestamps.push(now);
 
-  // 3. Advertencia al 5to mensaje rápido
   if (user.timestamps.length === 5) {
     spamCache.set(sender, user);
     return 'WARN';
   }
 
-  // 4. Baneo silencioso al 6to mensaje rápido (Mini-ban de 60 segundos)
   if (user.timestamps.length >= 6) {
-    user.bannedUntil = now + 60000; // 60 segundos
-    user.timestamps = []; // Limpiamos su historial
+    user.bannedUntil = now + 60000; 
+    user.timestamps = []; 
     spamCache.set(sender, user);
     return 'BANNED';
   }
@@ -432,7 +397,6 @@ function checkSpam(sender) {
   spamCache.set(sender, user);
   return false;
 }
-// ==========================================
 
 async function messageHandler(sock, msg, store = {}) {
   try {
@@ -512,38 +476,32 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
-    if (messagePlugins.length) {
-      for (const plugin of messagePlugins) {
-        try {
-          await plugin.onMessage({
-            sock,
-            msg,
-            key,
-            remoteJid,
-            sender,
-            botJid,
-            pushName,
-            body,
-            store,
-            config,
-            db,
+    // ==========================================
+    // 🔥 APAGADO ABSOLUTO DEL BOT 
+    // Comprobamos la BD temprano para bloquear TODO lo automático
+    // ==========================================
+    let botEncendido = true;
+    if (fromGroup) {
+      const gData = await db.getGroup(remoteJid);
+      if (gData.bot === false) botEncendido = false;
+    } else {
+      const uData = await db.getUser(userKey);
+      if (uData.bot === false) botEncendido = false;
+    }
 
-            fromMe,
-            fromGroup,
-            isOwner,
-            isAdmin,
-            isBotAdmin,
-            groupMetadata,
-            groupAdmins,
-
-            reply: text => sock.sendMessage(
-              remoteJid,
-              { text: String(text) },
-              { quoted: msg }
-            )
-          });
-        } catch (e) {
-          console.log(chalk.red(`❌ Error en onMessage ${plugin.file}:`), e?.message || e);
+    // 🔥 Solo ejecutamos los audios y funciones automáticas si el bot ESTÁ ENCENDIDO
+    if (botEncendido) {
+      if (messagePlugins.length) {
+        for (const plugin of messagePlugins) {
+          try {
+            await plugin.onMessage({
+              sock, msg, key, remoteJid, sender, botJid, pushName, body, store, config, db,
+              fromMe, fromGroup, isOwner, isAdmin, isBotAdmin, groupMetadata, groupAdmins,
+              reply: text => sock.sendMessage(remoteJid, { text: String(text) }, { quoted: msg })
+            });
+          } catch (e) {
+            console.log(chalk.red(`❌ Error en onMessage ${plugin.file}:`), e?.message || e);
+          }
         }
       }
     }
@@ -558,61 +516,33 @@ async function messageHandler(sock, msg, store = {}) {
 
     if (!command) return;
 
+    // 🔥 Si el bot está apagado, bloqueamos los comandos (EXCEPTO enable/disable/menu/help)
+    if (!botEncendido && !['enable', 'disable', 'menu', 'help'].includes(command)) {
+       // El Owner siempre tiene pase VIP para forzar comandos aunque esté apagado
+       if (!isOwner) return; 
+    }
+
     const plugin = plugins.get(command);
     if (!plugin) return;
 
-    // ==========================================
-    // 🔥 CORTAFUEGOS: BANEOS Y ANTI-SPAM
-    // ==========================================
     if (!isOwner) {
-      // 1. Verificación de ban global
       const banned = await db.isBanned(sender);
-      if (banned) return; // Silencioso
+      if (banned) return;
 
-      // 2. Verificación Anti-Spam
       const spamStatus = checkSpam(sender);
-      
       if (spamStatus === 'WARN') {
         return sock.sendMessage(remoteJid, {
           text: `⚠️ *¡ALTO AHÍ!*\n\nEstás enviando comandos demasiado rápido.\nSi sigues haciendo spam, te silenciaré por 1 minuto de forma automática para proteger el sistema.`
         }, { quoted: msg });
       }
-
-      if (spamStatus === 'BANNED') {
-        return; // Silencioso (ignora el comando completamente)
-      }
+      if (spamStatus === 'BANNED') return;
     }
-    // ==========================================
 
-    // ⛓️ BLOQUEAR COMANDOS SI ESTÁ ARRESTADO
     const jail = checkJail(sender);
-
     if (jail && !isOwner && !['sobornar', 'fianza', 'usar', 'llave', 'inventario'].includes(command)) {
       return sock.sendMessage(remoteJid, {
-        text:
-`⛓️ *ESTÁS ARRESTADO*
-
-No puedes usar comandos del bot por ahora.
-
-⏳ Tiempo restante: *${msToTime(jail.until - Date.now())}*
-💸 Usa *.sobornar* para intentar salir antes.`
+        text: `⛓️ *ESTÁS ARRESTADO*\n\nNo puedes usar comandos del bot por ahora.\n\n⏳ Tiempo restante: *${msToTime(jail.until - Date.now())}*\n💸 Usa *.sobornar* para intentar salir antes.`
       }, { quoted: msg });
-    }
-
-    if (!isOwner) {
-      if (fromGroup) {
-        const groupData = await db.getGroup(remoteJid);
-
-        if (groupData.bot === false && !['enable', 'menu', 'help'].includes(command)) {
-          return;
-        }
-      } else {
-        const userData = await db.getUser(userKey);
-
-        if (userData.bot === false && !['enable', 'menu', 'help'].includes(command)) {
-          return;
-        }
-      }
     }
 
     if (config.debug) {
@@ -621,67 +551,24 @@ No puedes usar comandos del bot por ahora.
 
     try {
       await plugin.execute({
-        sock,
-        msg,
-        key,
-        remoteJid,
-        sender,
-        botJid,
-        pushName,
-        body,
-        args,
-        command,
-        store,
-        config,
-        db,
-
-        fromMe,
-        fromGroup,
-        isOwner,
-        isAdmin,
-        isBotAdmin,
-        groupMetadata,
-        groupAdmins,
-
-        reply: text => sock.sendMessage(
-          remoteJid,
-          { text: String(text) },
-          { quoted: msg }
-        )
+        sock, msg, key, remoteJid, sender, botJid, pushName, body, args, command, store, config, db,
+        fromMe, fromGroup, isOwner, isAdmin, isBotAdmin, groupMetadata, groupAdmins,
+        reply: text => sock.sendMessage(remoteJid, { text: String(text) }, { quoted: msg })
       });
 
-      if (config.debug) {
-        console.log(chalk.green(`✅ Comando ejecutado correctamente: ${command}`));
-      }
-
-      try {
-        await db.addXP(sender, Math.floor(Math.random() * 16) + 5);
-      } catch (e) {
-        console.log(chalk.yellow('⚠️ No se pudo guardar XP:'), e?.message || e);
-      }
-
+      if (config.debug) console.log(chalk.green(`✅ Comando ejecutado correctamente: ${command}`));
+      try { await db.addXP(sender, Math.floor(Math.random() * 16) + 5); } catch (e) {}
     } catch (e) {
-      console.log(chalk.red(`❌ Error en comando ${command}:`));
-      console.log(e?.stack || e);
-
-      try {
-        await sock.sendMessage(
-          remoteJid,
-          { text: '❌ Ocurrió un error ejecutando este comando.' },
-          { quoted: msg }
-        );
-      } catch {}
+      console.log(chalk.red(`❌ Error en comando ${command}:`), e?.stack || e);
+      try { await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error ejecutando este comando.' }, { quoted: msg }); } catch {}
     }
 
   } catch (err) {
-    console.log(chalk.red('❌ Error en handler:'));
-    console.log(err?.stack || err);
+    console.log(chalk.red('❌ Error en handler:'), err?.stack || err);
   }
 }
 
 module.exports = {
-  messageHandler,
-  loadPlugins,
-  plugins,
-  messagePlugins
+  messageHandler, loadPlugins, plugins, messagePlugins
 };
+    
