@@ -18,63 +18,51 @@ module.exports = {
     const capitulo = partes.pop().trim();
     const nombreAnime = partes.join(' ').trim();
 
-    await sock.sendMessage(remoteJid, { text: `🔍 *Conectando al Proxy Inverso...*\nBuscando sinopsis y enlaces para "${nombreAnime}" Ep ${capitulo}.` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 *Rastreador en Modo Sigilo...*\nUsando motores de búsqueda para encontrar "${nombreAnime}" Ep ${capitulo} sin ser detectados.` }, { quoted: msg });
 
     try {
-      // 🛡️ Envolvemos la búsqueda en AllOrigins para evitar el bloqueo de IP de TokyVideo
-      const query = encodeURIComponent(`${nombreAnime} capitulo ${capitulo} latino`);
-      const searchUrl = `https://www.tokyvideo.com/es/search?q=${query}`;
-      const proxySearchUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(searchUrl)}`;
+      // Forzamos a DuckDuckGo a buscar solo dentro de TokyVideo
+      const query = `site:tokyvideo.com "${nombreAnime}" "capitulo ${capitulo}" (latino OR sub)`;
+      const urlBusqueda = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
 
-      const { data } = await axios.get(proxySearchUrl, { timeout: 15000 });
-      const html = data.contents; // El proxy nos devuelve el HTML puro
-      const $ = cheerio.load(html);
-      
+      const { data } = await axios.get(urlBusqueda, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      });
+
+      const $ = cheerio.load(data);
       let links = [];
 
-      // Cazamos todos los enlaces de video que salgan en la búsqueda
-      $('a').each((i, el) => {
-        let href = $(el).attr('href');
-        if (href && href.includes('/video/')) {
-          if (!href.startsWith('http')) href = 'https://www.tokyvideo.com' + href;
-          if (!links.includes(href) && links.length < 2) {
-            links.push(href);
+      // Extraemos los links reales de los resultados
+      $('.result__snippet').each((i, el) => {
+        if (i < 2) { // Tomamos las 2 mejores opciones
+          const href = $(el).parent().find('.result__url').attr('href');
+          if (href && href.includes('uddg=')) {
+            const urlParams = new URLSearchParams(href.split('?')[1]);
+            const cleanLink = decodeURIComponent(urlParams.get('uddg'));
+            if (cleanLink.includes('tokyvideo.com/video/')) links.push(cleanLink);
           }
         }
       });
 
       if (!links.length) {
-        return sock.sendMessage(remoteJid, { text: '❌ No se encontraron capítulos. Intenta con un nombre más corto (Ej: .buscaranime jujutsu kaisen - 1)' }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: '❌ No se encontraron resultados.\n\n💡 *Tip:* Asegúrate de escribir el nombre bien. (Ej: .buscaranime naruto - 5)' }, { quoted: msg });
       }
 
       let respuestaFinal = `🎌 *RESULTADOS ENCONTRADOS* 🎌\n\n`;
 
-      // 🛡️ Volvemos a usar el Proxy para entrar a cada enlace y robar el resumen sin ser detectados
-      for (let i = 0; i < links.length; i++) {
-        try {
-          const videoProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(links[i])}`;
-          const videoRes = await axios.get(videoProxyUrl, { timeout: 15000 });
-          const $vid = cheerio.load(videoRes.data.contents);
-          
-          const title = $vid('meta[property="og:title"]').attr('content') || $vid('title').text() || 'Capítulo disponible';
-          let desc = $vid('meta[property="og:description"]').attr('content') || 'Sin resumen disponible.';
-          
-          if (desc.length > 200) desc = desc.substring(0, 200) + '...';
-
-          respuestaFinal += `🎬 *Opción ${i + 1}:* ${title}\n`;
-          respuestaFinal += `📝 *Sinopsis:* ${desc}\n\n`;
-          respuestaFinal += `📥 *Copia y pega esto para descargar:*\n.descargar ${links[i]}\n`;
-          respuestaFinal += `━━━━━━━━━━━━━━━━━━\n\n`;
-        } catch (err) {
-          console.log(`Fallo al leer la opción ${i + 1}`);
-        }
-      }
+      links.forEach((link, i) => {
+        // Limpiamos la URL para crear un título improvisado
+        const tituloLimpio = link.split('/video/')[1].replace(/-/g, ' ').toUpperCase();
+        respuestaFinal += `🎬 *Opción ${i + 1}:* ${tituloLimpio}\n`;
+        respuestaFinal += `📥 *Copia y pega esto para descargar:*\n.descargar ${link}\n`;
+        respuestaFinal += `━━━━━━━━━━━━━━━━━━\n\n`;
+      });
 
       return sock.sendMessage(remoteJid, { text: respuestaFinal.trim() }, { quoted: msg });
 
     } catch (e) {
-      console.log('❌ Error en buscador blindado:', e.message);
-      return sock.sendMessage(remoteJid, { text: '❌ Error al procesar la búsqueda. El proxy podría estar saturado.' }, { quoted: msg });
+      console.log('Error en buscador DDG:', e.message);
+      return sock.sendMessage(remoteJid, { text: '❌ Error al buscar en los motores de internet.' }, { quoted: msg });
     }
   }
 };
