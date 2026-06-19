@@ -5,6 +5,21 @@ const axios = require('axios');
 const cooldowns = new Map();
 const COOLDOWN_TIME = 2 * 60 * 1000; 
 
+// 🔥 TÚNEL ANTI-CLOUDFLARE: Engaña a TioAnime usando APIs de extracción públicas
+async function obtenerCodigoFuente(urlObjetivo) {
+  try {
+    const res = await axios.get(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(urlObjetivo)}`, { timeout: 15000 });
+    return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+  } catch (error1) {
+    try {
+      const res2 = await axios.get(`https://api.allorigins.win/raw?url=${encodeURIComponent(urlObjetivo)}`, { timeout: 15000 });
+      return typeof res2.data === 'string' ? res2.data : JSON.stringify(res2.data);
+    } catch (error2) {
+      return null;
+    }
+  }
+}
+
 module.exports = {
   commands: ['anime', 'descargar'],
 
@@ -23,15 +38,15 @@ module.exports = {
     const capitulo = partes.pop().trim();
     const slug = partes.join(' - ').trim(); 
     
-    await sock.sendMessage(remoteJid, { text: `💻 *Infiltración en TioAnime...*\nIntentando extraer el video o los enlaces VIP de: ${slug} - Ep ${capitulo}` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `💻 *Hackeando TioAnime mediante Túneles...*\nEvadiendo Cloudflare para extraer el Ep ${capitulo}` }, { quoted: msg });
 
     try {
       const episodeUrl = `https://tioanime.com/ver/${slug}-${capitulo}`;
-      const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' };
+      
+      // En lugar de ir directos, pasamos la URL por el túnel para saltar el bloqueo
+      const data = await obtenerCodigoFuente(episodeUrl);
 
-      const { data } = await axios.get(episodeUrl, { headers }).catch(() => ({ data: null }));
-
-      if (!data) return sock.sendMessage(remoteJid, { text: '❌ El capítulo no existe o la página está en mantenimiento.' }, { quoted: msg });
+      if (!data) return sock.sendMessage(remoteJid, { text: '❌ El túnel falló o la página de TioAnime está en mantenimiento.' }, { quoted: msg });
 
       // ==========================================
       // FASE 1: HACKEO DEL REPRODUCTOR (Intento de MP4)
@@ -47,34 +62,33 @@ module.exports = {
           let okruUrl = okruServer[1];
           if (okruUrl.startsWith('//')) okruUrl = 'https:' + okruUrl;
           try {
-            const okRes = await axios.get(okruUrl, { headers });
+            const okRes = await axios.get(okruUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
             const match = okRes.data.match(/data-options="([^"]+)"/);
             if (match) {
               const options = JSON.parse(match[1].replace(/&quot;/g, '"'));
               const metadata = JSON.parse(options.flashvars.metadata);
+              // Forzamos a buscar la mejor calidad
               const hdVideo = metadata.videos.find(v => v.name === 'hd' || v.name === 'sd');
               if (hdVideo) finalMp4Url = hdVideo.url;
             }
-          } catch (err) { /* Ignoramos el error para pasar a la Fase 2 */ }
+          } catch (err) { /* Ignoramos si falla para pasar a Fase 2 */ }
         }
       }
 
       // ==========================================
       // FASE 2: EXTRACCIÓN DE LINKS VIP DE DESCARGA
       // ==========================================
-      // TioAnime guarda los enlaces de descarga (Mega, Mediafire) en otra variable oculta
       const downloadsMatch = data.match(/var downloads = (\[.*?\]);/);
       let enlacesTexto = '';
 
       if (downloadsMatch) {
         const downloads = JSON.parse(downloadsMatch[1]);
         downloads.forEach(d => {
-          // d[0] es el nombre del servidor (Mega, Mediafire), d[1] es el link
           enlacesTexto += `*${d[0]}:* ${d[1]}\n`;
         });
       }
 
-      // Si tenemos el MP4 directo, lo enviamos a WhatsApp
+      // Si tenemos el MP4 directo, a WhatsApp
       if (finalMp4Url) {
         cooldowns.set(sender, Date.now());
         await sock.sendMessage(remoteJid, { text: `✅ *Seguridad Bypasseada.*\nDescargando video pesado a WhatsApp. Espera unos minutos...` }, { quoted: msg });
@@ -88,30 +102,27 @@ module.exports = {
         }, { quoted: msg });
       }
 
-      // ==========================================
-      // FASE 3: PLAN DE RESPALDO (Entregar Links)
-      // ==========================================
-      // Si el MP4 falló, pero logramos robar los links directos de Mega/Mediafire
+      // Si falló el MP4 pero salvamos los links
       if (enlacesTexto !== '') {
         const mensajeLinks = 
-`⚠️ *RESTRICCIÓN DE VIDEO* ⚠️
-Los servidores ocultaron el video directo, pero **¡hackeé sus enlaces privados de descarga!**
+`⚠️ *RESTRICCIÓN DE VIDEO (Bypass Exitoso)* ⚠️
+El archivo MP4 directo bloqueó la descarga, pero logré extraer los **Enlaces VIP de Descarga** saltando el Cloudflare.
 
-Descarga el capítulo en 1 clic desde tu servidor favorito:
+Baja el capítulo en calidad HD directamente desde aquí:
 
 ${enlacesTexto}
 
-💡 *Recomendación:* Usa el link de Mediafire o Mega para bajarlo rápido a tu celular o PC.`;
+💡 *Recomendación:* Usa Mega o Mediafire.`;
 
         return sock.sendMessage(remoteJid, { text: mensajeLinks }, { quoted: msg });
       }
 
-      // Si todo falla
-      return sock.sendMessage(remoteJid, { text: `❌ *Bloqueo Total:* TioAnime bloqueó la extracción y ocultó los links.\nTendrás que ir a la página: ${episodeUrl}` }, { quoted: msg });
+      // El último recurso
+      return sock.sendMessage(remoteJid, { text: `❌ *Bloqueo Total:* TioAnime actualizó su seguridad anti-bots el día de hoy.\nTendrás que ir a la página manualmente:\n${episodeUrl}` }, { quoted: msg });
 
     } catch (e) {
       console.log('❌ Error en híbrido:', e.message);
-      await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error interno al buscar el capítulo.' }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error interno al conectar con los túneles.' }, { quoted: msg });
     }
   }
 };
