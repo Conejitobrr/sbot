@@ -1,45 +1,56 @@
 'use strict';
 const axios = require('axios');
 
+const cooldowns = new Map();
+const COOLDOWN_TIME = 5 * 60 * 1000; // Lo bajé a 5 minutos para que sea más dinámico
+
 module.exports = {
   commands: ['anime', 'descargar'],
   async execute(ctx) {
     const { sock, remoteJid, args, msg, sender } = ctx;
-    const input = args.join(' ');
     
-    if (!input.includes('-')) return sock.sendMessage(remoteJid, { text: '❌ Formato: .anime Nombre - Capitulo' }, { quoted: msg });
+    if (cooldowns.has(sender)) {
+      const timeLeft = COOLDOWN_TIME - (Date.now() - cooldowns.get(sender));
+      if (timeLeft > 0) return sock.sendMessage(remoteJid, { text: `⏳ *ENFRIAMIENTO*\nEspera ${Math.ceil(timeLeft / 60000)} minutos para descargar otro.` }, { quoted: msg });
+    }
+
+    const input = args.join(' ');
+    if (!input.includes('-')) return sock.sendMessage(remoteJid, { text: '❌ Te faltó el guion.\nEjemplo: .anime Naruto - 1' }, { quoted: msg });
 
     const [nombre, capitulo] = input.split('-').map(s => s.trim());
     
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando: ${nombre} episodio ${capitulo}...` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `⏳ *Procesando descarga...*\n🎬 Anime: ${nombre}\n🔢 Capítulo: ${capitulo}` }, { quoted: msg });
 
     try {
-      // Usamos una API más estable (consumet/animeflv)
+      // 1. Buscamos el ID exacto
       const res = await axios.get(`https://api.consumet.org/anime/animeflv/${encodeURIComponent(nombre)}`);
-      if (!res.data.results.length) return sock.sendMessage(remoteJid, { text: '❌ Anime no encontrado.' }, { quoted: msg });
+      if (!res.data.results || !res.data.results.length) return sock.sendMessage(remoteJid, { text: '❌ No pude encontrar los datos de descarga en el servidor.' }, { quoted: msg });
 
-      // Buscamos el mejor match (si pediste latino, buscamos el que tenga 'latino' en el título)
-      let anime = res.data.results.find(a => nombre.toLowerCase().includes('latino') && a.title.toLowerCase().includes('latino')) || res.data.results[0];
+      // Agarramos el primer resultado porque el buscador ya nos dio el nombre exacto
+      const anime = res.data.results[0];
 
-      // Obtenemos los episodios
-      const info = await axios.get(`https://api.consumet.org/anime/animeflv/info?id=${anime.id}`);
-      const ep = info.data.episodes.find(e => e.number == capitulo);
-      
-      if (!ep) return sock.sendMessage(remoteJid, { text: '❌ Ese capítulo no existe.' }, { quoted: msg });
+      // 2. Traemos los links de video
+      const watch = await axios.get(`https://api.consumet.org/anime/animeflv/watch/${anime.id}-${capitulo}`);
+      if (!watch.data.sources || watch.data.sources.length === 0) {
+        return sock.sendMessage(remoteJid, { text: `❌ El capítulo ${capitulo} aún no está disponible para descargar.` }, { quoted: msg });
+      }
 
-      // Obtenemos el link de descarga
-      const watch = await axios.get(`https://api.consumet.org/anime/animeflv/watch?episodeId=${ep.id}`);
-      const video = watch.data.sources.find(s => s.quality === '720p')?.url || watch.data.sources[0].url;
+      // Buscamos calidad 720p para que no pase el límite de WhatsApp
+      const video = watch.data.sources.find(s => s.quality === '720p')?.file || watch.data.sources[0].file;
+
+      cooldowns.set(sender, Date.now());
 
       await sock.sendMessage(remoteJid, {
         document: { url: video },
         mimetype: 'video/mp4',
-        fileName: `${anime.title} Ep ${capitulo}.mp4`,
-        caption: `✅ *Descarga lista:* ${anime.title} - Ep ${capitulo}`
+        fileName: `${nombre} Ep ${capitulo}.mp4`,
+        caption: `✅ *ENTREGA DE ANIME*\n\n🎬 *Título:* ${nombre}\n🔢 *Capítulo:* ${capitulo}\n👤 *Pedido por:* @${sender.split('@')[0]}`,
+        mentions: [sender]
       }, { quoted: msg });
 
     } catch (e) {
-      await sock.sendMessage(remoteJid, { text: '❌ Error: El servidor de anime está ocupado. Intenta en un momento.' }, { quoted: msg });
+      console.log('Error de descarga API:', e.message);
+      await sock.sendMessage(remoteJid, { text: '❌ Los servidores de video están saturados. Inténtalo de nuevo en unos minutos.' }, { quoted: msg });
     }
   }
 };
