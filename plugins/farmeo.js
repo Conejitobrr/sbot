@@ -1,9 +1,9 @@
 'use strict';
 
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const shop = require('../lib/shop'); // 🔥 IMPORTADO: Para revisar el inventario
+const shop = require('../lib/shop'); 
 
-// 🔥 CANDADO ANTI-SPAM (Evita que saturen el bot mientras se reproduce la animación)
+// 🔥 CANDADO ANTI-SPAM
 const enUso = new Set();
 
 function cleanJid(jid = '') {
@@ -97,8 +97,45 @@ const minaCastigo = [
     '⛏️ Rompiste tu *pico de diamante* contra una piedra indestructible.'
 ];
 
+// ==========================================
+// DICCIONARIOS DE VARIEDAD (TALAR)
+// ==========================================
+const talaLegendaria = [
+    '🌳 ¡MÍTICO! Talaste una rama del mismísimo *Árbol del Mundo (Yggdrasil)*.',
+    '✨ Encontraste un claro oculto y talaste *Madera Élfica Brillante*.',
+    '🌌 Cortaste un árbol que cayó del cielo: *Madera de Estrella Fugaz*.',
+    '🔥 Talaste un *Roble de Fuego* que nunca se apaga.'
+];
+const talaEpica = [
+    '🪵 ¡Qué fuerza! Talaste un gigantesco *Árbol de Caoba Antigua*.',
+    '🌲 Conseguiste madera de un *Pino Milenario Místico*.',
+    '🍂 Encontraste y cortaste un raro *Árbol de Arce Dorado*.',
+    '🌳 Talaste madera de un *Roble Oscuro Encantado*.'
+];
+const talaNormal = [
+    '🪵 Talaste un montón de *Madera de Roble* estándar.',
+    '🌲 Cortaste varios *Pinos* para hacer tablas.',
+    '🪵 Conseguiste buena cantidad de *Madera de Abedul*.',
+    '🌿 Cortaste bambú y *Madera de Jungla*.',
+    '🪵 Trabajaste duro y apilaste mucha *Leña para el invierno*.'
+];
+const talaBasura = [
+    '🍂 Solo conseguiste un montón de *hojas secas*.',
+    '🪵 Tu hacha resbaló y solo cortaste *ramas podridas*.',
+    '🍄 Talaste un tronco que estaba lleno de *hongos venenosos*.',
+    '🐦 Tiraste un árbol y solo había un *nido de pájaros vacío*.',
+    '🪵 Cortaste la corteza y estaba llena de *termitas muertas*.'
+];
+const talaCastigo = [
+    '🐝 ¡GOLPEASTE UN PANAL! Un enjambre de *abejas asesinas* te atacó. Pagaste la clínica.',
+    '🪵 ¡CUIDADO! El árbol cayó hacia el lado equivocado y *te aplastó la pierna*.',
+    '🪓 Golpeaste una piedra escondida y *rompiste tu hacha*.',
+    '🐻 El ruido despertó a un *Oso pardo* que te persiguió por el bosque.',
+    '👮‍♂️ Un guardabosques te atrapó *talando en zona protegida* y te multó.'
+];
+
 module.exports = {
-    commands: ['pescar', 'minar'],
+    commands: ['pescar', 'minar', 'talar'],
     
     async execute(ctx) {
         const { sock, remoteJid, sender, command, db, reply, fromGroup } = ctx;
@@ -111,124 +148,113 @@ module.exports = {
         if (enUso.has(userKey)) return;
 
         const userData = await db.getUser(userKey);
-        const inv = await shop.getInventory(userKey); // 🔥 Obtenemos inventario
+        const inv = await shop.getInventory(userKey);
         const now = Date.now();
         const cooldown = 5 * 60 * 1000; // 5 minutos
 
         // ==========================================
-        // COMANDO: .pescar
+        // FUNCIÓN GENERAL DE FARMEO
         // ==========================================
-        if (command === 'pescar') {
-            const remaining = cooldown - (now - (userData.lastPescar || 0));
+        const procesarFarmeo = async (tipo, nombreComando, animacionIni, animacionFin, diccionarios, itemPro, emoji) => {
+            const dbField = `last${tipo}`;
+            const remaining = cooldown - (now - (userData[dbField] || 0));
 
             if (remaining > 0) {
                 const m = Math.floor(remaining / 60000);
                 const s = Math.floor((remaining % 60000) / 1000);
-                return reply(`⏳ Tus peces se asustaron. Debes esperar *${m}m ${s}s* para volver a pescar.`);
+                return reply(`⏳ Aún estás descansando de tu última jornada. Espera *${m}m ${s}s* para volver a ${nombreComando}.`);
             }
 
             enUso.add(userKey);
-            await db.setUser(userKey, { lastPescar: now });
+            await db.setUser(userKey, { [dbField]: now });
 
             try {
-                // 🔥 BONO PRO (Si tiene Caña Profesional)
-                let mult = (inv.cana_pro || 0) > 0 ? 1.5 : 1;
-                let aviso = mult > 1 ? '\n🎣 *¡Tu Caña Profesional te dio un bono del 50%!*' : '';
+                // BONO DE HERRAMIENTA PRO
+                let mult = (inv[itemPro] || 0) > 0 ? 1.5 : 1;
+                let aviso = mult > 1 ? `\n${emoji} *¡Tu Herramienta Profesional te dio un bono del 50%!*` : '';
 
-                let msg = await sock.sendMessage(remoteJid, { text: `🎣 @${number(sender)} ha lanzado la caña al agua...`, mentions: [userKey] });
+                // ANIMACIÓN
+                let msg = await sock.sendMessage(remoteJid, { text: animacionIni, mentions: [userKey] });
                 await esperar(1500);
-                try { await sock.sendMessage(remoteJid, { text: `🎣 @${number(sender)} siente un fuerte tirón... *¡Algo picó!*`, edit: msg.key, mentions: [userKey] }); } catch (e) {}
+                try { await sock.sendMessage(remoteJid, { text: animacionFin, edit: msg.key, mentions: [userKey] }); } catch (e) {}
                 await esperar(2000);
 
+                // CÁLCULO DE PROBABILIDAD Y CRÍTICO
                 let rand = Math.random() * 100;
+                let critico = Math.random() < 0.10; // 10% de probabilidad de golpe crítico (x2)
                 let premio = 0;
                 let resultadoTxt = '';
+                let textoCritico = critico ? `\n💥 *¡GOLPE CRÍTICO! Tu XP se ha duplicado.*` : '';
 
                 if (rand < 5) { 
                     premio = Math.floor(randXP(4000, 6000) * mult); 
-                    resultadoTxt = `${pick(pescaLegendaria)}${aviso}\n💰 Ganaste *${premio} XP*.`;
+                    if (critico) premio *= 2;
+                    resultadoTxt = `${pick(diccionarios.legendario)}${aviso}${textoCritico}\n💰 Ganaste *${premio} XP*.`;
                 } else if (rand < 20) { 
                     premio = Math.floor(randXP(1500, 2500) * mult); 
-                    resultadoTxt = `${pick(pescaEpica)}${aviso}\n💰 Ganaste *${premio} XP*.`;
+                    if (critico) premio *= 2;
+                    resultadoTxt = `${pick(diccionarios.epico)}${aviso}${textoCritico}\n💰 Ganaste *${premio} XP*.`;
                 } else if (rand < 70) { 
                     premio = Math.floor(randXP(400, 1000) * mult); 
-                    resultadoTxt = `${pick(pescaNormal)}${aviso}\n💰 Ganaste *${premio} XP*.`;
+                    if (critico) premio *= 2;
+                    resultadoTxt = `${pick(diccionarios.normal)}${aviso}${textoCritico}\n💰 Ganaste *${premio} XP*.`;
                 } else if (rand < 90) { 
                     premio = 0;
-                    resultadoTxt = `${pick(pescaBasura)}\n💸 No ganas nada de XP.`;
+                    resultadoTxt = `${pick(diccionarios.basura)}\n💸 No ganas nada de XP.`;
                 } else { 
                     let castigo = randXP(500, 1000);
                     if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
                     await db.removeXP(userKey, castigo);
-                    resultadoTxt = `${pick(pescaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
+                    resultadoTxt = `${pick(diccionarios.castigo)}\n❌ Perdiste *${castigo} XP*.`;
+                }
+
+                // 🐾 SINERGIA CON MASCOTAS
+                if (premio > 0 && userData.pet) {
+                    if (Math.random() < 0.25) { // 25% de que la mascota ayude
+                        let bonoMascota = Math.floor(premio * 0.20); // Da 20% extra
+                        premio += bonoMascota;
+                        resultadoTxt += `\n✨ ¡Tu mascota *${userData.pet.name}* te ayudó y encontró *+${bonoMascota} XP* extra!`;
+                    }
                 }
 
                 if (premio > 0) await db.addXP(userKey, premio);
 
-                let finalMsg = `*RESULTADO DE PESCA* 🎣\n\n${resultadoTxt}\n👤 @${number(sender)}`;
+                let finalMsg = `*RESULTADO DE ${nombreComando.toUpperCase()}* ${emoji}\n\n${resultadoTxt}\n👤 @${number(sender)}`;
                 try { await sock.sendMessage(remoteJid, { text: finalMsg, edit: msg.key, mentions: [userKey] }); } 
                 catch (e) { await sock.sendMessage(remoteJid, { text: finalMsg, mentions: [userKey] }); }
             } finally {
                 enUso.delete(userKey);
             }
+        };
+
+        // ==========================================
+        // RUTEO DE COMANDOS
+        // ==========================================
+        if (command === 'pescar') {
+            await procesarFarmeo('Pescar', 'pesca', 
+                `🎣 @${number(sender)} ha lanzado la caña al agua...`, 
+                `🎣 @${number(sender)} siente un fuerte tirón... *¡Algo picó!*`, 
+                { legendario: pescaLegendaria, epico: pescaEpica, normal: pescaNormal, basura: pescaBasura, castigo: pescaCastigo },
+                'cana_pro', '🎣'
+            );
         }
 
-        // ==========================================
-        // COMANDO: .minar
-        // ==========================================
         if (command === 'minar') {
-            const remaining = cooldown - (now - (userData.lastMinar || 0));
+            await procesarFarmeo('Minar', 'minería', 
+                `⛏️ @${number(sender)} encendió su antorcha y entró a la cueva oscura...`, 
+                `⛏️ @${number(sender)} está picando una pared de piedra...\n\n*¡Clank! ¡Clank! ¡Clank!*`, 
+                { legendario: minaLegendaria, epico: minaEpica, normal: minaNormal, basura: minaBasura, castigo: minaCastigo },
+                'pico_pro', '⛏️'
+            );
+        }
 
-            if (remaining > 0) {
-                const m = Math.floor(remaining / 60000);
-                const s = Math.floor((remaining % 60000) / 1000);
-                return reply(`⏳ Tus brazos están cansados. Debes esperar *${m}m ${s}s* para volver a minar.`);
-            }
-
-            enUso.add(userKey);
-            await db.setUser(userKey, { lastMinar: now });
-
-            try {
-                // 🔥 BONO PRO (Si tiene Pico Diamante)
-                let mult = (inv.pico_pro || 0) > 0 ? 1.5 : 1;
-                let aviso = mult > 1 ? '\n⛏️ *¡Tu Pico de Diamante te dio un bono del 50%!*' : '';
-
-                let msg = await sock.sendMessage(remoteJid, { text: `⛏️ @${number(sender)} encendió su antorcha y entró a la cueva oscura...`, mentions: [userKey] });
-                await esperar(1500);
-                try { await sock.sendMessage(remoteJid, { text: `⛏️ @${number(sender)} está picando una pared de piedra...\n\n*¡Clank! ¡Clank! ¡Clank!*`, edit: msg.key, mentions: [userKey] }); } catch (e) {}
-                await esperar(2000);
-
-                let rand = Math.random() * 100;
-                let premio = 0;
-                let resultadoTxt = '';
-
-                if (rand < 5) { 
-                    premio = Math.floor(randXP(4000, 6000) * mult); 
-                    resultadoTxt = `${pick(minaLegendaria)}${aviso}\n💰 Ganaste *${premio} XP*.`;
-                } else if (rand < 20) { 
-                    premio = Math.floor(randXP(1500, 2500) * mult); 
-                    resultadoTxt = `${pick(minaEpica)}${aviso}\n💰 Ganaste *${premio} XP*.`;
-                } else if (rand < 70) { 
-                    premio = Math.floor(randXP(400, 1000) * mult); 
-                    resultadoTxt = `${pick(minaNormal)}${aviso}\n💰 Ganaste *${premio} XP*.`;
-                } else if (rand < 90) { 
-                    premio = 0;
-                    resultadoTxt = `${pick(minaBasura)}\n💸 No ganas nada de XP.`;
-                } else { 
-                    let castigo = randXP(500, 1000); 
-                    if ((userData.xp || 0) < castigo) castigo = userData.xp || 0; 
-                    await db.removeXP(userKey, castigo);
-                    resultadoTxt = `${pick(minaCastigo)}\n❌ Perdiste *${castigo} XP*.`;
-                }
-
-                if (premio > 0) await db.addXP(userKey, premio);
-
-                let finalMsg = `*RESULTADO DE MINERÍA* ⛏️\n\n${resultadoTxt}\n👤 @${number(sender)}`;
-                try { await sock.sendMessage(remoteJid, { text: finalMsg, edit: msg.key, mentions: [userKey] }); } 
-                catch (e) { await sock.sendMessage(remoteJid, { text: finalMsg, mentions: [userKey] }); }
-            } finally {
-                enUso.delete(userKey);
-            }
+        if (command === 'talar') {
+            await procesarFarmeo('Talar', 'tala', 
+                `🪓 @${number(sender)} camina hacia el espeso bosque buscando un buen árbol...`, 
+                `🪓 @${number(sender)} levanta su hacha y comienza a golpear el tronco...\n\n*¡Chop! ¡Chop! ¡Chop!*`, 
+                { legendario: talaLegendaria, epico: talaEpica, normal: talaNormal, basura: talaBasura, castigo: talaCastigo },
+                'hacha_pro', '🪓'
+            );
         }
     }
 };
