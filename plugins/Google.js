@@ -29,7 +29,7 @@ module.exports = {
       const query = args.join(' ');
 
       await sock.sendMessage(remoteJid, {
-        text: '🤖 *Iniciando asistente IA...* leyendo resultados y tomando captura.'
+        text: '🤖 *Iniciando asistente IA...* analizando desde Perú y tomando captura.'
       }, { quoted: msg });
 
       processingChats.add(remoteJid);
@@ -45,12 +45,19 @@ module.exports = {
       });
 
       const page = await browser.newPage();
+
+      // 🔥 TRUCO DE UBICACIÓN: Fingimos ser una PC en Perú
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await page.setExtraHTTPHeaders({
+        // Esto fuerza a las páginas y a la IA a usar Español Latino/Peruano
+        'Accept-Language': 'es-PE,es-419,es;q=0.9,en;q=0.8'
+      });
       
       // Tamaño de pantalla amplio para que el cuadro de IA entre perfectamente
       await page.setViewport({ width: 1366, height: 800 });
 
-      // Tema oscuro (kae=d) y en español
-      const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es&kae=d`;
+      // kl=pe-es (Forzamos la región a Perú) | kae=d (Tema oscuro)
+      const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=pe-es&kae=d`;
       
       await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
