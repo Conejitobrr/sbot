@@ -1,7 +1,8 @@
 'use strict';
 
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
 module.exports = {
   commands: ['buscaranime', 'animes'],
@@ -12,40 +13,50 @@ module.exports = {
     if (args.length === 0) return sock.sendMessage(remoteJid, { text: '❌ Ejemplo: .buscaranime jujutsu kaisen 04' }, { quoted: msg });
 
     const query = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando en la web: "${query}"...` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 *Abriendo motor de navegación real...* buscando "${query}"...` }, { quoted: msg });
 
     try {
-      // Usamos el motor de DuckDuckGo que es el más amigable para bots
-      // Le pedimos que busque específicamente en Facebook
-      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent('site:facebook.com ' + query)}`;
+      const browser = await puppeteer.launch({
+        executablePath: '/usr/bin/chromium-browser',
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+
+      const page = await browser.newPage();
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36');
       
-      const { data } = await axios.get(searchUrl, { 
-        headers: { 
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36' 
-        } 
-      });
+      // Buscamos en Google directamente porque ya sabemos que tu Google.js encuentra resultados ahí
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent('site:facebook.com ' + query)}`;
+      await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
-      const $ = cheerio.load(data);
-      let resultados = [];
-
-      // DuckDuckGo usa la clase 'result__url' para los enlaces
-      $('.result__url').each((i, el) => {
-        const href = $(el).attr('href');
-        if (href && href.includes('facebook.com')) {
-          resultados.push(href);
+      // Extraemos los enlaces usando el navegador real
+      const links = await page.evaluate(() => {
+        const results = [];
+        const anchors = document.querySelectorAll('a');
+        for (let a of anchors) {
+          const href = a.href;
+          if (href && href.includes('facebook.com') && href.includes('video')) {
+            results.push(href);
+          }
         }
+        return results.slice(0, 3); // Primeros 3 resultados
       });
 
-      if (resultados.length === 0) {
-        return sock.sendMessage(remoteJid, { text: '❌ No se encontraron videos. Intenta un término más corto.' }, { quoted: msg });
+      await browser.close();
+
+      if (links.length === 0) {
+        return sock.sendMessage(remoteJid, { text: '❌ Google no pudo encontrar enlaces de video para esa búsqueda.' }, { quoted: msg });
       }
 
-      // Tomamos el primer resultado que es el más relevante
-      const respuesta = `✅ *Resultado encontrado en Facebook:*\n\n📥 *.descargar ${resultados[0]}*`;
+      let respuesta = `✅ *Resultados encontrados con Navegador Real:*\n\n`;
+      links.forEach((link, i) => {
+        respuesta += `*Opción ${i + 1}:* \n📥 .descargar ${link}\n\n`;
+      });
+
       return sock.sendMessage(remoteJid, { text: respuesta }, { quoted: msg });
 
     } catch (e) {
-      return sock.sendMessage(remoteJid, { text: '❌ Error al buscar en la web.' }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: '❌ Error crítico en el navegador del bot.' }, { quoted: msg });
     }
   }
 };
