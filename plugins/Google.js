@@ -8,7 +8,6 @@ puppeteer.use(StealthPlugin());
 const processingChats = new Set();
 
 module.exports = {
-  // Mantenemos el comando "google" para que tus usuarios no noten el cambio
   commands: ['google', 'buscar'],
 
   async execute(ctx) {
@@ -30,7 +29,7 @@ module.exports = {
       const query = args.join(' ');
 
       await sock.sendMessage(remoteJid, {
-        text: '🔍 *Buscando información...* tomando captura.'
+        text: '🔍 *Buscando información...* limpiando anuncios y tomando captura.'
       }, { quoted: msg });
 
       processingChats.add(remoteJid);
@@ -47,17 +46,33 @@ module.exports = {
 
       const page = await browser.newPage();
       
-      // Tamaño de pantalla de PC
       await page.setViewport({ width: 1280, height: 800 });
 
-      // Usamos el buscador antibloqueos. 
-      // kl=es-es (Idioma Español) | kae=d (Tema Claro para que parezca Google)
-      const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es&kae=d`;
+      // kl=es-es (Español) | kae=c (Tema Claro para que parezca Google)
+      const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es&kae=c`;
       
       await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
-      // Le damos 2 segundos para que cargue la información y las imágenes
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // 🔥 TRUCO MÁGICO: Inyectar código para destruir la publicidad
+      await page.evaluate(() => {
+        // 1. Borrar el popup gigante de "Upgrade to our browser"
+        const popups = document.querySelectorAll('[class*="badge"], [class*="promo"]');
+        popups.forEach(p => p.remove());
+
+        const divs = document.querySelectorAll('div');
+        for (let div of divs) {
+          if (div.innerText && div.innerText.includes('Upgrade to our browser')) {
+            div.remove();
+          }
+        }
+
+        // 2. Borrar los anuncios patrocinados de arriba (Ads)
+        const ads = document.querySelectorAll('.js-ads-wrap, [data-testid="ads"], .module--ad');
+        ads.forEach(ad => ad.remove());
+      });
+
+      // Le damos 1.5 segundos extras para que la página se acomode tras borrar la basura
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       const screenshotBuffer = await page.screenshot({ 
         type: 'jpeg', 
