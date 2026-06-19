@@ -39,7 +39,7 @@ async function downloadSticker(sticker) {
 async function convertStickerToVideo(input, gif, output) {
 
   // 🔥 convertir sticker animado a gif
-  await execFileAsync('magick', [
+  await execFileAsync('convert', [
     input,
     gif
   ]);
