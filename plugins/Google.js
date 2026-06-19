@@ -8,6 +8,7 @@ puppeteer.use(StealthPlugin());
 const processingChats = new Set();
 
 module.exports = {
+  // Mantenemos el comando "google" para que tus usuarios no noten el cambio
   commands: ['google', 'buscar'],
 
   async execute(ctx) {
@@ -29,7 +30,7 @@ module.exports = {
       const query = args.join(' ');
 
       await sock.sendMessage(remoteJid, {
-        text: '🔍 *Hackeando la seguridad de Google...* simulando ser humano.'
+        text: '🔍 *Buscando información...* tomando captura.'
       }, { quoted: msg });
 
       processingChats.add(remoteJid);
@@ -40,45 +41,22 @@ module.exports = {
         args: [
           '--no-sandbox', 
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-blink-features=AutomationControlled',
-          '--start-maximized'
-        ],
-        ignoreDefaultArgs: ['--enable-automation']
+          '--disable-dev-shm-usage'
+        ]
       });
 
       const page = await browser.newPage();
-
-      // Fingimos ser una computadora con Windows 10 e idioma en Español
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      await page.setExtraHTTPHeaders({
-        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
-      });
+      
+      // Tamaño de pantalla de PC
       await page.setViewport({ width: 1280, height: 800 });
 
-      // Inyectamos la cookie para saltar el aviso legal de Google
-      const cookies = [{
-        name: 'SOCS',
-        value: 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmVzIAEaBgiA_LyaBg',
-        domain: '.google.com'
-      }];
-      await page.setCookie(...cookies);
+      // Usamos el buscador antibloqueos. 
+      // kl=es-es (Idioma Español) | kae=d (Tema Claro para que parezca Google)
+      const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es&kae=d`;
+      
+      await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
-      // 1. VAMOS A LA PÁGINA PRINCIPAL PRIMERO (Como un humano)
-      await page.goto('https://www.google.com/?hl=es-419', { waitUntil: 'networkidle2' });
-
-      // 2. SIMULAMOS ESCRIBIR LETRA POR LETRA
-      await page.waitForSelector('[name="q"]', { timeout: 5000 });
-      // "delay: 60" hace que el bot tarde 60 milisegundos entre cada letra que escribe
-      await page.type('[name="q"]', query, { delay: 60 }); 
-
-      // 3. PRESIONAMOS ENTER Y ESPERAMOS
-      await Promise.all([
-        page.keyboard.press('Enter'),
-        page.waitForNavigation({ waitUntil: 'networkidle2' })
-      ]);
-
-      // Le damos 2 segundos extras para que carguen bien las imágenes de los resultados
+      // Le damos 2 segundos para que cargue la información y las imágenes
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const screenshotBuffer = await page.screenshot({ 
@@ -99,7 +77,7 @@ module.exports = {
       console.log('❌ Error en google.js:', err?.message || err);
 
       await sock.sendMessage(remoteJid, {
-        text: '❌ Google se puso muy terco y bloqueó el acceso. Intenta con otra búsqueda.'
+        text: '❌ Hubo un error al tomar la captura. Inténtalo de nuevo.'
       }, { quoted: msg });
 
     } finally {
