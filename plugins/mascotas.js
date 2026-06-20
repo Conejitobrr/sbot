@@ -233,7 +233,7 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    // ⚔️ SISTEMA DE PELEAS NARRADO EN VIVO
+    // ⚔️ SISTEMA DE PELEAS NARRADO EN VIVO (Con Bypass y Bonos de Edad)
     if (command === 'pelear') {
       const target = getTarget(msg, args);
       if (!target) return sock.sendMessage(remoteJid, { text: `❌ Menciona o responde al dueño de la mascota que quieres desafiar.` }, { quoted: msg });
@@ -246,16 +246,29 @@ module.exports = {
       
       if (hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `🤒 *${p.name}* está demasiado débil para pelear. Cúralo primero.` }, { quoted: msg });
       
+      // 🔥 MODO DIOS: Owner y Premium no esperan
       const remaining = (60 * 60 * 1000) - (now - (p.lastBattle || 0));
-      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* se está recuperando de su última batalla. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
+      const sinEspera = isOwner || userData.premium;
+
+      if (remaining > 0 && !sinEspera) {
+        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* se está recuperando de su última batalla. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
+      }
 
       p.lastBattle = now;
+
+      // Variables de Edad / Evolución
+      const miEtapaTxt = p.level >= NIVEL_EVOLUCION ? 'Adulto' : 'Cachorro';
+      const rivalEtapaTxt = enemyPet.level >= NIVEL_EVOLUCION ? 'Adulto' : 'Cachorro';
+
+      const miBonoEdad = p.level >= NIVEL_EVOLUCION ? 1.5 : 1.0;
+      const rivalBonoEdad = enemyPet.level >= NIVEL_EVOLUCION ? 1.5 : 1.0;
 
       const miMulti = getRarezaMascota(p.type);
       const rivalMulti = getRarezaMascota(enemyPet.type);
       
-      const miPoder = p.level * miMulti;
-      const rivalPoder = enemyPet.level * rivalMulti;
+      // Cálculo de Poder (Nivel * Rareza * Bono de Edad)
+      const miPoder = p.level * miMulti * miBonoEdad;
+      const rivalPoder = enemyPet.level * rivalMulti * rivalBonoEdad;
 
       let probGanar = (miPoder / (miPoder + rivalPoder)) * 100;
       if (probGanar > 90) probGanar = 90;
@@ -268,7 +281,7 @@ module.exports = {
       const atkRival = obtenerAtaquePorEspecie(enemyPet.type);
 
       // FASE 1: DESAFÍO
-      let texto = `⚔️ *BATALLA DE MASCOTAS* ⚔️\n\n🥊 *${p.name}* (${p.type} - Nvl ${p.level}) desafía a *${enemyPet.name}* (${enemyPet.type} - Nvl ${enemyPet.level})...`;
+      let texto = `⚔️ *BATALLA DE MASCOTAS* ⚔️\n\n🥊 *${p.name}* (${p.type} [${miEtapaTxt}] - Nvl ${p.level}) desafía a *${enemyPet.name}* (${enemyPet.type} [${rivalEtapaTxt}] - Nvl ${enemyPet.level})...`;
       const mensajeBatalla = await sock.sendMessage(remoteJid, { text: texto, mentions: [target] }, { quoted: msg });
 
       await delay(2500); // 2.5 segs
@@ -337,3 +350,4 @@ module.exports = {
     }
   }
 };
+                            
