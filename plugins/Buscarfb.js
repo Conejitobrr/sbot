@@ -23,10 +23,10 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: msgRes }, { quoted: msg });
     }
 
-    if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ ¿Qué quieres buscar?' }, { quoted: msg });
+    if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ ¿Qué anime buscas?' }, { quoted: msg });
 
     const query = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando en Facebook: "${query}"...` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 Buscando desde Perú: "${query}"...` }, { quoted: msg });
 
     try {
       const browser = await puppeteer.launch({
@@ -36,6 +36,19 @@ module.exports = {
       });
 
       const page = await browser.newPage();
+      
+      // 🔥 FORZAMOS IDIOMA Y REGIÓN PERUANA
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'es-PE,es;q=0.9'
+      });
+
+      // Navegamos primero a Facebook.com para inyectar una cookie de idioma si es necesario
+      await page.goto('https://www.facebook.com/', { waitUntil: 'networkidle2' });
+      await page.evaluate(() => {
+        document.cookie = "locale=es_LA; domain=.facebook.com; path=/";
+      });
+
+      // Ahora buscamos
       await page.goto(`https://www.facebook.com/watch/search/?q=${encodeURIComponent(query)}`, { waitUntil: 'networkidle2' });
       await new Promise(r => setTimeout(r, 6000));
 
@@ -53,7 +66,7 @@ module.exports = {
 
       await browser.close();
 
-      if (resultados.length === 0) return sock.sendMessage(remoteJid, { text: '❌ No encontré resultados.' }, { quoted: msg });
+      if (resultados.length === 0) return sock.sendMessage(remoteJid, { text: '❌ No encontré resultados. Intenta con un término más general.' }, { quoted: msg });
 
       global.menuBusqueda.set(sender, resultados);
 
