@@ -1,159 +1,50 @@
 'use strict';
 
 const axios = require('axios');
-const yts = require('yt-search');
-
-function cleanText(text = '') {
-  return String(text)
-    .replace(/\(.*?\)/g, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/official video/ig, '')
-    .replace(/official audio/ig, '')
-    .replace(/lyrics/ig, '')
-    .replace(/letra/ig, '')
-    .replace(/video oficial/ig, '')
-    .replace(/audio oficial/ig, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function splitArtistTitle(title = '') {
-  const clean = cleanText(title);
-
-  if (clean.includes(' - ')) {
-    const [artist, ...rest] = clean.split(' - ');
-    return {
-      artist: artist.trim(),
-      title: rest.join(' - ').trim()
-    };
-  }
-
-  if (clean.includes(' – ')) {
-    const [artist, ...rest] = clean.split(' – ');
-    return {
-      artist: artist.trim(),
-      title: rest.join(' – ').trim()
-    };
-  }
-
-  return {
-    artist: '',
-    title: clean
-  };
-}
-
-function cutLyrics(text = '', max = 3500) {
-  const lyrics = String(text || '').trim();
-
-  if (lyrics.length <= max) return lyrics;
-
-  return lyrics.slice(0, max) + '\n\n⚠️ Letra muy larga, se envió recortada.';
-}
-
-async function searchYouTube(query) {
-  const res = await yts(query);
-
-  if (!res.videos?.length) return null;
-
-  return (
-    res.videos.find(v =>
-      v.title &&
-      !v.title.toLowerCase().includes('mix') &&
-      !v.title.toLowerCase().includes('playlist')
-    ) || res.videos[0]
-  );
-}
-
-async function getLyricsFromOvh(artist, title) {
-  const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
-
-  const res = await axios.get(url, {
-    timeout: 15000
-  });
-
-  return res.data?.lyrics || '';
-}
 
 module.exports = {
   commands: ['letra', 'lyrics'],
 
-  async execute({ sock, remoteJid, args, msg }) {
+  async execute(ctx) {
+    const { sock, remoteJid, args, msg } = ctx;
+
+    if (!args.length) {
+      return sock.sendMessage(
+        remoteJid, 
+        { text: '❌ *Uso correcto:* .letra [nombre de la canción]\n*Ejemplo:* .letra La leyenda del hada y el mago' }, 
+        { quoted: msg }
+      );
+    }
+
+    const song = args.join(' ');
+    await sock.sendMessage(remoteJid, { text: `🔍 Buscando la letra de: *${song}*...` }, { quoted: msg });
+
     try {
-      if (!args.length) {
-        return sock.sendMessage(remoteJid, {
-          text:
-`❌ Escribe el nombre de una canción.
+      // Usamos la API pública de Popcat
+      const url = `https://api.popcat.xyz/lyrics?song=${encodeURIComponent(song)}`;
+      const response = await axios.get(url);
 
-Ejemplos:
-.letra bad bunny dakiti
-.letra shakira hips dont lie
-.lyrics adele hello`
-        }, { quoted: msg });
+      if (response.data.error) {
+        return sock.sendMessage(remoteJid, { text: '❌ No pude encontrar la letra de esa canción.' }, { quoted: msg });
       }
 
-      const query = args.join(' ').trim();
+      const { title, artist, image, lyrics } = response.data;
 
-      await sock.sendMessage(remoteJid, {
-        text: '🔍 Buscando letra...'
-      }, { quoted: msg });
+      const textoFinal = `🎤 *${title}*\n👤 *Artista:* ${artist}\n\n${lyrics}`;
 
-      const video = await searchYouTube(query);
+      // Enviamos la foto del artista junto con la letra
+      await sock.sendMessage(
+        remoteJid, 
+        { 
+          image: { url: image }, 
+          caption: textoFinal 
+        }, 
+        { quoted: msg }
+      );
 
-      if (!video) {
-        return sock.sendMessage(remoteJid, {
-          text: '❌ No encontré esa canción.'
-        }, { quoted: msg });
-      }
-
-      let { artist, title } = splitArtistTitle(video.title);
-
-      if (!artist || !title) {
-        const parts = query.split('-');
-
-        if (parts.length >= 2) {
-          artist = parts[0].trim();
-          title = parts.slice(1).join('-').trim();
-        } else {
-          artist = video.author?.name || '';
-          title = cleanText(video.title);
-        }
-      }
-
-      let lyrics = '';
-
-      try {
-        lyrics = await getLyricsFromOvh(artist, title);
-      } catch {}
-
-      if (!lyrics) {
-        return sock.sendMessage(remoteJid, {
-          text:
-`❌ No encontré la letra.
-
-Prueba escribirlo así:
-.letra artista - canción
-
-Ejemplo:
-.letra bad bunny - dakiti`
-        }, { quoted: msg });
-      }
-
-      lyrics = cutLyrics(lyrics);
-
-      return sock.sendMessage(remoteJid, {
-        text:
-`🎵 *${title}*
-👤 *${artist}*
-
-${lyrics}`
-      }, { quoted: msg });
-
-    } catch (err) {
-      console.log('❌ Error en letra:', err?.message || err);
-
-      return sock.sendMessage(remoteJid, {
-        text: '❌ Error buscando la letra. Prueba con artista - canción.'
-      }, { quoted: msg });
+    } catch (error) {
+      console.error("Error en plugin de letra:", error.message);
+      await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error al buscar la canción.' }, { quoted: msg });
     }
   }
 };
