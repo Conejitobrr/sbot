@@ -8,77 +8,67 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, args, msg } = ctx;
 
-    // 1. Verificamos que el usuario haya escrito algo
-    if (!args.length) {
+    // 1. Verificación de argumentos
+    if (!args || args.length === 0) {
       return sock.sendMessage(
         remoteJid, 
-        { text: '❌ Escribe lo que quieres buscar en Wikipedia.\n\n*Ejemplo:*\n.wiki Inteligencia artificial' }, 
+        { text: '❌ *Uso correcto:* .wiki [búsqueda]\nEjemplo: .wiki Lima' }, 
         { quoted: msg }
       );
     }
 
     const query = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando en Wikipedia: *"${query}"*...` }, { quoted: msg });
+    
+    // Notificación de carga
+    await sock.sendMessage(remoteJid, { text: `🔍 Consultando Wikipedia: *${query}*...` }, { quoted: msg });
 
     try {
-      // 2. Hacemos la consulta a la API de Wikipedia en español
-      // Usamos el endpoint "summary" que nos da exactamente lo que necesitamos: resumen + imagen
+      // 2. Configuración de la petición con User-Agent (vital para evitar rechazos)
       const url = `https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
-      const response = await axios.get(url);
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'SiriusBot/1.0 (Contact: admin@bot.com)'
+        }
+      });
+
       const data = response.data;
 
-      // 3. Manejo de resultados ambiguos (ej. si buscan "Lima", puede ser la fruta, la ciudad, etc.)
+      // 3. Manejo de ambigüedad
       if (data.type === 'disambiguation') {
         return sock.sendMessage(
           remoteJid, 
-          { text: `⚠️ Tu búsqueda es muy general y tiene varios significados. Intenta ser más específico.\n\n*Artículo:* ${data.title}` }, 
+          { text: `⚠️ La búsqueda *${query}* tiene múltiples significados. Sé más específico.` }, 
           { quoted: msg }
         );
       }
 
-      // 4. Extraemos la información
-      const extract = data.extract; // El texto resumido
-      const title = data.title;     // El título oficial
-      const wikiUrl = data.content_urls.desktop.page; // Link para leer completo
-      const imageUrl = data.originalimage ? data.originalimage.source : null; // La imagen (si existe)
+      // 4. Preparación del mensaje
+      const title = data.title || "Sin título";
+      const extract = data.extract || "No se encontró descripción.";
+      const wikiUrl = data.content_urls?.desktop?.page || "https://es.wikipedia.org/";
+      const imageUrl = data.originalimage?.source || null;
 
-      // Armamos el texto final
-      const finalMessage = `📚 *${title}*\n\n${extract}\n\n🔗 *Leer más:* ${wikiUrl}`;
+      const textoFinal = `📚 *${title}*\n\n${extract}\n\n🔗 *Leer más:* ${wikiUrl}`;
 
-      // 5. Lógica de envío: Si hay imagen manda foto + texto, si no, solo texto
+      // 5. Envío condicional (Imagen + Texto o solo Texto)
       if (imageUrl) {
-        await sock.sendMessage(
-          remoteJid, 
-          { 
-            image: { url: imageUrl }, 
-            caption: finalMessage 
-          }, 
-          { quoted: msg }
-        );
+        await sock.sendMessage(remoteJid, { 
+          image: { url: imageUrl }, 
+          caption: textoFinal 
+        }, { quoted: msg });
       } else {
-        await sock.sendMessage(
-          remoteJid, 
-          { text: finalMessage }, 
-          { quoted: msg }
-        );
+        await sock.sendMessage(remoteJid, { text: textoFinal }, { quoted: msg });
       }
 
     } catch (error) {
-      // Si la API responde con 404, es que no encontró nada
-      if (error.response && error.response.status === 404) {
-        return sock.sendMessage(
-          remoteJid, 
-          { text: '❌ No encontré ningún artículo exacto con ese nombre. Revisa la ortografía o intenta con sinónimos.' }, 
-          { quoted: msg }
-        );
-      }
+      console.error("Error Wikipedia:", error.message);
       
-      console.error("Error en plugin wikipedia:", error.message);
-      return sock.sendMessage(
-        remoteJid, 
-        { text: '❌ Ocurrió un error al intentar conectarse con Wikipedia.' }, 
-        { quoted: msg }
-      );
+      // Mensaje técnico para el usuario
+      const errorMsg = error.response?.status === 404 
+        ? '❌ Artículo no encontrado.' 
+        : '❌ Wikipedia no respondió correctamente.';
+        
+      await sock.sendMessage(remoteJid, { text: errorMsg }, { quoted: msg });
     }
   }
 };
