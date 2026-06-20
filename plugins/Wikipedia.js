@@ -20,7 +20,7 @@ module.exports = {
     await sock.sendMessage(remoteJid, { text: `🔍 Buscando en Wikipedia: *${query}*...` }, { quoted: msg });
 
     try {
-      // PASO 1: Buscador inteligente (corrige ortografía y encuentra el título exacto)
+      // 1. Buscador inteligente
       const searchUrl = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json`;
       const searchResponse = await axios.get(searchUrl, {
         headers: { 'User-Agent': 'SiriusBot/1.0' }
@@ -32,10 +32,9 @@ module.exports = {
         return sock.sendMessage(remoteJid, { text: '❌ No se encontró ningún artículo relacionado con tu búsqueda.' }, { quoted: msg });
       }
 
-      // Tomamos el título del mejor resultado
       const exactTitle = searchResults[0].title;
 
-      // PASO 2: Ahora sí, pedimos el resumen y la foto de ese artículo exacto
+      // 2. Extraer el artículo exacto
       const summaryUrl = `https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(exactTitle)}`;
       const summaryResponse = await axios.get(summaryUrl, {
         headers: { 'User-Agent': 'SiriusBot/1.0' }
@@ -58,13 +57,33 @@ module.exports = {
 
       const textoFinal = `📚 *${title}*\n\n${extract}\n\n🔗 *Leer más:* ${wikiUrl}`;
 
-      // PASO 3: Enviamos la imagen o solo el texto
+      // 3. Descargar y enviar la imagen manualmente para evitar el Error 403
+      let imagenEnviada = false;
+
       if (imageUrl) {
-        await sock.sendMessage(remoteJid, { 
-          image: { url: imageUrl }, 
-          caption: textoFinal 
-        }, { quoted: msg });
-      } else {
+        try {
+          // Descargamos la imagen nosotros mismos con el User-Agent correcto
+          const imageResponse = await axios.get(imageUrl, {
+            responseType: 'arraybuffer',
+            headers: { 'User-Agent': 'SiriusBot/1.0' }
+          });
+          
+          const bufferImagen = Buffer.from(imageResponse.data, 'binary');
+
+          // Entregamos la imagen ya procesada a WhatsApp
+          await sock.sendMessage(remoteJid, { 
+            image: bufferImagen, 
+            caption: textoFinal 
+          }, { quoted: msg });
+          
+          imagenEnviada = true;
+        } catch (imgError) {
+          console.error("No se pudo descargar la imagen, enviando texto plano:", imgError.message);
+        }
+      }
+
+      // 4. PLAN B: Si no hay imagen o dio error al descargarla, enviamos solo el texto
+      if (!imagenEnviada) {
         await sock.sendMessage(remoteJid, { text: textoFinal }, { quoted: msg });
       }
 
