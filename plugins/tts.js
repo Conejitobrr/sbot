@@ -13,7 +13,7 @@ module.exports = {
     const { sock, remoteJid, args, msg } = ctx;
 
     if (!args || args.length === 0) {
-      return sock.sendMessage(remoteJid, { text: '❌ *Uso:* .tts [texto]\nEl bot detectará el idioma automáticamente.' }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: '❌ *Uso:* .tts [texto]' }, { quoted: msg });
     }
 
     let textToSpeak = args.join(' ');
@@ -24,59 +24,55 @@ module.exports = {
     }
 
     try {
-      // 1. MAGIA DE DETECCIÓN: Le preguntamos a la API qué idioma es
-      const detectUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${encodeURIComponent(textToSpeak)}`;
-      const detectResponse = await axios.get(detectUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      // 1. TU CLAVE DE ELEVENLABS (Reemplaza este texto con tu clave real)
+      const apiKey = 'sk_6f3c4c79fabf661e2ee0eb72fd48914b89dbf7af90c23eaa'; 
       
-      // Si detecta el idioma lo usamos, si no, caemos por defecto a 'es'
-      const detectedLang = (detectResponse.data && detectResponse.data[2]) ? detectResponse.data[2] : 'es';
-
-      // 2. DESCARGAMOS EL MP3 CON EL IDIOMA DETECTADO
-      const ttsUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(textToSpeak)}&tl=${detectedLang}&client=gtx`;
-      const audioResponse = await axios.get(ttsUrl, {
+      // 2. ID DE LA VOZ (Esta es 'Rachel', perfecta para inglés y español)
+      const voiceId = '21m00Tcm4TlvDq8ikWAM'; 
+      
+      const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+      
+      // 3. PETICIÓN A LA IA NEURONAL
+      const audioResponse = await axios.post(url, {
+        text: textToSpeak,
+        model_id: "eleven_multilingual_v2", // El modelo mágico que entiende el idioma solo
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75
+        }
+      }, {
         responseType: 'arraybuffer',
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey
+        }
       });
 
-      // 3. CONVERSIÓN A OGG (OPUS) PARA ENGAÑAR A WHATSAPP
-      // Creamos rutas temporales seguras en el servidor
+      // 4. CONVERSIÓN A NOTA DE VOZ WHATSAPP (MP3 -> OGG Opus)
       const tempId = Date.now();
       const tempMp3 = path.join('/tmp', `tts_${tempId}.mp3`);
       const tempOgg = path.join('/tmp', `tts_${tempId}.ogg`);
 
-      // Guardamos el MP3
       fs.writeFileSync(tempMp3, Buffer.from(audioResponse.data, 'binary'));
-
-      // Ejecutamos FFmpeg para convertirlo al formato estricto de WhatsApp
       await exec(`ffmpeg -i ${tempMp3} -c:a libopus -b:a 48k -vbr on -compression_level 10 -frame_duration 60 -application voip ${tempOgg}`);
-
-      // Leemos el archivo convertido
       const oggBuffer = fs.readFileSync(tempOgg);
 
-      // 4. ENVIAMOS COMO NOTA DE VOZ (ptt: true)
-      await sock.sendMessage(
-        remoteJid, 
-        { 
-          audio: oggBuffer, 
-          mimetype: 'audio/ogg; codecs=opus', 
-          ptt: true 
-        }, 
-        { quoted: msg }
-      );
+      // 5. ENVÍO (ptt: true)
+      await sock.sendMessage(remoteJid, { 
+        audio: oggBuffer, 
+        mimetype: 'audio/ogg; codecs=opus', 
+        ptt: true 
+      }, { quoted: msg });
 
-      // 5. LIMPIEZA (Destruimos la evidencia para no gastar espacio)
+      // 6. LIMPIEZA
       try {
         fs.unlinkSync(tempMp3);
         fs.unlinkSync(tempOgg);
       } catch (err) {}
 
     } catch (error) {
-      console.error("Error en TTS:", error.message);
-      await sock.sendMessage(
-        remoteJid, 
-        { text: '❌ Ocurrió un error al generar el audio. Revisa la consola.' }, 
-        { quoted: msg }
-      );
+      console.error("Error en TTS:", error.response ? error.response.data : error.message);
+      await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error. Asegúrate de haber puesto tu API Key en el código.' }, { quoted: msg });
     }
   }
 };
