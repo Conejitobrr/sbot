@@ -5,29 +5,34 @@ module.exports = {
 
   async execute(ctx) {
     const { sock, remoteJid, args, msg, sender } = ctx;
-    
-    // 1. ¿Es una selección numérica? (ej: "1")
-    if (args[0] && args[0].length === 1 && !isNaN(args[0])) {
-      const indice = parseInt(args[0]) - 1;
-      const links = global.menuBusqueda.get(sender);
 
-      if (!links || !links[indice]) {
+    // 1. Si el usuario envía solo un número (ej: .descargar 1)
+    if (args.length === 1 && !isNaN(args[0])) {
+      const indice = parseInt(args[0]) - 1;
+      const resultados = global.menuBusqueda ? global.menuBusqueda.get(sender) : null;
+
+      if (!resultados || resultados.length === 0) {
         return sock.sendMessage(remoteJid, { text: '❌ Primero debes buscar un video con .buscarfb' }, { quoted: msg });
       }
 
-      const urlElegida = links[indice];
-      await sock.sendMessage(remoteJid, { text: `✅ Has seleccionado el video ${args[0]}. Preparando descarga...` }, { quoted: msg });
+      if (indice < 0 || indice >= resultados.length) {
+        return sock.sendMessage(remoteJid, { text: `❌ Elige un número del 1 al ${resultados.length}.` }, { quoted: msg });
+      }
+
+      const linkElegido = resultados[indice].url;
       
-      // AQUÍ LLAMAS A TU LÓGICA DE DESCARGA (o simplemente envías el link)
-      return sock.sendMessage(remoteJid, { text: `📥 *Descarga lista:* ${urlElegida}` }, { quoted: msg });
+      // Enviamos el link limpio para que lo copies a Web Video Caster
+      return sock.sendMessage(remoteJid, { 
+        text: `✅ *Has seleccionado:* ${resultados[indice].title}\n\n🔗 *Copia este link y pégalo en Web Video Caster para verlo en tu TV:*\n${linkElegido}` 
+      }, { quoted: msg });
     }
 
-    // 2. ¿Es un enlace directo?
+    // 2. Si el usuario envía un link directo
     const url = args[0];
     if (url && url.includes('facebook.com')) {
-      return sock.sendMessage(remoteJid, { text: `📥 *Enlace recibido:* ${url}` }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: `🔗 *Link recibido:* ${url}\nÁbrelo en Web Video Caster.` }, { quoted: msg });
     }
 
-    return sock.sendMessage(remoteJid, { text: '❌ Usa .buscarfb [nombre] primero.' }, { quoted: msg });
+    return sock.sendMessage(remoteJid, { text: '❌ Uso correcto:\n.buscarfb jujutsu kaisen\n.descargar 1' }, { quoted: msg });
   }
 };
