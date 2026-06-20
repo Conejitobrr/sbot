@@ -17,58 +17,61 @@ module.exports = {
     }
 
     const query = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando *${query}*...` }, { quoted: msg });
-
-    // 🔥 SISTEMA ANTICAÍDAS: 3 APIs distintas. Si una falla, pasa a la siguiente.
-    const apis = [
-      `https://api.siputzx.my.id/api/s/pinterest?query=${encodeURIComponent(query)}`,
-      `https://api.agatz.xyz/api/pinterest?message=${encodeURIComponent(query)}`,
-      `https://itzpire.com/search/pinterest?query=${encodeURIComponent(query)}`
-    ];
-
-    let images = [];
-
-    for (const url of apis) {
-      try {
-        const response = await axios.get(url, { timeout: 5000 }); // 5 segundos máximo por API
-        
-        // Cada API devuelve la info con distinto nombre (data, result, etc), cubrimos todas:
-        images = response.data.data || response.data.result || response.data;
-        
-        // Si logró extraer un array con enlaces de imágenes, detenemos la búsqueda
-        if (Array.isArray(images) && images.length > 0) {
-          break; 
-        }
-      } catch (error) {
-        // Falla silenciosa: si esta API falló, no decimos nada y el ciclo intentará la siguiente
-        continue;
-      }
-    }
-
-    // Si después de buscar en las 3 APIs no hay nada...
-    if (!images || images.length === 0) {
-      return sock.sendMessage(remoteJid, { text: '❌ Las bases de datos de Pinterest están saturadas. Intenta en un rato.' }, { quoted: msg });
-    }
+    await sock.sendMessage(remoteJid, { text: `🔍 Infiltrándose en Pinterest buscando: *${query}*...` }, { quoted: msg });
 
     try {
-      // Tomamos una imagen al azar del resultado exitoso
-      const randomImage = images[Math.floor(Math.random() * images.length)];
+      // 1. Preparamos el paquete de datos oculto que Pinterest usa en su propio buscador
+      const queryData = {
+        options: {
+          isPrefetch: false,
+          query: query,
+          scope: "pins",
+          no_fetch_context_on_resource: false
+        },
+        context: {}
+      };
+
+      // 2. Construimos la URL apuntando directo al motor de búsqueda interno de Pinterest
+      const encodedUrl = encodeURIComponent(`/search/pins/?q=${query}`);
+      const encodedData = encodeURIComponent(JSON.stringify(queryData));
+      const url = `https://www.pinterest.com/resource/BaseSearchResource/get/?source_url=${encodedUrl}&data=${encodedData}`;
+
+      // 3. Nos disfrazamos de navegador humano para que no nos bloqueen
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+
+      // 4. Extraemos el arreglo de resultados directamente de su JSON oficial
+      const results = response.data.resource_response.data.results;
       
-      // Extraemos la URL final (a veces viene como string, a veces dentro de un objeto)
-      const finalImageUrl = typeof randomImage === 'object' && randomImage.url ? randomImage.url : randomImage;
+      // Filtramos para quedarnos SOLO con las URLs de las imágenes originales en máxima calidad
+      const images = results
+        .map(pin => pin.images?.orig?.url)
+        .filter(url => url !== undefined);
+
+      if (!images || images.length === 0) {
+        return sock.sendMessage(remoteJid, { text: '❌ No se encontraron imágenes en Pinterest para esa búsqueda.' }, { quoted: msg });
+      }
+
+      // 5. Seleccionamos una al azar y la enviamos
+      const randomImage = images[Math.floor(Math.random() * images.length)];
 
       await sock.sendMessage(
         remoteJid, 
         { 
-          image: { url: finalImageUrl }, 
+          image: { url: randomImage }, 
           caption: `📌 *Pinterest:* ${query}` 
         }, 
         { quoted: msg }
       );
 
     } catch (error) {
-      console.error("Error enviando Pinterest:", error.message);
-      await sock.sendMessage(remoteJid, { text: '❌ Error al intentar enviar la imagen al chat.' }, { quoted: msg });
+      console.error("Error en extracción directa de Pinterest:", error.message);
+      await sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error al extraer la imagen directamente de Pinterest.' }, { quoted: msg });
     }
   }
 };
