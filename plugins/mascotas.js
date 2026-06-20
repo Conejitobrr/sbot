@@ -354,4 +354,60 @@ module.exports = {
       } else {
         texto += `¡*${enemyPet.name}* se alza con la victoria! 👑\n`;
         texto += `🩸 *${p.name}* cae derrotado y gravemente herido. Deberás curarlo de inmediato.\n\n`;
-        texto += `⭐ El rival gana *+${xpGanada
+        texto += `⭐ El rival gana *+${xpGanada} XP*.`;
+        
+        enemyPet.xp += xpGanada;
+        // CASTIGO PARA TI (Perdiste): Poner "enferma"
+        p.lastFeed = now - (25 * 60 * 60 * 1000);
+      }
+
+      // Check de subida de nivel
+      const miNuevoNivel = Math.floor(p.xp / 200) + 1;
+      if (miNuevoNivel > p.level) {
+        p.level = miNuevoNivel;
+        texto += `\n✨ ¡WOW! *${p.name}* ha subido al Nivel ${p.level}!`;
+      }
+
+      const enemigoNuevoNivel = Math.floor(enemyPet.xp / 200) + 1;
+      if (enemigoNuevoNivel > enemyPet.level) {
+        enemyPet.level = enemigoNuevoNivel;
+      }
+
+      await db.setUser(userKey, userData);
+      await db.setUser(target, targetData);
+
+      return sock.sendMessage(remoteJid, { text: texto, edit: mensajeBatalla.key, mentions: [target] });
+    }
+
+    // 🔥 SACRIFICIO Y PERDÓN
+    if (command === 'sacrificar') {
+      if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes ninguna mascota para sacrificar.` }, { quoted: msg });
+      if (!args.includes('confirmar')) return sock.sendMessage(remoteJid, { text: `⚠️ *ADVERTENCIA IRREVERSIBLE* ⚠️\n\nEstás a punto de sacrificar a *${userData.pet.name}*. Si lo haces, serás vetado.\n\nPara proceder, escribe:\n*.sacrificar confirmar*` }, { quoted: msg });
+
+      const n = userData.pet.name, t = userData.pet.type, l = userData.pet.level;
+      userData.petGraveyard = true;
+      delete userData.pet;
+      await db.setUser(userKey, userData);
+
+      const video = getPetVideo(t, 'sacrificada', l);
+      const text = `☠️ Has tomado la oscura decisión de sacrificar a *${n}*.\n\nEl sistema te ha vetado de futuras adopciones.`;
+
+      if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text }, { quoted: msg });
+    }
+
+    if (command === 'perdonar') {
+      if (!isOwner) return sock.sendMessage(remoteJid, { text: `❌ Solo el Owner del bot tiene el poder de revocar vetos.` }, { quoted: msg });
+      const target = getTarget(msg, args);
+      if (!target) return sock.sendMessage(remoteJid, { text: `❌ Debes mencionar o responder al usuario vetado.` }, { quoted: msg });
+
+      const targetData = await db.getUser(target);
+      if (!targetData.petGraveyard) return sock.sendMessage(remoteJid, { text: `ℹ️ Este usuario tiene un registro limpio.` }, { quoted: msg });
+
+      targetData.petGraveyard = false;
+      await db.setUser(target, targetData);
+      
+      return sock.sendMessage(remoteJid, { text: `⚖️ *AMNISTÍA CONCEDIDA*\n\nEl Owner ha tenido piedad de @${cleanNumber(target)}. Ya puede volver a usar *.adoptar*.`, mentions: [target] }, { quoted: msg });
+    }
+  }
+};
