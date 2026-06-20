@@ -1,7 +1,6 @@
 'use strict';
 
-const { Aki } = require('aki-api');
-
+// Memoria para guardar la conversación de cada jugador
 const juegosActivos = new Map();
 
 module.exports = {
@@ -11,63 +10,107 @@ module.exports = {
     const { sock, remoteJid, args, msg } = ctx;
     const jugadorId = msg.key.participant || remoteJid;
 
-    if (!args.length) {
-      return sock.sendMessage(remoteJid, { text: '🧞‍♂️ *AKINATOR*\n\nUsa `.aki start` para empezar a jugar.' }, { quoted: msg });
+    // Tomamos la clave directamente de tu entorno, tal como lo hace tu chatbot.js
+    const API_KEY = process.env.GROQ_API_KEY;
+
+    if (!API_KEY) {
+      return sock.sendMessage(
+        remoteJid, 
+        { text: '❌ No detecté la API Key de Groq en tu servidor. Asegúrate de tener configurado GROQ_API_KEY.' }, 
+        { quoted: msg }
+      );
     }
 
-    const accion = args[0].toLowerCase();
+    if (!args.length) {
+      return sock.sendMessage(
+        remoteJid, 
+        { text: '🧞‍♂️ *EL GENIO IA* 🧞‍♂️\n\nPiensa en un personaje y yo lo adivinaré.\n\n*Para empezar:* `.aki start`\n*Para responder:* `.aki si`, `.aki no`, `.aki no sé`' }, 
+        { quoted: msg }
+      );
+    }
 
+    const accion = args.join(' ').toLowerCase();
+
+    // 1. INICIAR NUEVO JUEGO
     if (accion === 'start') {
-      await sock.sendMessage(remoteJid, { text: '🧞‍♂️ Iniciando sesión de genio...' }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: '🧞‍♂️ Conectando redes neuronales... Piensa en un personaje y no me lo digas.' }, { quoted: msg });
       
-      try {
-        // 🔥 CAMUFLAJE: Añadimos parámetros para parecer un navegador móvil real
-        const aki = new Aki({ 
-            region: 'es',
-            childMode: false,
-            // Estos headers ayudan a esquivar el bloqueo básico de IP
-            proxy: null 
-        });
+      const systemPrompt = {
+        role: 'system',
+        content: `Eres Akinator. Jugaremos a adivinar en qué personaje (real o ficticio) está pensando el usuario. 
+        Reglas estrictas:
+        1. Haz SOLO UNA pregunta de sí/no a la vez.
+        2. Sé breve, misterioso y carismático. No hagas listas numeradas.
+        3. Cuando estés al menos un 85% seguro de saber quién es, debes gritarlo diciendo exactamente la frase: "¡LO TENGO! Tu personaje es: [Nombre del personaje]".`
+      };
 
-        await aki.start();
-        juegosActivos.set(jugadorId, aki);
+      const historial = [
+        systemPrompt,
+        { role: 'user', content: 'Inicia el juego haciendo la primera pregunta.' }
+      ];
+
+      try {
+        const respuesta = await consultarGroq(historial, API_KEY);
+        historial.push({ role: 'assistant', content: respuesta });
+        juegosActivos.set(jugadorId, historial);
         
-        return sock.sendMessage(remoteJid, { 
-            text: `🧞‍♂️ *Pregunta 1:*\n${aki.question}\n\n[0] Sí | [1] No | [2] No sé | [3] Prob. Sí | [4] Prob. No` 
-        }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: `🧞‍♂️ *Pregunta 1:*\n${respuesta}` }, { quoted: msg });
       } catch (error) {
-        console.error("Error Akinator:", error);
-        return sock.sendMessage(remoteJid, { 
-            text: '❌ Akinator bloqueó la conexión de este servidor. Está protegiendo su sitio de bots.' 
-        }, { quoted: msg });
+        console.error("Error Groq Akinator:", error);
+        return sock.sendMessage(remoteJid, { text: '❌ Ocurrió un error conectando con el genio.' }, { quoted: msg });
       }
     }
 
-    // Lógica del juego...
-    if (!juegosActivos.has(jugadorId)) return sock.sendMessage(remoteJid, { text: '❌ No hay juego activo.' }, { quoted: msg });
+    // 2. VERIFICAR JUEGO ACTIVO
+    if (!juegosActivos.has(jugadorId)) {
+      return sock.sendMessage(remoteJid, { text: '❌ No hay juego activo. Escribe `.aki start`' }, { quoted: msg });
+    }
 
-    const aki = juegosActivos.get(jugadorId);
-    const opciones = { '0': 0, '1': 1, '2': 2, '3': 3, '4': 4 };
-    
-    if (opciones[accion] === undefined) return sock.sendMessage(remoteJid, { text: '❌ Usa números del 0 al 4.' }, { quoted: msg });
+    // 3. CONTINUAR EL JUEGO
+    const historial = juegosActivos.get(jugadorId);
+    historial.push({ role: 'user', content: accion });
 
     try {
-      await aki.step(opciones[accion]);
-      
-      if (aki.progress >= 80) {
-        await aki.win();
-        const res = aki.answers[0];
+      const respuesta = await consultarGroq(historial, API_KEY);
+      historial.push({ role: 'assistant', content: respuesta });
+      juegosActivos.set(jugadorId, historial);
+
+      // Si el bot adivinó, cerramos el juego
+      if (respuesta.includes('LO TENGO') || respuesta.includes('Tu personaje es')) {
         juegosActivos.delete(jugadorId);
-        return sock.sendMessage(remoteJid, { 
-            image: { url: res.absolute_picture_path }, 
-            caption: `🧞‍♂️ *¡Adiviné!* Es: *${res.name}*` 
-        }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: `✨ *¡MAGIA NEURONAL!*\n\n${respuesta}` }, { quoted: msg });
       }
 
-      await sock.sendMessage(remoteJid, { text: `${aki.question}\n\n[0] Sí | [1] No | [2] No sé | [3] Prob. Sí | [4] Prob. No` }, { quoted: msg });
-    } catch (e) {
-      juegosActivos.delete(jugadorId);
-      await sock.sendMessage(remoteJid, { text: '❌ Error: La conexión se interrumpió.' }, { quoted: msg });
+      // Calculamos la ronda en la que van
+      const numeroPregunta = Math.floor((historial.length - 1) / 2);
+      return sock.sendMessage(remoteJid, { text: `🧞‍♂️ *Pregunta ${numeroPregunta}:*\n${respuesta}` }, { quoted: msg });
+
+    } catch (error) {
+      console.error("Error Groq Akinator:", error);
+      return sock.sendMessage(remoteJid, { text: '❌ Hubo un fallo en la matriz. Intenta responder de nuevo.' }, { quoted: msg });
     }
   }
 };
+
+// Función usando la estructura 'fetch' exacta de tu chatbot.js
+async function consultarGroq(mensajes, apiKey) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile', // El mismo modelo veloz de tu bot
+      temperature: 0.7,
+      messages: mensajes
+    })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error('Fallo en la API de Groq');
+  }
+
+  return data.choices[0].message.content.trim();
+}
