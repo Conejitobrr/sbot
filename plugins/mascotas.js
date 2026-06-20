@@ -7,12 +7,12 @@ const db = require('../lib/database');
 const PETS_DIR = path.resolve(__dirname, '../media/mascotas');
 const NIVEL_EVOLUCION = 10; 
 
-// 🐾 BASE DE DATOS DE 250+ ANIMALES
+// 🐾 BASE DE DATOS LIMPIA (Sin corales ni medusas, puro animal guerrero/mascota real)
 const ANIMALES = {
-  comun: ["Perro", "Gato", "Conejo", "Hámster", "Tortuga", "Loro", "Pato", "Gallina", "Cerdo", "Oveja", "Vaca", "Caballo", "Ratón", "Paloma", "Pavo", "Iguana", "Rana", "Sapo", "Pez Dorado", "Canario", "Cabra", "Burro", "Ganso", "Codorniz", "Cobaya", "Hurón", "Erizo", "Cisne", "Gaviota", "Cuervo", "Gorrión", "Golondrina", "Búho", "Lechuza", "Carpintero", "Pelícano", "Flamenco", "Cigüeña", "Perezoso", "Armadillo", "Oso Hormiguero", "Castor", "Nutria", "Mapache", "Zorrillo", "Comadreja", "Visón", "Tejón", "Marmota", "Ardilla", "Topo", "Murciélago", "Cangrejo", "Langosta", "Camarón", "Calamar", "Pulpo", "Estrella de mar", "Erizo de mar", "Caballito de mar", "Medusa", "Coral", "Alce", "Ciervo"],
-  raro: ["Lobo", "Zorro", "Oso", "Tigre", "León", "Pantera", "Guepardo", "Leopardo", "Jaguar", "Puma", "Lince", "Hiena", "Chacal", "Coyote", "Dingo", "Canguro", "Koala", "Wombat", "Demonio de Tasmania", "Ornitorrinco", "Equidna", "Panda", "Panda Rojo", "Mono", "Chimpancé", "Gorila", "Orangután", "Babuino", "Lémur", "Tucán", "Guacamayo", "Cacatúa", "Avestruz", "Emú", "Casuario", "Kiwi", "Pingüino", "Foca", "Morsa", "León Marino", "Manatí", "Dugongo", "Delfín", "Orca", "Ballena", "Tiburón", "Raya", "Pez Espada", "Pez Payaso", "Pez Globo", "Piraña", "Cocodrilo", "Caimán", "Pitón", "Boa", "Anaconda", "Cobra", "Víbora", "Cascabel", "Mamba", "Camaleón", "Gecko", "Dragón de Komodo", "Elefante", "Rinoceronte", "Hipopótamo", "Jirafa", "Cebra", "Camello"],
-  epico: ["Lobo Blanco", "Tigre Blanco", "Pantera Negra", "León Dorado", "Oso Polar", "Zorro Ártico", "Águila Dorada", "Halcón Peregrino", "Cóndor", "Albatros", "Cisne Negro", "Pavo Real Albino", "Ajolote", "Narval", "Calamar Gigante", "Tiburón Blanco", "Megalodón Clonado", "T-Rex Clonado", "Velociraptor Clonado", "Triceratops Clonado", "Pterodáctilo Clonado", "Mamut Clonado", "Tigre Dientes de Sable", "Lobo Huargo", "Dodo Clonado"],
-  mitologico: ["Dragón", "Fénix", "Grifo", "Unicornio", "Pegaso", "Cerbero", "Quimera", "Basilisco", "Kraken", "Leviatán", "Behemoth", "Manticora", "Esfinge", "Minotauro", "Centauro", "Sirena", "Tritón", "Kitsune", "Tengu", "Kappa", "Dragón Chino", "Qilin", "Roc", "Thunderbird", "Yeti", "Pie Grande", "Chupacabras", "Wendigo", "Gárgola", "Golem", "Slime", "Wyvern", "Hipogrifo", "Kelpie", "Barghest", "Guiverno", "Cthulhu Pequeño"]
+  comun: ["Perro", "Gato", "Conejo", "Hámster", "Tortuga", "Loro", "Pato", "Gallina", "Cerdo", "Oveja", "Vaca", "Caballo", "Ratón", "Paloma", "Pavo", "Iguana", "Rana", "Sapo", "Pez Dorado", "Cabra", "Burro", "Ganso", "Hurón", "Erizo", "Cisne", "Cuervo", "Búho", "Lechuza", "Halcón", "Carpintero", "Pelícano", "Flamenco", "Armadillo", "Oso Hormiguero", "Castor", "Nutria", "Mapache", "Zorrillo", "Tejón", "Murciélago", "Cangrejo", "Alce", "Ciervo"],
+  raro: ["Lobo", "Zorro", "Oso", "Tigre", "León", "Pantera", "Guepardo", "Leopardo", "Jaguar", "Puma", "Lince", "Hiena", "Chacal", "Coyote", "Dingo", "Canguro", "Gorila", "Chimpancé", "Orangután", "Babuino", "Tucán", "Guacamayo", "Avestruz", "Pingüino", "Foca", "Morsa", "Delfín", "Orca", "Tiburón", "Cocodrilo", "Caimán", "Pitón", "Boa", "Anaconda", "Cobra", "Víbora", "Dragón de Komodo", "Elefante", "Rinoceronte", "Hipopótamo", "Jirafa", "Cebra"],
+  epico: ["Lobo Blanco", "Tigre Blanco", "Pantera Negra", "León Dorado", "Oso Polar", "Zorro Ártico", "Águila Dorada", "Halcón Peregrino", "Cóndor", "Cisne Negro", "Ajolote", "Tiburón Blanco", "Megalodón Clonado", "T-Rex Clonado", "Velociraptor Clonado", "Triceratops Clonado", "Mamut Clonado", "Tigre Dientes de Sable", "Lobo Huargo"],
+  mitologico: ["Dragón", "Fénix", "Grifo", "Unicornio", "Pegaso", "Cerbero", "Quimera", "Basilisco", "Kraken", "Leviatán", "Behemoth", "Manticora", "Esfinge", "Minotauro", "Centauro", "Kitsune", "Dragón Chino", "Wyvern", "Hipogrifo", "Wendigo", "Gárgola", "Golem"]
 };
 
 function cleanJid(jid = '') {
@@ -53,7 +53,7 @@ function hoursPassed(timestamp, hours) {
 module.exports = {
   commands: [
     'adoptar', 'mascota', 'alimentar', 'jugar', 
-    'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'perdonar'
+    'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'perdonar', 'pelear'
   ],
   
   async execute(ctx) {
@@ -62,7 +62,7 @@ module.exports = {
     const userData = await db.getUser(userKey);
     const now = Date.now();
 
-    const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar'];
+    const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'pelear'];
     
     // SISTEMA DE MUERTE POR ABANDONO
     if (userData.pet && petCommands.includes(command)) {
@@ -80,21 +80,14 @@ module.exports = {
       }
     }
 
-    // 1. ADOPTAR (Gacha / Suerte)
+    // 1. ADOPTAR
     if (command === 'adoptar') {
-      if (userData.pet) {
-        return sock.sendMessage(remoteJid, { text: `❌ Ya tienes una criatura llamada *${userData.pet.name}*. Cuídala bien.` }, { quoted: msg });
-      }
-
-      if (userData.petGraveyard) {
-        return sock.sendMessage(remoteJid, { text: `💀 *Registro Manchado*\n\nDejaste morir a tu mascota anterior. El sistema no te permite adoptar de nuevo.\n\n_Pide al Owner que use .perdonar en ti._` }, { quoted: msg });
-      }
+      if (userData.pet) return sock.sendMessage(remoteJid, { text: `❌ Ya tienes a *${userData.pet.name}*. Cuídalo bien.` }, { quoted: msg });
+      if (userData.petGraveyard) return sock.sendMessage(remoteJid, { text: `💀 *Registro Manchado*\n\nDejaste morir a tu mascota anterior. El sistema no te permite adoptar de nuevo.\n\n_Pide al Owner que use .perdonar en ti._` }, { quoted: msg });
 
       const petName = args.join(' ') || 'Sin Nombre';
-
       const roll = Math.random() * 100;
-      let rareza = '';
-      let pool = [];
+      let rareza = '', pool = [];
 
       if (roll <= 5) { pool = ANIMALES.mitologico; rareza = '🌟 MITOLÓGICO 🌟'; } 
       else if (roll <= 15) { pool = ANIMALES.epico; rareza = '✨ ÉPICO ✨'; } 
@@ -111,7 +104,8 @@ module.exports = {
         lastFeed: now,
         lastPlay: now,
         lastTrain: 0,
-        lastWalk: 0
+        lastWalk: 0,
+        lastBattle: 0 // Nuevo registro para peleas
       };
 
       await db.setUser(userKey, userData);
@@ -130,23 +124,12 @@ module.exports = {
       const p = userData.pet;
       const stage = p.level >= NIVEL_EVOLUCION ? 'Adulto 🔥' : 'Bebé 🐾';
       const horaActual = new Date().getHours();
+      let estadoActual = 'contenta', notaEstado = '¡Irradia felicidad y energía!';
 
-      let estadoActual = 'contenta';
-      let notaEstado = '¡Irradia felicidad y energía!';
-
-      if (hoursPassed(p.lastFeed, 24)) {
-        estadoActual = 'enferma';
-        notaEstado = '🤒 Su salud decae por falta de alimento. Usa *.curar* y luego *.alimentar*.';
-      } else if (hoursPassed(p.lastFeed, 12)) {
-        estadoActual = 'enojada';
-        notaEstado = '💢 Está inquieto y de mal humor por el hambre. Usa *.alimentar*.';
-      } else if (hoursPassed(p.lastPlay, 24)) {
-        estadoActual = 'triste';
-        notaEstado = '😢 Se siente ignorado y triste. Usa *.jugar*.';
-      } else if (horaActual < 6 || horaActual >= 22) {
-        estadoActual = 'durmiendo';
-        notaEstado = '💤 Descansa pacíficamente. Shhh...';
-      }
+      if (hoursPassed(p.lastFeed, 24)) { estadoActual = 'enferma'; notaEstado = '🤒 Su salud decae por falta de alimento. Usa *.curar*.'; } 
+      else if (hoursPassed(p.lastFeed, 12)) { estadoActual = 'enojada'; notaEstado = '💢 Está inquieto y de mal humor por el hambre.'; } 
+      else if (hoursPassed(p.lastPlay, 24)) { estadoActual = 'triste'; notaEstado = '😢 Se siente ignorado y triste. Usa *.jugar*.'; } 
+      else if (horaActual < 6 || horaActual >= 22) { estadoActual = 'durmiendo'; notaEstado = '💤 Descansa pacíficamente. Shhh...'; }
 
       const video = getPetVideo(p.type, estadoActual, p.level);
       const text = `🐾 *PERFIL DE MASCOTA* 🐾\n\n👤 Cuidador: ${pushName}\n🏷️ Nombre: *${p.name}*\n🧬 Especie: *${String(p.type).toUpperCase()}*\n📊 Nivel: *${p.level}* (${stage})\n✨ Experiencia: *${p.xp} XP*\n\n💭 Estado: ${notaEstado}`;
@@ -155,9 +138,7 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    if (!userData.pet && petCommands.includes(command)) {
-      return sock.sendMessage(remoteJid, { text: `❌ No tienes criatura alguna a tu cuidado.` }, { quoted: msg });
-    }
+    if (!userData.pet && petCommands.includes(command)) return sock.sendMessage(remoteJid, { text: `❌ No tienes criatura alguna a tu cuidado.` }, { quoted: msg });
 
     const p = userData.pet;
 
@@ -177,74 +158,52 @@ module.exports = {
         if (p.level < NIVEL_EVOLUCION && newLevel >= NIVEL_EVOLUCION) evoluciono = true;
         p.level = newLevel;
       }
-
       await db.setUser(userKey, userData);
 
       const estadoFinal = evoluciono ? 'evolucionando' : newState;
       let text = `${actionText}\n⭐ Ganó *+${gainXP} XP*.`;
-
-      if (evoluciono) {
-        text += `\n\n✨ ¡INCREÍBLE! El cuerpo de *${p.name}* brilla intensamente...\n¡Ha evolucionado a su forma Adulta!`;
-      }
+      if (evoluciono) text += `\n\n✨ ¡INCREÍBLE! El cuerpo de *${p.name}* brilla intensamente...\n¡Ha evolucionado a su forma Adulta!`;
 
       const video = getPetVideo(p.type, estadoFinal, p.level);
       if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     };
 
-    // ACCIONES UNIVERSALES
+    // ACCIONES
     if (command === 'alimentar') {
       const remaining = (2 * 60 * 60 * 1000) - (now - (p.lastFeed || 0));
-      if (remaining > 0 && !hoursPassed(p.lastFeed, 24)) {
-        const m = Math.floor(remaining / 60000);
-        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* está satisfecho. Podrá comer de nuevo en *${m} min*.` }, { quoted: msg });
-      }
+      if (remaining > 0 && !hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* está satisfecho. Podrá comer de nuevo en *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
       p.lastFeed = now;
       return procesarAccion(Math.floor(Math.random() * 50) + 20, 'comiendo', `🍖 Has alimentado a *${p.name}*. Devoró todo con ganas.`);
     }
 
     if (command === 'jugar') {
-      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
-        return sock.sendMessage(remoteJid, { text: `💢 *${p.name}* se agita y te ignora. ¡El hambre lo tiene de mal humor! Usa *.alimentar*.` }, { quoted: msg });
-      }
+      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `💢 *${p.name}* te ignora. ¡El hambre lo tiene de mal humor! Usa *.alimentar*.` }, { quoted: msg });
       const remaining = (30 * 60 * 1000) - (now - (p.lastPlay || 0));
-      if (remaining > 0) {
-        const m = Math.floor(remaining / 60000);
-        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* necesita descansar. Juega en *${m} min*.` }, { quoted: msg });
-      }
+      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* necesita descansar. Juega en *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
       p.lastPlay = now;
       return procesarAccion(Math.floor(Math.random() * 20) + 10, 'jugando', `🎾 Pasaste un buen rato divirtiéndote con *${p.name}*.`);
     }
 
     if (command === 'entrenar') {
-      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
-        return sock.sendMessage(remoteJid, { text: `💢 *${p.name}* se niega a obedecer por la falta de comida. Usa *.alimentar*.` }, { quoted: msg });
-      }
+      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `💢 *${p.name}* se niega a obedecer por la falta de comida. Usa *.alimentar*.` }, { quoted: msg });
       const remaining = (4 * 60 * 60 * 1000) - (now - (p.lastTrain || 0));
-      if (remaining > 0) {
-        const m = Math.floor(remaining / 60000);
-        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* está sin energía. Entrena en *${m} min*.` }, { quoted: msg });
-      }
+      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* está sin energía. Entrena en *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
       p.lastTrain = now;
       return procesarAccion(Math.floor(Math.random() * 50) + 50, 'entrenando', `⚔️ Practicaste las habilidades y destrezas de *${p.name}*.`);
     }
 
     if (command === 'pasear') {
       const remaining = (60 * 60 * 1000) - (now - (p.lastWalk || 0));
-      if (remaining > 0) {
-        const m = Math.floor(remaining / 60000);
-        return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* ya se ejercitó bastante. Espera *${m} min*.` }, { quoted: msg });
-      }
+      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* ya se ejercitó bastante. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
       p.lastWalk = now;
       return procesarAccion(Math.floor(Math.random() * 30) + 15, 'paseando', `🌳 Llevaste a *${p.name}* a explorar los alrededores.`);
     }
 
     if (command === 'curar') {
-      if (!hoursPassed(p.lastFeed, 24)) {
-        return sock.sendMessage(remoteJid, { text: `✅ *${p.name}* goza de buena salud. No es necesario medicar.` }, { quoted: msg });
-      }
+      if (!hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `✅ *${p.name}* goza de buena salud.` }, { quoted: msg });
       p.lastFeed = now - (23 * 60 * 60 * 1000); 
-      return procesarAccion(5, 'curando', `💊 Aplicaste medicina y cuidados a *${p.name}*. ¡Se está recuperando!`, true);
+      return procesarAccion(5, 'curando', `💊 Aplicaste medicina a *${p.name}*. ¡Se está recuperando!`, true);
     }
 
     if (command === 'dormir') {
@@ -254,52 +213,94 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    // 🔥 SACRIFICIO VOLUNTARIO (Lo hace el propio usuario)
+    // ⚔️ SISTEMA DE PELEAS
+    if (command === 'pelear') {
+      const target = getTarget(msg, args);
+      if (!target) return sock.sendMessage(remoteJid, { text: `❌ Menciona o responde al dueño de la mascota que quieres desafiar.` }, { quoted: msg });
+      if (target === userKey) return sock.sendMessage(remoteJid, { text: `❌ Tu mascota no puede pelear contra su propia sombra.` }, { quoted: msg });
+
+      const targetData = await db.getUser(target);
+      if (!targetData.pet) return sock.sendMessage(remoteJid, { text: `❌ Ese usuario no tiene ninguna mascota para pelear.` }, { quoted: msg });
+
+      const enemyPet = targetData.pet;
+      
+      if (hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `🤒 *${p.name}* está demasiado débil para pelear. Cúralo primero.` }, { quoted: msg });
+      
+      const remaining = (60 * 60 * 1000) - (now - (p.lastBattle || 0));
+      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}* se está recuperando de su última batalla. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
+
+      p.lastBattle = now;
+
+      // Cálculo de probabilidad (Ventaja de Nivel)
+      const diferenciaNivel = p.level - enemyPet.level;
+      let probGanar = 50 + (diferenciaNivel * 5); // 5% de ventaja por cada nivel de diferencia
+      
+      // Limites: Máximo 90% (siempre hay riesgo de perder), Mínimo 10% (siempre hay fe de ganar)
+      if (probGanar > 90) probGanar = 90;
+      if (probGanar < 10) probGanar = 10;
+
+      const random = Math.random() * 100;
+      const ganeYo = random <= probGanar;
+      const xpGanada = Math.floor(Math.random() * 50) + 50; // Entre 50 y 100 XP
+
+      let textoPelea = `⚔️ *BATALLA DE MASCOTAS* ⚔️\n\n`;
+      textoPelea += `🥊 *${p.name}* (Nvl ${p.level}) vs *${enemyPet.name}* (Nvl ${enemyPet.level})\n\n`;
+
+      if (ganeYo) {
+        textoPelea += `🏆 ¡*${p.name}* atacó con ferocidad y superó las defensas de *${enemyPet.name}*!\n\n⭐ Ganaste *+${xpGanada} XP*.`;
+        p.xp += xpGanada;
+      } else {
+        textoPelea += `💀 ¡*${enemyPet.name}* fue demasiado fuerte! *${p.name}* ha sido derrotado y huyó a lamer sus heridas...\n\n⭐ El ganador se lleva la gloria.`;
+        enemyPet.xp += xpGanada;
+      }
+
+      // Check level up para ambos
+      const miNuevoNivel = Math.floor(p.xp / 200) + 1;
+      if (miNuevoNivel > p.level) {
+        p.level = miNuevoNivel;
+        textoPelea += `\n\n✨ ¡WOW! *${p.name}* ha subido al Nivel ${p.level}!`;
+      }
+
+      const enemigoNuevoNivel = Math.floor(enemyPet.xp / 200) + 1;
+      if (enemigoNuevoNivel > enemyPet.level) {
+        enemyPet.level = enemigoNuevoNivel;
+      }
+
+      await db.setUser(userKey, userData);
+      await db.setUser(target, targetData);
+
+      return sock.sendMessage(remoteJid, { text: textoPelea, mentions: [target] }, { quoted: msg });
+    }
+
+    // 🔥 SACRIFICIO VOLUNTARIO Y PERDÓN
     if (command === 'sacrificar') {
-      if (!userData.pet) {
-        return sock.sendMessage(remoteJid, { text: `❌ No tienes ninguna mascota para sacrificar.` }, { quoted: msg });
-      }
+      if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes ninguna mascota para sacrificar.` }, { quoted: msg });
+      if (!args.includes('confirmar')) return sock.sendMessage(remoteJid, { text: `⚠️ *ADVERTENCIA IRREVERSIBLE* ⚠️\n\nEstás a punto de sacrificar a *${userData.pet.name}*. Si lo haces, serás vetado.\n\nPara proceder, escribe:\n*.sacrificar confirmar*` }, { quoted: msg });
 
-      if (!args.includes('confirmar')) {
-        return sock.sendMessage(remoteJid, { text: `⚠️ *ADVERTENCIA IRREVERSIBLE* ⚠️\n\nEstás a punto de sacrificar a *${userData.pet.name}* (${userData.pet.type}). Si lo haces, serás vetado y no podrás adoptar otra mascota.\n\nPara proceder, escribe:\n*.sacrificar confirmar*` }, { quoted: msg });
-      }
-
-      const nombreMascota = userData.pet.name;
-      const type = userData.pet.type;
-      const level = userData.pet.level;
-
+      const n = userData.pet.name, t = userData.pet.type, l = userData.pet.level;
       userData.petGraveyard = true;
       delete userData.pet;
       await db.setUser(userKey, userData);
 
-      const video = getPetVideo(type, 'sacrificada', level);
-      const text = `☠️ Has tomado la oscura decisión de sacrificar a *${nombreMascota}*.\n\nSu energía se ha desvanecido. Como consecuencia, el sistema te ha vetado de futuras adopciones.`;
+      const video = getPetVideo(t, 'sacrificada', l);
+      const text = `☠️ Has tomado la oscura decisión de sacrificar a *${n}*.\n\nEl sistema te ha vetado de futuras adopciones.`;
 
       if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    // ⚖️ EL PERDÓN DEL OWNER
     if (command === 'perdonar') {
-      if (!isOwner) {
-        return sock.sendMessage(remoteJid, { text: `❌ Solo el Owner del bot tiene el poder de revocar vetos.` }, { quoted: msg });
-      }
-
+      if (!isOwner) return sock.sendMessage(remoteJid, { text: `❌ Solo el Owner del bot tiene el poder de revocar vetos.` }, { quoted: msg });
       const target = getTarget(msg, args);
       if (!target) return sock.sendMessage(remoteJid, { text: `❌ Debes mencionar o responder al usuario vetado.` }, { quoted: msg });
 
       const targetData = await db.getUser(target);
-      
-      if (!targetData.petGraveyard) {
-        return sock.sendMessage(remoteJid, { text: `ℹ️ Este usuario tiene un registro limpio. No necesita perdón.` }, { quoted: msg });
-      }
+      if (!targetData.petGraveyard) return sock.sendMessage(remoteJid, { text: `ℹ️ Este usuario tiene un registro limpio.` }, { quoted: msg });
 
       targetData.petGraveyard = false;
       await db.setUser(target, targetData);
-
-      const text = `⚖️ *AMNISTÍA CONCEDIDA*\n\nEl Owner ha tenido piedad de @${cleanNumber(target)}. Su historial de negligencia ha sido borrado y ya puede volver a usar *.adoptar*.`;
       
-      return sock.sendMessage(remoteJid, { text, mentions: [target] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: `⚖️ *AMNISTÍA CONCEDIDA*\n\nEl Owner ha tenido piedad de @${cleanNumber(target)}. Ya puede volver a usar *.adoptar*.`, mentions: [target] }, { quoted: msg });
     }
   }
 };
