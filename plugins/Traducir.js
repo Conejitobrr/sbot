@@ -8,55 +8,48 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, args, msg } = ctx;
 
-    // 1. Verificamos que escriban el comando correctamente
     if (!args || args.length < 2) {
       return sock.sendMessage(
         remoteJid, 
-        { 
-          text: '❌ *Uso correcto:* .tr [idioma] [texto]\n\n*Ejemplos:*\n.tr en pantalla\n.tr es instead of\n\n*Idiomas comunes:* en (inglés), es (español), pt (portugués), fr (francés).' 
-        }, 
+        { text: '❌ Uso: .tr [idioma] [texto]\nEjemplo: .tr es hello' }, 
         { quoted: msg }
       );
     }
 
-    // 2. Extraemos el idioma destino y el texto a traducir
     const targetLang = args[0].toLowerCase();
     const textToTranslate = args.slice(1).join(' ');
 
     try {
-      // 3. Consultamos la API pública de Google Translate
-      // Usamos client=gtx que es el acceso libre de Google
+      // Usamos el endpoint oficial de Google Translate (GTX)
       const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(textToTranslate)}`;
       
       const response = await axios.get(url, {
         headers: { 'User-Agent': 'Mozilla/5.0' }
       });
 
-      // 4. Extraemos la traducción del formato extraño que devuelve Google
-      // La respuesta es un array de arrays, concatenamos todas las partes traducidas
-      let translatedText = '';
-      if (response.data && response.data[0]) {
-        response.data[0].forEach(part => {
-          if (part[0]) translatedText += part[0];
-        });
+      // --- DEBUG: ESTO APARECERÁ EN TU CONSOLA ---
+      console.log("--- RESPUESTA TRADUCTOR ---");
+      console.log(JSON.stringify(response.data, null, 2));
+      // -------------------------------------------
+
+      // Procesamiento más robusto
+      if (!response.data || !response.data[0]) {
+        throw new Error("Respuesta vacía de Google");
       }
 
-      // 5. Detectamos qué idioma reconoció automáticamente Google como origen
+      const translatedText = response.data[0]
+        .map(segment => segment[0])
+        .join('');
+
       const sourceLang = response.data[2] || 'auto';
 
-      // 6. Armamos el mensaje final
-      const mensajeFinal = `🌍 *Traducción (${sourceLang.toUpperCase()} ➔ ${targetLang.toUpperCase()})*\n\n${translatedText}`;
-
-      // 7. Enviamos el resultado
-      await sock.sendMessage(remoteJid, { text: mensajeFinal }, { quoted: msg });
+      const finalMsg = `🌍 *Traducción (${sourceLang.toUpperCase()} ➔ ${targetLang.toUpperCase()})*\n\n${translatedText}`;
+      
+      await sock.sendMessage(remoteJid, { text: finalMsg }, { quoted: msg });
 
     } catch (error) {
-      console.error("Error en Traductor:", error.message);
-      await sock.sendMessage(
-        remoteJid, 
-        { text: '❌ Hubo un error al intentar traducir. Verifica que el código del idioma sea correcto (ej. "en" para inglés).' }, 
-        { quoted: msg }
-      );
+      console.error("Error Traductor:", error.message);
+      await sock.sendMessage(remoteJid, { text: `❌ Error: ${error.message}` }, { quoted: msg });
     }
   }
 };
