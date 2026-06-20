@@ -10,10 +10,10 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, args, msg } = ctx;
 
-    if (args.length === 0) return sock.sendMessage(remoteJid, { text: '❌ Ejemplo: .buscaranime jujutsu kaisen 04' }, { quoted: msg });
+    if (args.length === 0) return sock.sendMessage(remoteJid, { text: '❌ Escribe el nombre del anime.' }, { quoted: msg });
 
     const query = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 *Abriendo motor de navegación real...* buscando "${query}"...` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 Buscando directamente en Google: "${query}"...` }, { quoted: msg });
 
     try {
       const browser = await puppeteer.launch({
@@ -23,40 +23,28 @@ module.exports = {
       });
 
       const page = await browser.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36');
-      
-      // Buscamos en Google directamente porque ya sabemos que tu Google.js encuentra resultados ahí
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent('site:facebook.com ' + query)}`;
-      await page.goto(searchUrl, { waitUntil: 'networkidle2' });
+      // Buscamos directamente en Google usando el mismo motor de tu google.js
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent('site:facebook.com/watch ' + query)}`;
+      await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
 
-      // Extraemos los enlaces usando el navegador real
-      const links = await page.evaluate(() => {
-        const results = [];
-        const anchors = document.querySelectorAll('a');
-        for (let a of anchors) {
-          const href = a.href;
-          if (href && href.includes('facebook.com') && href.includes('video')) {
-            results.push(href);
-          }
-        }
-        return results.slice(0, 3); // Primeros 3 resultados
+      // Extraemos el primer resultado directamente
+      const resultado = await page.evaluate(() => {
+        const h3 = document.querySelector('h3'); // Título
+        const a = h3 ? h3.parentElement : null; // Enlace
+        return a ? { title: h3.innerText, href: a.href } : null;
       });
 
       await browser.close();
 
-      if (links.length === 0) {
-        return sock.sendMessage(remoteJid, { text: '❌ Google no pudo encontrar enlaces de video para esa búsqueda.' }, { quoted: msg });
+      if (!resultado) {
+        return sock.sendMessage(remoteJid, { text: '❌ No encontré videos públicos en Facebook.' }, { quoted: msg });
       }
 
-      let respuesta = `✅ *Resultados encontrados con Navegador Real:*\n\n`;
-      links.forEach((link, i) => {
-        respuesta += `*Opción ${i + 1}:* \n📥 .descargar ${link}\n\n`;
-      });
-
-      return sock.sendMessage(remoteJid, { text: respuesta }, { quoted: msg });
+      const respuesta = `✅ *Resultado encontrado en Facebook:*\n\n🎬 *Título:* ${resultado.title}\n🔗 ${resultado.href}\n\n📥 *.descargar ${resultado.href}*`;
+      await sock.sendMessage(remoteJid, { text: respuesta }, { quoted: msg });
 
     } catch (e) {
-      return sock.sendMessage(remoteJid, { text: '❌ Error crítico en el navegador del bot.' }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: '❌ Error al conectar con Google.' }, { quoted: msg });
     }
   }
 };
