@@ -40,46 +40,78 @@ function hoursPassed(timestamp, hours) {
   return (Date.now() - (timestamp || 0)) > (hours * 60 * 60 * 1000);
 }
 
-// 💥 SISTEMA DE LÓGICA DE COMBATE
+// 💥 SISTEMA LÓGICO DE COMBATE Y CLASES
 function getRarezaMascota(tipo) {
   for (const rareza in ANIMALES) {
     if (ANIMALES[rareza].includes(tipo)) {
       if (rareza === 'mitologico') return 2.0;
       if (rareza === 'epico') return 1.5;
       if (rareza === 'raro') return 1.2;
-      return 1.0; // Común
+      return 1.0; 
     }
   }
   return 1.0;
 }
 
-function obtenerAtaquePorEspecie(tipo) {
+function obtenerTextosCombate(tipo) {
   const t = String(tipo).toLowerCase();
   
-  if (t.match(/(dragón|fénix|quimera|basilisco|leviatán|wyvern|manticora|cerbero|gárgola|golem)/)) {
-    const atk = ["desató su furia ancestral", "lanzó un ataque elemental", "usó magia antigua y letal", "rugió haciendo temblar el campo de batalla"];
-    return atk[Math.floor(Math.random() * atk.length)];
+  if (t.match(/(dragón|fénix|wyvern|dragón chino|quimera)/)) {
+    return {
+      entrada: "desciende de los cielos envuelto en un aura de calor abrasador",
+      ataque: "inhala profundamente y exhala una llamarada que calcina el campo de batalla",
+      remate: "envuelve a su rival en un tornado de fuego, quemándolo vivo sin piedad"
+    };
   }
-  if (t.match(/(águila|halcón|cóndor|cuervo|búho|pato|loro|gaviota|paloma|fénix|cisne|pelícano|flamenco|avestruz|pingüino)/)) {
-    const atk = ["descendió en picada ferozmente", "atacó con sus garras afiladas", "dio un picotazo certero a los ojos", "creó un torbellino con sus alas"];
-    return atk[Math.floor(Math.random() * atk.length)];
+  if (t.match(/(cerbero|minotauro|golem|behemoth|gárgola|esfinge|manticora)/)) {
+    return {
+      entrada: "hace temblar la tierra con cada uno de sus imponentes pasos",
+      ataque: "embiste con una fuerza colosal capaz de derribar montañas",
+      remate: "aplasta a su oponente contra el suelo usando pura y destructiva fuerza bruta"
+    };
   }
-  if (t.match(/(serpiente|cobra|víbora|pitón|boa|anaconda|mamba|cocodrilo|caimán|iguana|dragón de komodo)/)) {
-    const atk = ["inyectó su veneno paralizante", "dio un coletazo rompehuesos", "usó sus fuertes mandíbulas", "se enrolló para asfixiar a su rival"];
-    return atk[Math.floor(Math.random() * atk.length)];
+  if (t.match(/(águila|halcón|cóndor|cuervo|búho|pato|loro|gaviota|fénix|cisne|pelícano|flamenco|avestruz|pingüino|grifo|pegaso)/)) {
+    return {
+      entrada: "extiende sus alas y se eleva tomando ventaja desde el aire",
+      ataque: "cae en picada a una velocidad cegadora usando sus afiladas garras",
+      remate: "lanza un ataque aéreo fulminante, apuntando directamente a los ojos con su pico"
+    };
   }
-  if (t.match(/(tiburón|orca|delfín|kraken|megalodón|foca|morsa|cangrejo|ajolote)/)) {
-    const atk = ["dio un feroz mordisco acuático", "golpeó con su fuerza bestial", "surgió de la nada para atacar", "atrapó a su presa con fuerza"];
-    return atk[Math.floor(Math.random() * atk.length)];
+  if (t.match(/(serpiente|cobra|víbora|pitón|boa|anaconda|mamba|cocodrilo|caimán|iguana|dragón de komodo|basilisco)/)) {
+    return {
+      entrada: "sisea amenazadoramente mientras se desliza buscando un punto ciego",
+      ataque: "lanza una mordida ultrarrápida inyectando toxinas paralizantes",
+      remate: "se enrosca alrededor del cuerpo de su presa, asfixiándola y rompiendo sus huesos"
+    };
   }
-  if (t.match(/(lobo|perro|zorro|coyote|tigre|león|pantera|gato|oso|jaguar|lince|guepardo|puma|hiena)/)) {
-    const atk = ["lanzó un zarpazo brutal", "dio un mordisco desgarrador", "embistió enseñando los colmillos", "atacó con instinto asesino"];
-    return atk[Math.floor(Math.random() * atk.length)];
+  if (t.match(/(tiburón|orca|delfín|kraken|megalodón|foca|morsa|cangrejo|ajolote|leviatán)/)) {
+    return {
+      entrada: "surge de las profundidades mostrando su naturaleza depredadora",
+      ataque: "arrastra a su oponente lanzando un feroz mordisco con hileras de dientes",
+      remate: "desata un frenesí acuático, destrozando las defensas de su rival con un coletazo letal"
+    };
+  }
+  if (t.match(/(lobo|perro|zorro|coyote|tigre|león|pantera|gato|jaguar|lince|guepardo|puma|hiena|dientes de sable|huargo)/)) {
+    return {
+      entrada: "gruñe mostrando los colmillos mientras eriza el pelaje de su lomo",
+      ataque: "salta impulsado por sus patas traseras para dar un zarpazo profundo",
+      remate: "clava sus colmillos directamente en la yugular, asegurando una herida crítica"
+    };
+  }
+  if (t.match(/(oso|elefante|rinoceronte|hipopótamo|mamut|alce|ciervo|caballo|vaca)/)) {
+    return {
+      entrada: "bufa violentamente y raspa el suelo preparándose para embestir",
+      ataque: "carga a toda velocidad utilizando todo su enorme peso corporal",
+      remate: "arrolla a su oponente pisoteándolo y dejándolo completamente sin aire"
+    };
   }
   
-  // Por defecto (herbívoros, roedores, etc)
-  const atkDefault = ["dio una embestida contundente", "lanzó una fuerte patada", "usó un ataque sorpresa y veloz", "golpeó con todo su peso corporal"];
-  return atkDefault[Math.floor(Math.random() * atkDefault.length)];
+  // Por defecto (Roedores, pequeños)
+  return {
+    entrada: "adopta una postura defensiva pero valiente",
+    ataque: "corre velozmente confundiendo al rival para dar un golpe sorpresa",
+    remate: "aprovecha un descuido para lanzar una ráfaga de ataques precisos e inesperados"
+  };
 }
 
 module.exports = {
@@ -146,7 +178,7 @@ module.exports = {
       const horaActual = new Date().getHours();
       let estadoActual = 'contenta', notaEstado = '¡Irradia felicidad y energía!';
 
-      if (hoursPassed(p.lastFeed, 24)) { estadoActual = 'enferma'; notaEstado = '🤒 Su salud decae por falta de alimento. Usa *.curar* y luego *.alimentar*.'; } 
+      if (hoursPassed(p.lastFeed, 24)) { estadoActual = 'enferma'; notaEstado = '🤒 Está muy malherido o enfermo. Usa *.curar*.'; } 
       else if (hoursPassed(p.lastFeed, 12)) { estadoActual = 'enojada'; notaEstado = '💢 Está inquieto y de mal humor por el hambre. Usa *.alimentar*.'; } 
       else if (hoursPassed(p.lastPlay, 24)) { estadoActual = 'triste'; notaEstado = '😢 Se siente ignorado y triste. Usa *.jugar*.'; } 
       else if (horaActual < 6 || horaActual >= 22) { estadoActual = 'durmiendo'; notaEstado = '💤 Descansa pacíficamente. Shhh...'; }
@@ -165,7 +197,7 @@ module.exports = {
     const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
       if (!isHeal && hoursPassed(p.lastFeed, 24)) {
         const videoEnferma = getPetVideo(p.type, 'enferma', p.level);
-        const txt = `🤒 *${p.name}* está demasiado débil para moverse. Usa *.curar* primero.`;
+        const txt = `🚑 *${p.name}* está demasiado débil o malherido. ¡Debes usar *.curar* primero!`;
         if (videoEnferma) return sock.sendMessage(remoteJid, { video: videoEnferma, caption: txt, gifPlayback: true }, { quoted: msg });
         return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
       }
@@ -222,8 +254,9 @@ module.exports = {
 
     if (command === 'curar') {
       if (!hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `✅ *${p.name}* goza de buena salud.` }, { quoted: msg });
+      // Sanamos a la mascota poniéndole su última comida hace 23 horas (tiene hambre, pero ya no está muriendo/herida)
       p.lastFeed = now - (23 * 60 * 60 * 1000); 
-      return procesarAccion(5, 'curando', `💊 Aplicaste medicina a *${p.name}*. ¡Se está recuperando!`, true);
+      return procesarAccion(5, 'curando', `💊 Trataste las heridas y curaste a *${p.name}*. ¡Ya está fuera de peligro!`, true);
     }
 
     if (command === 'dormir') {
@@ -233,7 +266,7 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text }, { quoted: msg });
     }
 
-    // ⚔️ SISTEMA DE PELEAS NARRADO EN VIVO (Con Bypass y Bonos de Edad)
+    // ⚔️ SISTEMA DE PELEAS (HISTORIA NARRADA)
     if (command === 'pelear') {
       const target = getTarget(msg, args);
       if (!target) return sock.sendMessage(remoteJid, { text: `❌ Menciona o responde al dueño de la mascota que quieres desafiar.` }, { quoted: msg });
@@ -244,9 +277,9 @@ module.exports = {
 
       const enemyPet = targetData.pet;
       
-      if (hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `🤒 *${p.name}* está demasiado débil para pelear. Cúralo primero.` }, { quoted: msg });
+      if (hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `🚑 *${p.name}* está demasiado débil para pelear. Usa *.curar* primero.` }, { quoted: msg });
+      if (hoursPassed(enemyPet.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `🛑 La mascota rival está herida de gravedad. Sería deshonroso atacarla ahora.` }, { quoted: msg });
       
-      // 🔥 MODO DIOS: Owner y Premium no esperan
       const remaining = (60 * 60 * 1000) - (now - (p.lastBattle || 0));
       const sinEspera = isOwner || userData.premium;
 
@@ -256,17 +289,14 @@ module.exports = {
 
       p.lastBattle = now;
 
-      // Variables de Edad / Evolución
+      // Variables de Poder
       const miEtapaTxt = p.level >= NIVEL_EVOLUCION ? 'Adulto' : 'Cachorro';
       const rivalEtapaTxt = enemyPet.level >= NIVEL_EVOLUCION ? 'Adulto' : 'Cachorro';
-
       const miBonoEdad = p.level >= NIVEL_EVOLUCION ? 1.5 : 1.0;
       const rivalBonoEdad = enemyPet.level >= NIVEL_EVOLUCION ? 1.5 : 1.0;
-
       const miMulti = getRarezaMascota(p.type);
       const rivalMulti = getRarezaMascota(enemyPet.type);
       
-      // Cálculo de Poder (Nivel * Rareza * Bono de Edad)
       const miPoder = p.level * miMulti * miBonoEdad;
       const rivalPoder = enemyPet.level * rivalMulti * rivalBonoEdad;
 
@@ -277,77 +307,51 @@ module.exports = {
       const ganeYo = (Math.random() * 100) <= probGanar;
       const xpGanada = Math.floor(Math.random() * 50) + 50; 
       
-      const atkMio = obtenerAtaquePorEspecie(p.type);
-      const atkRival = obtenerAtaquePorEspecie(enemyPet.type);
+      // Obtener Lore
+      const loreMio = obtenerTextosCombate(p.type);
+      const loreRival = obtenerTextosCombate(enemyPet.type);
 
-      // FASE 1: DESAFÍO
-      let texto = `⚔️ *BATALLA DE MASCOTAS* ⚔️\n\n🥊 *${p.name}* (${p.type} [${miEtapaTxt}] - Nvl ${p.level}) desafía a *${enemyPet.name}* (${enemyPet.type} [${rivalEtapaTxt}] - Nvl ${enemyPet.level})...`;
-      const mensajeBatalla = await sock.sendMessage(remoteJid, { text: texto, mentions: [target] }, { quoted: msg });
-
-      await delay(2500); // 2.5 segs
-
-      // FASE 2: ATAQUE
-      texto += `\n\n💨 ¡Inicia el combate!\n*${p.name}* ${atkMio}, mientras que *${enemyPet.name}* ${atkRival}...`;
-      await sock.sendMessage(remoteJid, { text: texto, edit: mensajeBatalla.key, mentions: [target] });
-
-      await delay(3000); // 3 segs
-
-      // FASE 3: RESULTADO
-      if (ganeYo) {
-        texto += `\n\n🏆 ¡El poder de *${p.name}* prevaleció! Logró derrotar a su rival.\n⭐ Ganaste *+${xpGanada} XP*.`;
-        p.xp += xpGanada;
-      } else {
-        texto += `\n\n💀 ¡*${enemyPet.name}* fue superior en combate! *${p.name}* huyó herido...\n⭐ El rival gana *+${xpGanada} XP*.`;
-        enemyPet.xp += xpGanada;
-      }
-
-      const miNuevoNivel = Math.floor(p.xp / 200) + 1;
-      if (miNuevoNivel > p.level) {
-        p.level = miNuevoNivel;
-        texto += `\n✨ ¡WOW! *${p.name}* ha subido al Nivel ${p.level}!`;
-      }
-
-      const enemigoNuevoNivel = Math.floor(enemyPet.xp / 200) + 1;
-      if (enemigoNuevoNivel > enemyPet.level) {
-        enemyPet.level = enemigoNuevoNivel;
-      }
-
-      await db.setUser(userKey, userData);
-      await db.setUser(target, targetData);
-
-      return sock.sendMessage(remoteJid, { text: texto, edit: mensajeBatalla.key, mentions: [target] });
-    }
-
-    // 🔥 SACRIFICIO Y PERDÓN
-    if (command === 'sacrificar') {
-      if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes ninguna mascota para sacrificar.` }, { quoted: msg });
-      if (!args.includes('confirmar')) return sock.sendMessage(remoteJid, { text: `⚠️ *ADVERTENCIA IRREVERSIBLE* ⚠️\n\nEstás a punto de sacrificar a *${userData.pet.name}*. Si lo haces, serás vetado.\n\nPara proceder, escribe:\n*.sacrificar confirmar*` }, { quoted: msg });
-
-      const n = userData.pet.name, t = userData.pet.type, l = userData.pet.level;
-      userData.petGraveyard = true;
-      delete userData.pet;
-      await db.setUser(userKey, userData);
-
-      const video = getPetVideo(t, 'sacrificada', l);
-      const text = `☠️ Has tomado la oscura decisión de sacrificar a *${n}*.\n\nEl sistema te ha vetado de futuras adopciones.`;
-
-      if (video) return sock.sendMessage(remoteJid, { video, caption: text, gifPlayback: true }, { quoted: msg });
-      return sock.sendMessage(remoteJid, { text }, { quoted: msg });
-    }
-
-    if (command === 'perdonar') {
-      if (!isOwner) return sock.sendMessage(remoteJid, { text: `❌ Solo el Owner del bot tiene el poder de revocar vetos.` }, { quoted: msg });
-      const target = getTarget(msg, args);
-      if (!target) return sock.sendMessage(remoteJid, { text: `❌ Debes mencionar o responder al usuario vetado.` }, { quoted: msg });
-
-      const targetData = await db.getUser(target);
-      if (!targetData.petGraveyard) return sock.sendMessage(remoteJid, { text: `ℹ️ Este usuario tiene un registro limpio.` }, { quoted: msg });
-
-      targetData.petGraveyard = false;
-      await db.setUser(target, targetData);
+      // --- FASE 1: ENTRADA ---
+      let texto = `⚔️ *C O M B A T E  D E  M A S C O T A S* ⚔️\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      texto += `🥊 *${p.name}* (${p.type} Nvl ${p.level})\n`;
+      texto += `🆚 *${enemyPet.name}* (${enemyPet.type} Nvl ${enemyPet.level})\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      texto += `👀 *La tensión aumenta...*\n`;
+      texto += `El ${p.type} ${loreMio.entrada}, preparándose para masacrar al ${enemyPet.type} que ${loreRival.entrada}.`;
       
-      return sock.sendMessage(remoteJid, { text: `⚖️ *AMNISTÍA CONCEDIDA*\n\nEl Owner ha tenido piedad de @${cleanNumber(target)}. Ya puede volver a usar *.adoptar*.`, mentions: [target] }, { quoted: msg });
-    }
-  }
-};
-                            
+      const mensajeBatalla = await sock.sendMessage(remoteJid, { text: texto, mentions: [target] }, { quoted: msg });
+      await delay(4500); // 4.5 segundos de suspenso
+
+      // --- FASE 2: EL CHOQUE ---
+      texto += `\n\n💥 *¡INICIA EL COMBATE!*\n`;
+      texto += `*${p.name}* da el primer golpe y ${loreMio.ataque}. Sin dudarlo, *${enemyPet.name}* resiste el impacto y ${loreRival.ataque}!`;
+      
+      await sock.sendMessage(remoteJid, { text: texto, edit: mensajeBatalla.key, mentions: [target] });
+      await delay(4500);
+
+      // --- FASE 3: EL CLÍMAX ---
+      texto += `\n\n🔥 *EL CLÍMAX DE LA BATALLA*\n`;
+      if (ganeYo) {
+        texto += `La arena está cubierta de polvo... de pronto, *${p.name}* emerge de las sombras y ${loreMio.remate}!`;
+      } else {
+        texto += `La batalla parece igualada, pero en un giro inesperado, *${enemyPet.name}* ${loreRival.remate}!`;
+      }
+
+      await sock.sendMessage(remoteJid, { text: texto, edit: mensajeBatalla.key, mentions: [target] });
+      await delay(4500);
+
+      // --- FASE 4: RESOLUCIÓN Y CASTIGO ---
+      texto += `\n\n🏆 *RESULTADO FINAL*\n`;
+      if (ganeYo) {
+        texto += `¡*${p.name}* es el ganador indiscutible! 👑\n`;
+        texto += `🩸 *${enemyPet.name}* huye gravemente herido y necesitará curación urgente.\n\n`;
+        texto += `⭐ *${p.name}* gana *+${xpGanada} XP*.`;
+        
+        p.xp += xpGanada;
+        // CASTIGO AL PERDEDOR: Poner "enferma" restándole 25 horas a su lastFeed
+        enemyPet.lastFeed = now - (25 * 60 * 60 * 1000); 
+      } else {
+        texto += `¡*${enemyPet.name}* se alza con la victoria! 👑\n`;
+        texto += `🩸 *${p.name}* cae derrotado y gravemente herido. Deberás curarlo de inmediato.\n\n`;
+        texto += `⭐ El rival gana *+${xpGanada
