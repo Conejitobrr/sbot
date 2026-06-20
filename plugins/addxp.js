@@ -3,8 +3,9 @@
 const db = require('../lib/database');
 
 module.exports = {
-  commands: ['addxp'],
-  description: 'Añadir XP a un usuario o al bot (Owner)',
+  // 🔥 1. Añadimos los nuevos comandos al mismo archivo
+  commands: ['addxp', 'quitarxp', 'delxp', 'removexp'],
+  description: 'Añadir o quitar XP a un usuario o al bot (Owner)',
 
   async execute(ctx) {
     const {
@@ -35,40 +36,50 @@ module.exports = {
     }
     // 3. Atajo para el bot
     else if (args.includes('bot') || args.includes('Bot')) {
-      // Extraemos el ID del bot y nos aseguramos de limpiarlo de códigos de dispositivo
       let botId = botJid || sock.user?.id || '';
       target = botId.includes(':') ? botId.split(':')[0] + '@s.whatsapp.net' : botId;
     }
 
     if (!target) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Debes mencionar, responder a alguien o poner "bot".\n\nEjemplos:\n.addxp @usuario 1000\n.addxp bot 1000'
+        text: '❌ Debes mencionar, responder a alguien o poner "bot".\n\nEjemplos:\n.addxp @usuario 1000\n.quitarxp bot 500'
       }, { quoted: msg });
     }
 
-    const amount = parseInt(
-      args.find(a => /^\d+$/.test(a))
-    );
+    // 🔥 2. Nueva expresión regular que acepta el signo negativo (-) opcionalmente
+    const amountStr = args.find(a => /^-?\d+$/.test(a));
+    let amount = parseInt(amountStr);
 
-    if (!amount || amount <= 0) {
+    if (isNaN(amount) || amount === 0) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ Debes indicar una cantidad válida.\n\nEjemplos:\n.addxp @usuario 1000\n.addxp bot 1000'
+        text: '❌ Debes indicar una cantidad válida.\n\nEjemplos:\n.addxp @usuario 1000\n.quitarxp @usuario 500'
       }, { quoted: msg });
     }
 
-    // Tu lógica original que guardaba correctamente la XP
+    // 🔥 3. Detectamos si usaste el comando para quitar
+    const textMessage = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+    const isRemovingCommand = /^[.!/#](quitarxp|delxp|removexp)\b/i.test(textMessage);
+
+    // Si usaste .quitarxp y pusiste un número positivo, lo invertimos a negativo
+    if (isRemovingCommand && amount > 0) {
+      amount = -amount;
+    }
+
+    // Tu lógica original (addXP restará si el amount es negativo)
     await db.addXP(target, amount);
 
-    // Extraemos solo el número limpio para mostrarlo en el texto
+    // Extraemos solo el número limpio
     const number = target.split('@')[0].split(':')[0]; 
     const isBot = args.includes('bot') || args.includes('Bot');
 
-    await sock.sendMessage(remoteJid, {
-      text:
-`✅ XP añadida correctamente
+    // 🔥 4. Mensaje dinámico (Para que no diga "Se añadieron -500 XP")
+    const accionTexto = amount > 0 ? 'añadieron' : 'quitaron';
+    const icono = amount > 0 ? '✅' : '➖';
+    const cantidadAbsoluta = Math.abs(amount); // Quitamos el signo negativo solo para el texto visual
 
-Se añadieron ${amount} XP a ${isBot ? 'SiriusBot 🤖' : `@${number}`}`,
-      mentions: [target] // Tu mención original que funcionaba perfecto
+    await sock.sendMessage(remoteJid, {
+      text: `${icono} XP actualizada correctamente\n\nSe ${accionTexto} ${cantidadAbsoluta} XP a ${isBot ? 'SiriusBot 🤖' : `@${number}`}`,
+      mentions: [target]
     }, { quoted: msg });
   }
 };
