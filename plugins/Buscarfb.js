@@ -4,7 +4,6 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
-// Memoria temporal global para guardar los links del usuario
 global.menuBusqueda = global.menuBusqueda || new Map();
 
 module.exports = {
@@ -13,7 +12,7 @@ module.exports = {
   async execute(ctx) {
     const { sock, remoteJid, args, msg, sender } = ctx;
 
-    if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ Escribe qué video buscas.' }, { quoted: msg });
+    if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ ¿Qué quieres buscar?' }, { quoted: msg });
 
     const query = args.join(' ');
     await sock.sendMessage(remoteJid, { text: `🔍 Buscando en Facebook Watch: "${query}"...` }, { quoted: msg });
@@ -26,34 +25,40 @@ module.exports = {
       });
 
       const page = await browser.newPage();
+      // Usamos el enlace que TÚ mismo probaste y funciona
       await page.goto(`https://www.facebook.com/watch/search/?q=${encodeURIComponent(query)}`, { waitUntil: 'networkidle2' });
-      await new Promise(r => setTimeout(r, 4000));
+      await new Promise(r => setTimeout(r, 6000)); // Damos más tiempo para cargar
 
       const resultados = await page.evaluate(() => {
-        const links = [];
-        const anchors = document.querySelectorAll('a[href*="/watch/"]');
-        anchors.forEach(a => {
-          if (a.href && !links.includes(a.href) && links.length < 5) links.push(a.href);
+        const items = [];
+        // Buscamos enlaces que tengan '?v=' o '/videos/'
+        const links = document.querySelectorAll('a[href*="/watch/?v="], a[href*="/videos/"]');
+        
+        links.forEach(l => {
+          // Buscamos un texto cercano que actúe como título
+          const title = l.innerText || l.getAttribute('aria-label') || "Video de Facebook";
+          if (l.href && !items.find(i => i.url === l.href) && title.length > 5) {
+            items.push({ title: title.substring(0, 40), url: l.href });
+          }
         });
-        return links;
+        return items.slice(0, 5);
       });
 
       await browser.close();
 
-      if (resultados.length === 0) return sock.sendMessage(remoteJid, { text: '❌ No encontré videos.' }, { quoted: msg });
+      if (resultados.length === 0) return sock.sendMessage(remoteJid, { text: '❌ No pude extraer resultados. Intenta otro término.' }, { quoted: msg });
 
-      // Guardamos los links en la memoria del bot vinculados al usuario
       global.menuBusqueda.set(sender, resultados);
 
-      let msgRes = `✅ *Resultados encontrados. Responde con el número (1-5) para descargar:*\n\n`;
-      resultados.forEach((link, i) => {
-        msgRes += `*${i + 1}.* ${link}\n`;
+      let msgRes = `✅ *Resultados encontrados (Responde 1-5):*\n\n`;
+      resultados.forEach((item, i) => {
+        msgRes += `*${i + 1}.* ${item.title}\n`;
       });
 
       await sock.sendMessage(remoteJid, { text: msgRes }, { quoted: msg });
 
     } catch (e) {
-      await sock.sendMessage(remoteJid, { text: '❌ Error.' }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: '❌ Error: ' + e.message }, { quoted: msg });
     }
   }
 };
