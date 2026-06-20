@@ -4,16 +4,19 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
+// Memoria temporal global para guardar los links del usuario
+global.menuBusqueda = global.menuBusqueda || new Map();
+
 module.exports = {
   commands: ['buscarfb', 'fbbuscar'],
 
   async execute(ctx) {
-    const { sock, remoteJid, args, msg } = ctx;
+    const { sock, remoteJid, args, msg, sender } = ctx;
 
-    if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ Escribe qué video buscas en Facebook.\nEjemplo: .buscarfb jujutsu kaisen 04' }, { quoted: msg });
+    if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ Escribe qué video buscas.' }, { quoted: msg });
 
     const query = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando en Facebook: "${query}"...` }, { quoted: msg });
+    await sock.sendMessage(remoteJid, { text: `🔍 Buscando en Facebook Watch: "${query}"...` }, { quoted: msg });
 
     try {
       const browser = await puppeteer.launch({
@@ -23,35 +26,34 @@ module.exports = {
       });
 
       const page = await browser.newPage();
-      // Buscamos directo en Facebook Watch
       await page.goto(`https://www.facebook.com/watch/search/?q=${encodeURIComponent(query)}`, { waitUntil: 'networkidle2' });
-
-      // Esperamos a que carguen los resultados
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise(r => setTimeout(r, 4000));
 
       const resultados = await page.evaluate(() => {
         const links = [];
-        // Seleccionamos los enlaces de videos que aparecen en los resultados
         const anchors = document.querySelectorAll('a[href*="/watch/"]');
         anchors.forEach(a => {
-          if (a.href && !links.includes(a.href)) links.push(a.href);
+          if (a.href && !links.includes(a.href) && links.length < 5) links.push(a.href);
         });
-        return links.slice(0, 3);
+        return links;
       });
 
       await browser.close();
 
-      if (resultados.length === 0) return sock.sendMessage(remoteJid, { text: '❌ No encontré videos. Asegúrate de que el término no sea muy largo.' }, { quoted: msg });
+      if (resultados.length === 0) return sock.sendMessage(remoteJid, { text: '❌ No encontré videos.' }, { quoted: msg });
 
-      let msgRes = `✅ *Resultados en Facebook Watch:*\n\n`;
+      // Guardamos los links en la memoria del bot vinculados al usuario
+      global.menuBusqueda.set(sender, resultados);
+
+      let msgRes = `✅ *Resultados encontrados. Responde con el número (1-5) para descargar:*\n\n`;
       resultados.forEach((link, i) => {
-        msgRes += `*${i + 1}.* ${link}\n📥 *.descargar ${link}*\n\n`;
+        msgRes += `*${i + 1}.* ${link}\n`;
       });
 
       await sock.sendMessage(remoteJid, { text: msgRes }, { quoted: msg });
 
     } catch (e) {
-      await sock.sendMessage(remoteJid, { text: '❌ Error al buscar en Facebook.' }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: '❌ Error.' }, { quoted: msg });
     }
   }
 };
