@@ -1,64 +1,35 @@
-'use strict';
-
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
-
-global.menuBusqueda = global.menuBusqueda || new Map();
+// Memoria para guardar la página actual de cada usuario
+global.paginasBusqueda = global.paginasBusqueda || new Map();
 
 module.exports = {
-  commands: ['buscarfb', 'fbbuscar'],
+  commands: ['buscarfb'],
 
   async execute(ctx) {
     const { sock, remoteJid, args, msg, sender } = ctx;
 
-    if (!args.length) return sock.sendMessage(remoteJid, { text: '❌ ¿Qué quieres buscar?' }, { quoted: msg });
-
-    const query = args.join(' ');
-    await sock.sendMessage(remoteJid, { text: `🔍 Buscando en Facebook Watch: "${query}"...` }, { quoted: msg });
-
-    try {
-      const browser = await puppeteer.launch({
-        executablePath: '/usr/bin/chromium-browser',
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    // Si escribe ".buscarfb siguiente", mostramos la página 2
+    if (args[0] === 'siguiente') {
+      const resultados = global.menuBusqueda.get(sender);
+      if (!resultados || resultados.length <= 5) return sock.sendMessage(remoteJid, { text: '❌ No hay más resultados.' }, { quoted: msg });
+      
+      let msgRes = `✅ *Página 2 (Responde 6-10):*\n\n`;
+      resultados.slice(5, 10).forEach((item, i) => {
+        msgRes += `*${i + 6}.* ${item.title}\n`;
       });
-
-      const page = await browser.newPage();
-      // Usamos el enlace que TÚ mismo probaste y funciona
-      await page.goto(`https://www.facebook.com/watch/search/?q=${encodeURIComponent(query)}`, { waitUntil: 'networkidle2' });
-      await new Promise(r => setTimeout(r, 6000)); // Damos más tiempo para cargar
-
-      const resultados = await page.evaluate(() => {
-        const items = [];
-        // Buscamos enlaces que tengan '?v=' o '/videos/'
-        const links = document.querySelectorAll('a[href*="/watch/?v="], a[href*="/videos/"]');
-        
-        links.forEach(l => {
-          // Buscamos un texto cercano que actúe como título
-          const title = l.innerText || l.getAttribute('aria-label') || "Video de Facebook";
-          if (l.href && !items.find(i => i.url === l.href) && title.length > 5) {
-            items.push({ title: title.substring(0, 40), url: l.href });
-          }
-        });
-        return items.slice(0, 5);
-      });
-
-      await browser.close();
-
-      if (resultados.length === 0) return sock.sendMessage(remoteJid, { text: '❌ No pude extraer resultados. Intenta otro término.' }, { quoted: msg });
-
-      global.menuBusqueda.set(sender, resultados);
-
-      let msgRes = `✅ *Resultados encontrados (Responde 1-5):*\n\n`;
-      resultados.forEach((item, i) => {
-        msgRes += `*${i + 1}.* ${item.title}\n`;
-      });
-
-      await sock.sendMessage(remoteJid, { text: msgRes }, { quoted: msg });
-
-    } catch (e) {
-      await sock.sendMessage(remoteJid, { text: '❌ Error: ' + e.message }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: msgRes }, { quoted: msg });
     }
+
+    // Búsqueda normal
+    const query = args.join(' ');
+    // ... (el resto del código de búsqueda anterior)
+    
+    // Al final del buscador, agregamos este aviso:
+    let msgRes = `✅ *Resultados 1-5 (Responde 1-5 para descargar):*\n\n`;
+    resultados.slice(0, 5).forEach((item, i) => {
+      msgRes += `*${i + 1}.* ${item.title}\n`;
+    });
+    msgRes += `\n⚡ *Escribe .buscarfb siguiente para ver más.*`;
+    
+    await sock.sendMessage(remoteJid, { text: msgRes }, { quoted: msg });
   }
 };
