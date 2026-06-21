@@ -54,7 +54,7 @@ function getRarezaMascota(tipo) {
   return 1.0;
 }
 
-// 🧠 ADN: SOLO PREPARACIÓN, ATAQUE Y REMATE (HISTORIA FLUÍDA)
+// 🧠 ADN: PREPARACIÓN, ATAQUE Y REMATE
 function obtenerADN(tipo) {
   const t = String(tipo).toLowerCase();
 
@@ -98,7 +98,7 @@ function obtenerADN(tipo) {
 }
 
 module.exports = {
-  commands: ['adoptar', 'mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'perdonar', 'pelear'],
+  commands: ['adoptar', 'mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'perdonar', 'pelear', 'darmascota'],
   
   async execute(ctx) {
     const { sock, remoteJid, msg, sender, args, command, isOwner, pushName } = ctx;
@@ -107,7 +107,7 @@ module.exports = {
     const now = Date.now();
     const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'pelear'];
     
-    // 🔥 SISTEMA DE MUERTE
+    // 🔥 SISTEMA DE MUERTE POR ABANDONO
     if (userData.pet && petCommands.includes(command) && hoursPassed(userData.pet.lastFeed, 72)) {
       const p = userData.pet;
       const video = getPetVideo(p.type, 'sacrificada', p.level);
@@ -118,12 +118,17 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
     }
 
-    // 1. ADOPTAR (CON RAREZA RESTAURADA)
+    // 1. ADOPTAR (CON MENÚ DE AYUDA)
     if (command === 'adoptar') {
+      if (!args.length) {
+        const menuMascotas = `🐾 *CENTRO DE ADOPCIÓN* 🐾\n\nPara adoptar a tu compañero, debes especificar un nombre.\n*Uso:* \`.adoptar [Nombre]\`\n*Ejemplo:* \`.adoptar Zeus\`\n\n📜 *COMANDOS DISPONIBLES:*\n🔸 \`.mascota\` - Ver perfil y estado.\n🔸 \`.alimentar\` - Dale de comer (cada 2h).\n🔸 \`.jugar\` - Diviértete con él (cada 30m).\n🔸 \`.entrenar\` - Gana mucha XP (cada 4h).\n🔸 \`.pasear\` - Gana XP leve (cada 1h).\n🔸 \`.dormir\` - Mandar a dormir.\n🔸 \`.curar\` - Sana heridas urgentes.\n🔸 \`.pelear @user\` - Combate por la gloria.\n🔸 \`.sacrificar\` - Despedida irreversible.`;
+        return sock.sendMessage(remoteJid, { text: menuMascotas }, { quoted: msg });
+      }
+
       if (userData.pet) return sock.sendMessage(remoteJid, { text: `❌ Ya tienes a *${userData.pet.name}(${userData.pet.type})*.` }, { quoted: msg });
       if (userData.petGraveyard) return sock.sendMessage(remoteJid, { text: `💀 *Registro Manchado*\n\nDejaste morir a tu mascota anterior. El sistema no te permite adoptar de nuevo.\n\n_Pide al Owner que use .perdonar en ti._` }, { quoted: msg });
 
-      const petName = args.join(' ') || 'Sin Nombre';
+      const petName = args.join(' ');
       const roll = Math.random() * 100;
       let rareza = '', pool = [];
 
@@ -144,7 +149,40 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: txt }, { quoted: msg });
     }
 
-    // 2. PERFIL (RESTABLECIDO CON DETALLES)
+    // 👑 COMANDO EXCLUSIVO OWNER: DAR MASCOTA ESPECÍFICA
+    if (command === 'darmascota') {
+      if (!isOwner) return sock.sendMessage(remoteJid, { text: `❌ Solo los Dioses (Owners) pueden crear criaturas a voluntad.` }, { quoted: msg });
+      
+      const target = getTarget(msg, args);
+      if (!target) return sock.sendMessage(remoteJid, { text: `❌ Menciona al usuario.\n*Uso:* .darmascota @user Raza | Nombre` }, { quoted: msg });
+
+      const partesTexto = args.join(' ').split('|');
+      if (partesTexto.length < 2) return sock.sendMessage(remoteJid, { text: `❌ Formato incorrecto.\n*Uso:* .darmascota @user Raza | Nombre\n*Ejemplo:* .darmascota @user Dragón | Bahamut` }, { quoted: msg });
+
+      // Limpiar la raza (removiendo menciones) y el nombre
+      const razaBuscada = partesTexto[0].replace(/@\d+/g, '').trim().toLowerCase();
+      const nombreElegido = partesTexto[1].trim() || 'Criatura';
+
+      let razaOficial = null;
+      for (const rareza in ANIMALES) {
+        const match = ANIMALES[rareza].find(a => a.toLowerCase() === razaBuscada);
+        if (match) {
+          razaOficial = match;
+          break;
+        }
+      }
+
+      if (!razaOficial) return sock.sendMessage(remoteJid, { text: `❌ La raza "${partesTexto[0].replace(/@\d+/g, '').trim()}" no existe en la base de datos de ADN.` }, { quoted: msg });
+
+      const targetData = await db.getUser(target);
+      targetData.pet = { name: nombreElegido, type: razaOficial, xp: 0, level: 1, lastFeed: now, lastPlay: now, lastTrain: 0, lastWalk: 0, lastBattle: 0 };
+      targetData.petGraveyard = false; // Se le perdona automáticamente si estaba vetado
+      await db.setUser(target, targetData);
+
+      return sock.sendMessage(remoteJid, { text: `🎁 *REGALO DIVINO*\n\nEl Owner ha concedido a @${cleanNumber(target)} un majestuoso *${razaOficial}* llamado *${nombreElegido}*.`, mentions: [target] }, { quoted: msg });
+    }
+
+    // 2. PERFIL
     if (command === 'mascota') {
       if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
       const p = userData.pet;
