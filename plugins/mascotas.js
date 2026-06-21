@@ -159,8 +159,13 @@ module.exports = {
       const partesTexto = args.join(' ').split('|');
       if (partesTexto.length < 2) return sock.sendMessage(remoteJid, { text: `❌ Formato incorrecto.\n*Uso:* .darmascota @user Raza | Nombre\n*Ejemplo:* .darmascota @user Dragón | Bahamut` }, { quoted: msg });
 
-      // Limpiar la raza (removiendo menciones) y el nombre
-      const razaBuscada = partesTexto[0].replace(/@\d+/g, '').trim().toLowerCase();
+      // 🔥 FILTRO DE LIMPIEZA PROFUNDA (ELIMINA CARACTERES INVISIBLES DE WHATSAPP)
+      const razaBuscada = partesTexto[0]
+        .replace(/@\d+/g, '') // Quita el número etiquetado
+        .replace(/[^\w\sáéíóúÁÉÍÓÚñÑ-]/gi, '') // Elimina fantasmas/caracteres invisibles
+        .trim()
+        .toLowerCase();
+
       const nombreElegido = partesTexto[1].trim() || 'Criatura';
 
       let razaOficial = null;
@@ -172,7 +177,7 @@ module.exports = {
         }
       }
 
-      if (!razaOficial) return sock.sendMessage(remoteJid, { text: `❌ La raza "${partesTexto[0].replace(/@\d+/g, '').trim()}" no existe en la base de datos de ADN.` }, { quoted: msg });
+      if (!razaOficial) return sock.sendMessage(remoteJid, { text: `❌ La raza "${razaBuscada}" no existe en la base de datos de ADN.` }, { quoted: msg });
 
       const targetData = await db.getUser(target);
       targetData.pet = { name: nombreElegido, type: razaOficial, xp: 0, level: 1, lastFeed: now, lastPlay: now, lastTrain: 0, lastWalk: 0, lastBattle: 0 };
