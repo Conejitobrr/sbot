@@ -469,14 +469,12 @@ async function getTargets(ctx) {
   return [...map.values()];
 }
 
+// 🔥 AQUÍ ESTÁ LA SOLUCIÓN DEL ANTILINK ENFOCADO SOLO EN GRUPOS 🔥
 function containsLink(text = '') {
   const value = String(text || '');
 
-  return (
-    /https?:\/\/\S+/i.test(value) ||
-    /chat\.whatsapp\.com\/[A-Za-z0-9]+/i.test(value) ||
-    /(?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/\S*)?/i.test(value)
-  );
+  // Solo detecta enlaces que contengan "chat.whatsapp.com"
+  return /chat\.whatsapp\.com\/[a-zA-Z0-9]+/i.test(value);
 }
 
 async function warnUser(sock, remoteJid, target, reason = '', msg = null) {
@@ -628,7 +626,7 @@ module.exports = {
         sock,
         remoteJid,
         target,
-        'Enviar links con antilink activado',
+        'Enviar enlaces de otros grupos',
         msg
       );
 
