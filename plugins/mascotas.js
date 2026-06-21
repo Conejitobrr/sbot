@@ -248,7 +248,7 @@ module.exports = {
     if (!userData.pet && petCommands.includes(command)) return sock.sendMessage(remoteJid, { text: `❌ No tienes criatura alguna a tu cuidado.` }, { quoted: msg });
     const p = userData.pet;
 
-    // 🔥 FUNCIÓN CENTRAL DE ANIMACIONES Y DETALLES PARA ALIMENTAR, JUGAR, ETC.
+    // 🔥 FUNCIÓN CENTRAL DE ANIMACIONES Y DETALLES PARA ACCIONES CON ÉXITO
     const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
       if (!isHeal && hoursPassed(p.lastFeed, 24)) {
         const mediaEnferma = getPetMedia(p.type, 'enferma', p.level);
@@ -276,37 +276,68 @@ module.exports = {
 
     if (command === 'alimentar') {
       const remaining = (2 * 60 * 60 * 1000) - (now - (p.lastFeed || 0));
-      if (remaining > 0 && !hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}(${p.type})* no tiene hambre. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
-      p.lastFeed = now; return procesarAccion(30, 'comiendo', `🍖 Le diste su comida favorita a *${p.name}(${p.type})*. Devoró todo con ganas.`);
+      if (remaining > 0 && !hoursPassed(p.lastFeed, 24)) {
+        const media = getPetMedia(p.type, 'contenta', p.level);
+        return sendMediaMsg(sock, remoteJid, media, `⏳ *${p.name}(${p.type})* no tiene hambre. Espera *${Math.floor(remaining / 60000)} min*.`, msg);
+      }
+      p.lastFeed = now; 
+      return procesarAccion(30, 'comiendo', `🍖 Le diste su comida favorita a *${p.name}(${p.type})*. Devoró todo con ganas.`);
     }
+
     if (command === 'jugar') {
       const remaining = (30 * 60 * 1000) - (now - (p.lastPlay || 0));
-      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `💢 *${p.name}(${p.type})* te ignora por hambre. Usa *.alimentar*.` }, { quoted: msg });
-      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}(${p.type})* está cansado. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
-      p.lastPlay = now; return procesarAccion(15, 'jugando', `🎾 Pasaste un buen rato divirtiéndote con *${p.name}(${p.type})*.`);
+      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
+        const media = getPetMedia(p.type, 'enojada', p.level);
+        return sendMediaMsg(sock, remoteJid, media, `💢 *${p.name}(${p.type})* te ignora por hambre. Usa *.alimentar*.`, msg);
+      }
+      if (remaining > 0) {
+        const media = getPetMedia(p.type, 'triste', p.level);
+        return sendMediaMsg(sock, remoteJid, media, `⏳ *${p.name}(${p.type})* está cansado. Espera *${Math.floor(remaining / 60000)} min*.`, msg);
+      }
+      p.lastPlay = now; 
+      return procesarAccion(15, 'jugando', `🎾 Pasaste un buen rato divirtiéndote con *${p.name}(${p.type})*.`);
     }
+
     if (command === 'entrenar') {
       const remaining = (4 * 60 * 60 * 1000) - (now - (p.lastTrain || 0));
-      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `💢 *${p.name}(${p.type})* se niega a entrenar sin comer. Usa *.alimentar*.` }, { quoted: msg });
-      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}(${p.type})* está exhausto. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
-      p.lastTrain = now; return procesarAccion(60, 'entrenando', `⚔️ Practicaste combate y mejoraste las habilidades de *${p.name}(${p.type})*.`);
+      if (hoursPassed(p.lastFeed, 12) && !hoursPassed(p.lastFeed, 24)) {
+        const media = getPetMedia(p.type, 'enojada', p.level);
+        return sendMediaMsg(sock, remoteJid, media, `💢 *${p.name}(${p.type})* se niega a entrenar sin comer. Usa *.alimentar*.`, msg);
+      }
+      if (remaining > 0) {
+        const media = getPetMedia(p.type, 'triste', p.level);
+        return sendMediaMsg(sock, remoteJid, media, `⏳ *${p.name}(${p.type})* está exhausto. Espera *${Math.floor(remaining / 60000)} min*.`, msg);
+      }
+      p.lastTrain = now; 
+      return procesarAccion(60, 'entrenando', `⚔️ Practicaste combate y mejoraste las habilidades de *${p.name}(${p.type})*.`);
     }
+
     if (command === 'pasear') {
       const remaining = (60 * 60 * 1000) - (now - (p.lastWalk || 0));
-      if (remaining > 0) return sock.sendMessage(remoteJid, { text: `⏳ *${p.name}(${p.type})* ya caminó suficiente. Espera *${Math.floor(remaining / 60000)} min*.` }, { quoted: msg });
-      p.lastWalk = now; return procesarAccion(20, 'paseando', `🌳 Fuiste a pasear tranquilamente con *${p.name}(${p.type})*.`);
+      if (remaining > 0) {
+        const media = getPetMedia(p.type, 'triste', p.level);
+        return sendMediaMsg(sock, remoteJid, media, `⏳ *${p.name}(${p.type})* ya caminó suficiente. Espera *${Math.floor(remaining / 60000)} min*.`, msg);
+      }
+      p.lastWalk = now; 
+      return procesarAccion(20, 'paseando', `🌳 Fuiste a pasear tranquilamente con *${p.name}(${p.type})*.`);
     }
+
     if (command === 'curar') {
-      if (!hoursPassed(p.lastFeed, 24)) return sock.sendMessage(remoteJid, { text: `✅ *${p.name}(${p.type})* goza de buena salud.` }, { quoted: msg });
-      p.lastFeed = now - (23 * 60 * 60 * 1000); return procesarAccion(5, 'curando', `💊 Aplicaste medicina a *${p.name}(${p.type})*. ¡Se está recuperando!`, true);
+      if (!hoursPassed(p.lastFeed, 24)) {
+        const media = getPetMedia(p.type, 'contenta', p.level);
+        return sendMediaMsg(sock, remoteJid, media, `✅ *${p.name}(${p.type})* goza de buena salud.`, msg);
+      }
+      p.lastFeed = now - (23 * 60 * 60 * 1000); 
+      return procesarAccion(5, 'curando', `💊 Aplicaste medicina a *${p.name}(${p.type})*. ¡Se está recuperando!`, true);
     }
+
     if (command === 'dormir') {
       const media = getPetMedia(p.type, 'durmiendo', p.level);
       const txt = `💤 Mandaste a descansar a *${p.name}(${p.type})*. Respira pacíficamente...`;
       return sendMediaMsg(sock, remoteJid, media, txt, msg);
     }
 
-    // ⚔️ SISTEMA DE COMBATE (FOTOS DE ENFERMEDAD OBLIGATORIAS)
+    // ⚔️ SISTEMA DE COMBATE (FOTOS DE ESTADO OBLIGATORIAS)
     if (command === 'pelear') {
       const target = getTarget(msg, args);
       if (!target) return sock.sendMessage(remoteJid, { text: `❌ Menciona a tu rival.` }, { quoted: msg });
@@ -332,7 +363,11 @@ module.exports = {
       }
       
       const cooldown = (60 * 60 * 1000) - (now - (p.lastBattle || 0));
-      if (cooldown > 0 && !isOwner && !userData.premium) return sock.sendMessage(remoteJid, { text: `⏳ *${n1}* descansa. Espera *${Math.floor(cooldown / 60000)} min*.` }, { quoted: msg });
+      if (cooldown > 0 && !isOwner && !userData.premium) {
+        const m = getPetMedia(p.type, 'durmiendo', p.level);
+        return sendMediaMsg(sock, remoteJid, m, `⏳ *${n1}* descansa. Espera *${Math.floor(cooldown / 60000)} min*.`, msg);
+      }
+      
       p.lastBattle = now;
 
       const miPoder = p.level * getRarezaMascota(p.type) * (p.level >= NIVEL_EVOLUCION ? 1.5 : 1.0);
