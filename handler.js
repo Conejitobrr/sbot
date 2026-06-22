@@ -64,6 +64,31 @@ console.warn = (...args) => {
   originalConsoleWarn(...args);
 };
 
+// ==========================================
+// 🔥 SISTEMA DE COLA ANTI-OVERLIMIT 
+// ==========================================
+const sendQueue = [];
+let isSending = false;
+const SEND_DELAY = 1000; // 1 segundo exacto de espera entre mensajes
+
+async function processSendQueue() {
+  if (isSending || sendQueue.length === 0) return;
+  isSending = true;
+
+  while (sendQueue.length > 0) {
+    const task = sendQueue.shift();
+    try {
+      await task();
+    } catch (err) {
+      // Los errores se manejan dentro de la propia tarea
+    }
+    // Pausa protectora para evitar el baneo de WhatsApp
+    await new Promise(resolve => setTimeout(resolve, SEND_DELAY));
+  }
+
+  isSending = false;
+}
+
 function attachSendLogger(sock) {
   if (sock._loggerAttached) return;
   sock._loggerAttached = true;
@@ -71,44 +96,57 @@ function attachSendLogger(sock) {
   const originalSend = sock.sendMessage.bind(sock);
 
   sock.sendMessage = async (jid, content = {}, options = {}) => {
-    try {
-      if (config.debug) {
-        let type = 'Desconocido';
-        let preview = '';
+    return new Promise((resolve, reject) => {
+      // Metemos el envío a la fila de espera
+      sendQueue.push(async () => {
+        try {
+          if (config.debug) {
+            let type = 'Desconocido';
+            let preview = '';
 
-        if (content.text) {
-          type = 'Texto';
-          preview = content.text;
-        } else if (content.image) {
-          type = 'Imagen';
-          preview = content.caption || '[Imagen]';
-        } else if (content.video) {
-          type = 'Video';
-          preview = content.caption || '[Video]';
-        } else if (content.audio) {
-          type = content.ptt ? 'Nota de voz' : 'Audio';
-          preview = '[Audio]';
-        } else if (content.sticker) {
-          type = 'Sticker';
-          preview = '[Sticker]';
-        } else if (content.document) {
-          type = 'Documento';
-          preview = content.fileName || '[Documento]';
+            if (content.text) {
+              type = 'Texto';
+              preview = content.text;
+            } else if (content.image) {
+              type = 'Imagen';
+              preview = content.caption || '[Imagen]';
+            } else if (content.video) {
+              type = 'Video';
+              preview = content.caption || '[Video]';
+            } else if (content.audio) {
+              type = content.ptt ? 'Nota de voz' : 'Audio';
+              preview = '[Audio]';
+            } else if (content.sticker) {
+              type = 'Sticker';
+              preview = '[Sticker]';
+            } else if (content.document) {
+              type = 'Documento';
+              preview = content.fileName || '[Documento]';
+            }
+
+            console.log(chalk.green('\n╔════════ BOT ENVÍA ════════'));
+            console.log(chalk.white('║ 📤 A    :'), chalk.cyan(jid));
+            console.log(chalk.white('║ 📦 Tipo :'), chalk.yellow(type));
+            console.log(chalk.white('║ 💬 Msg  :'), chalk.green(String(preview).slice(0, 300)));
+            console.log(chalk.green('╚═══════════════════════════\n'));
+          }
+
+          const result = await originalSend(jid, content, options);
+          resolve(result);
+        } catch (err) {
+          console.log(chalk.red('❌ Error enviando mensaje:'), err?.message || err);
+          reject(err);
         }
+      });
 
-        console.log(chalk.green('\n╔════════ BOT ENVÍA ════════'));
-        console.log(chalk.white('║ 📤 A    :'), chalk.cyan(jid));
-        console.log(chalk.white('║ 📦 Tipo :'), chalk.yellow(type));
-        console.log(chalk.white('║ 💬 Msg  :'), chalk.green(String(preview).slice(0, 300)));
-        console.log(chalk.green('╚═══════════════════════════\n'));
-      }
-
-      return await originalSend(jid, content, options);
-    } catch (err) {
-      console.log(chalk.red('❌ Error enviando mensaje:'), err?.message || err);
-    }
+      // Iniciamos el procesador de la cola
+      processSendQueue();
+    });
   };
 }
+// ==========================================
+// FIN DEL SISTEMA ANTI-OVERLIMIT
+// ==========================================
 
 function getPluginsDir() {
   const plugin = path.join(process.cwd(), 'plugin');
@@ -571,4 +609,3 @@ async function messageHandler(sock, msg, store = {}) {
 module.exports = {
   messageHandler, loadPlugins, plugins, messagePlugins
 };
-    
