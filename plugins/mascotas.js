@@ -119,14 +119,14 @@ function obtenerADN(tipo) {
 }
 
 module.exports = {
-  commands: ['adoptar', 'mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'perdonar', 'pelear', 'darmascota', 'editarnombre'],
+  commands: ['adoptar', 'mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'sacrificar', 'perdonar', 'pelear', 'darmascota', 'editarnombre', 'darxpmascota', 'ruletamascota'],
   
   async execute(ctx) {
     const { sock, remoteJid, msg, sender, args, command, isOwner, pushName } = ctx;
     const userKey = cleanJid(sender);
     const userData = await db.getUser(userKey);
     const now = Date.now();
-    const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'pelear'];
+    const petCommands = ['mascota', 'alimentar', 'jugar', 'entrenar', 'pasear', 'dormir', 'curar', 'pelear', 'ruletamascota'];
     
     // 🔥 SISTEMA DE MUERTE POR ABANDONO
     if (userData.pet && petCommands.includes(command) && hoursPassed(userData.pet.lastFeed, 72)) {
@@ -225,6 +225,37 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: `✅ Has cambiado el nombre de la mascota de @${cleanNumber(target)}.\n\nDe *${antiguo}* pasó a llamarse *${nuevoNombre}*.`, mentions: [target] }, { quoted: msg });
     }
 
+    // 👑 COMANDO EXCLUSIVO OWNER: DAR XP A LA MASCOTA
+    if (command === 'darxpmascota') {
+      if (!isOwner) return sock.sendMessage(remoteJid, { text: `❌ Solo los Owners pueden inyectar XP divina.` }, { quoted: msg });
+      
+      const target = getTarget(msg, args);
+      if (!target) return sock.sendMessage(remoteJid, { text: `❌ Menciona al usuario.\n*Uso:* .darxpmascota @user Cantidad` }, { quoted: msg });
+
+      const amount = parseInt(args[args.length - 1]);
+      if (isNaN(amount) || amount <= 0) return sock.sendMessage(remoteJid, { text: `❌ Ingresa una cantidad válida de XP al final del comando.` }, { quoted: msg });
+
+      const targetData = await db.getUser(target);
+      if (!targetData.pet) return sock.sendMessage(remoteJid, { text: `❌ El usuario mencionado no tiene mascota.` }, { quoted: msg });
+
+      targetData.pet.xp += amount;
+      const oldLevel = targetData.pet.level;
+      const newLevel = Math.floor(targetData.pet.xp / 200) + 1;
+      
+      let extraText = '';
+      if (newLevel > oldLevel) {
+        targetData.pet.level = newLevel;
+        if (oldLevel < NIVEL_EVOLUCION && newLevel >= NIVEL_EVOLUCION) {
+          extraText = `\n\n✨ ¡INCREÍBLE! El cuerpo de *${targetData.pet.name}* brilla...\n¡Ha evolucionado a su forma Adulta! (Nivel ${newLevel})`;
+        } else {
+          extraText = `\n\n✨ ¡*${targetData.pet.name}* subió al Nivel ${newLevel}!`;
+        }
+      }
+
+      await db.setUser(target, targetData);
+      return sock.sendMessage(remoteJid, { text: `⚡ *INYECCIÓN DE PODER*\n\nLe has dado *+${amount} XP* a la mascota de @${cleanNumber(target)}. ${extraText}`, mentions: [target] }, { quoted: msg });
+    }
+
     // 2. PERFIL
     if (command === 'mascota') {
       if (!userData.pet) return sock.sendMessage(remoteJid, { text: `❌ No tienes mascota.` }, { quoted: msg });
@@ -250,6 +281,7 @@ module.exports = {
 
     // 🔥 FUNCIÓN CENTRAL DE ANIMACIONES Y DETALLES PARA ACCIONES CON ÉXITO
     const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
+      // Si la variable isHeal está en true (como en el cheat code del owner), ignora si está enferma
       if (!isHeal && hoursPassed(p.lastFeed, 24)) {
         const mediaEnferma = getPetMedia(p.type, 'enferma', p.level);
         const txt = `🤒 *${p.name}(${p.type})* está demasiado débil para moverse. Usa *.curar* primero.`;
@@ -320,6 +352,18 @@ module.exports = {
       }
       p.lastWalk = now; 
       return procesarAccion(20, 'paseando', `🌳 Fuiste a pasear tranquilamente con *${p.name}(${p.type})*.`);
+    }
+
+    // 🎰 RULETA DE MASCOTAS (SECRETA PARA EL OWNER)
+    if (command === 'ruletamascota') {
+      // Bloqueo total y silencioso para usuarios normales
+      if (!isOwner) return; 
+
+      // Ganancia exagerada de XP (entre 100 y 500 XP)
+      const wonXP = Math.floor(Math.random() * 401) + 100; 
+
+      // El 'true' al final hace que ignore si la mascota está enferma o muriéndose
+      return procesarAccion(wonXP, 'jugando', `🎰 *RULETA VIP SECRETA* 🎰\n\n¡La ruleta trucada cae en el premio mayor divino! 🎉\n*${p.name}* recibe una inyección masiva de experiencia.`, true);
     }
 
     if (command === 'curar') {
