@@ -44,8 +44,9 @@ module.exports = {
         .replace(/"/g, '\\"')
         .replace(/`/g, '\\`');
 
+      // 🔥 CAMBIO CLAVE AQUÍ: Se usa "convert" en lugar de "magick"
       const createImg = `
-      magick -background none \
+      convert -background none \
       -fill white \
       -stroke black \
       -strokewidth 6 \
@@ -78,7 +79,7 @@ module.exports = {
         if (err1) {
           console.log('IMG ERROR:', err1);
           return sock.sendMessage(remoteJid, {
-            text: '❌ Error creando imagen'
+            text: '❌ Error creando imagen. Asegúrate de tener instalado ImageMagick.'
           }, { quoted: msg });
         }
 
@@ -86,7 +87,7 @@ module.exports = {
           if (err2) {
             console.log('WEBP ERROR:', err2);
             return sock.sendMessage(remoteJid, {
-              text: '❌ Error creando sticker'
+              text: '❌ Error creando sticker. Asegúrate de tener instalado ffmpeg.'
             }, { quoted: msg });
           }
 
