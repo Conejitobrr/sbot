@@ -309,7 +309,7 @@ ${bet > 0 ? `🎰 Apuesta inicial: *${bet} XP*` : ''}${jackpotText}
 }
 
 module.exports = {
-  commands: ['duelo', 'aceptar', 'rechazar'],
+  commands: ['duelo', 'confirm', 'nodeseo'],
 
   async execute(ctx) {
     const {
@@ -329,7 +329,7 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    if (command === 'rechazar') {
+    if (command === 'nodeseo') {
       const duel = pendingDuels.get(remoteJid);
 
       if (!duel || duel.opponent !== sender) {
@@ -347,7 +347,7 @@ module.exports = {
       }, { quoted: msg });
     }
 
-    if (command === 'aceptar') {
+    if (command === 'confirm') {
       const duel = pendingDuels.get(remoteJid);
 
       if (!duel || duel.opponent !== sender) {
@@ -413,8 +413,8 @@ VS
 .duelo @usuario 500
 
 El rival debe responder:
-.aceptar
-.rechazar`
+.confirm
+.nodeseo`
       }, { quoted: msg });
     }
 
