@@ -477,8 +477,8 @@ ${bet > 0 ? `🎰 Apuesta: *${bet} XP*` : '🎰 Apuesta: *sin apuesta*'}
 
 ⏳ ${mention(target)}, tienes *60 segundos* para responder:
 
-✅ *.aceptar*
-❌ *.rechazar*
+✅ *.confirm*
+❌ *.nodeseo*
 
 ╚══════════════════════╝`,
       mentions: [sender, target]
