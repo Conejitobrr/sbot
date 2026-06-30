@@ -13,7 +13,8 @@ const ANIMALES = {
   comun: ["Perro", "Gato", "Conejo", "Hámster", "Tortuga", "Loro", "Pato", "Gallina", "Cerdo", "Oveja", "Vaca", "Caballo", "Ratón", "Paloma", "Pavo", "Iguana", "Rana", "Sapo", "Pez Dorado", "Cabra", "Burro", "Ganso", "Hurón", "Erizo", "Cisne", "Cuervo", "Búho", "Lechuza", "Halcón", "Carpintero", "Pelícano", "Flamenco", "Armadillo", "Oso Hormiguero", "Castor", "Nutria", "Mapache", "Zorrillo", "Tejón", "Murciélago", "Cangrejo", "Alce", "Ciervo"],
   raro: ["Lobo", "Zorro", "Oso", "Tigre", "León", "Pantera", "Guepardo", "Leopardo", "Jaguar", "Puma", "Lince", "Hiena", "Chacal", "Coyote", "Dingo", "Canguro", "Gorila", "Chimpancé", "Orangután", "Babuino", "Tucán", "Guacamayo", "Avestruz", "Pingüino", "Foca", "Morsa", "Delfín", "Orca", "Tiburón", "Cocodrilo", "Caimán", "Pitón", "Boa", "Anaconda", "Cobra", "Víbora", "Dragón de Komodo", "Elefante", "Rinoceronte", "Hipopótamo", "Jirafa", "Cebra"],
   epico: ["Lobo Blanco", "Tigre Blanco", "Pantera Negra", "León Dorado", "Oso Polar", "Zorro Ártico", "Águila Dorada", "Halcón Peregrino", "Cóndor", "Cisne Negro", "Ajolote", "Tiburón Blanco", "Megalodón Clonado", "T-Rex Clonado", "Velociraptor Clonado", "Triceratops Clonado", "Mamut Clonado", "Tigre Dientes de Sable", "Lobo Huargo"],
-  mitologico: ["Dragón", "Fénix", "Grifo", "Unicornio", "Pegaso", "Cerbero", "Quimera", "Basilisco", "Kraken", "Leviatán", "Behemoth", "Manticora", "Esfinge", "Minotauro", "Centauro", "Kitsune", "Dragón Chino", "Wyvern", "Hipogrifo", "Wendigo", "Gárgola", "Golem"]
+  mitologico: ["Dragón", "Fénix", "Grifo", "Unicornio", "Pegaso", "Cerbero", "Quimera", "Basilisco", "Kraken", "Leviatán", "Behemoth", "Manticora", "Esfinge", "Minotauro", "Centauro", "Kitsune", "Dragón Chino", "Wyvern", "Hipogrifo", "Wendigo", "Gárgola", "Golem"],
+  exclusivo: ["Dragón Ancestral"] // 🔥 MASCOTA ÚNICA: Solo obtenible por el Owner
 };
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
@@ -66,6 +67,7 @@ function hoursPassed(timestamp, hours) { return (Date.now() - (timestamp || 0)) 
 function getRarezaMascota(tipo) {
   for (const rareza in ANIMALES) {
     if (ANIMALES[rareza].includes(tipo)) {
+      if (rareza === 'exclusivo') return 3.0; // 🔥 MAXIMO PODER
       if (rareza === 'mitologico') return 2.0;
       if (rareza === 'epico') return 1.5;
       if (rareza === 'raro') return 1.2;
@@ -79,6 +81,10 @@ function getRarezaMascota(tipo) {
 function obtenerADN(tipo) {
   const t = String(tipo).toLowerCase();
 
+  // 🔥 ADN ÚNICO PARA EL DRAGÓN ANCESTRAL
+  if (t.match(/(dragón ancestral)/)) {
+    return { preparacion: "hace temblar la realidad con su imponente aura cósmica", ataque: "desata un devastador aliento de fuego estelar", remate: "desintegra por completo a su rival, borrándolo de la existencia" };
+  }
   if (t.match(/(gato|tigre|león|pantera|guepardo|leopardo|jaguar|puma|lince|dientes de sable)/)) {
     return { preparacion: "mueve la cola lentamente mientras sus pupilas se dilatan", ataque: "salta impulsado ágilmente con las garras desenfundadas", remate: "salta directo a la yugular con una precisión felina y letal" };
   }
@@ -281,7 +287,6 @@ module.exports = {
 
     // 🔥 FUNCIÓN CENTRAL DE ANIMACIONES Y DETALLES PARA ACCIONES CON ÉXITO
     const procesarAccion = async (gainXP, newState, actionText, isHeal = false) => {
-      // Si la variable isHeal está en true (como en el cheat code del owner), ignora si está enferma
       if (!isHeal && hoursPassed(p.lastFeed, 24)) {
         const mediaEnferma = getPetMedia(p.type, 'enferma', p.level);
         const txt = `🤒 *${p.name}(${p.type})* está demasiado débil para moverse. Usa *.curar* primero.`;
@@ -356,13 +361,10 @@ module.exports = {
 
     // 🎰 RULETA DE MASCOTAS (SECRETA PARA EL OWNER)
     if (command === 'ruletamascota') {
-      // Bloqueo total y silencioso para usuarios normales
       if (!isOwner) return; 
 
-      // Ganancia exagerada de XP (entre 100 y 500 XP)
-      const wonXP = Math.floor(Math.random() * 401) + 100; 
+      const wonXP = Math.floor(Math.random() * 4001) + 1000; 
 
-      // El 'true' al final hace que ignore si la mascota está enferma o muriéndose
       return procesarAccion(wonXP, 'jugando', `🎰 *RULETA VIP SECRETA* 🎰\n\n¡La ruleta trucada cae en el premio mayor divino! 🎉\n*${p.name}* recibe una inyección masiva de experiencia.`, true);
     }
 
