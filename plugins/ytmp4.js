@@ -19,6 +19,7 @@ const TEMP_DIR = path.join(process.cwd(), 'temp');
 const QUEUE_DELAY = 2 * 60 * 1000; 
 const queues = new Map();
 const processingChats = new Set();
+const warnedChats = new Map(); // 🔥 CONTROL DE AVISOS
 
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
@@ -102,6 +103,9 @@ async function processQueue(chatId) {
       }, { quoted: job.msg });
     }
 
+    // Se liberó un espacio, permitimos que la gente vuelva a pedir
+    warnedChats.delete(chatId);
+
     // Esperar un poco antes de procesar el siguiente para no saturar la RAM
     if (queue.length > 0) {
       await sleep(QUEUE_DELAY);
@@ -110,6 +114,7 @@ async function processQueue(chatId) {
 
   queues.delete(chatId);
   processingChats.delete(chatId);
+  warnedChats.delete(chatId);
 }
 
 // ==========================================
@@ -246,8 +251,32 @@ module.exports = {
       }
 
       const queue = queues.get(remoteJid);
+      const isProcessing = processingChats.has(remoteJid);
       
-      const position = queue.length + (processingChats.has(remoteJid) ? 1 : 0);
+      const activeCount = queue.length + (isProcessing ? 1 : 0);
+
+      // 🔥 LÓGICA DE TOPE (MÁXIMO 2 VIDEOS)
+      if (activeCount >= 2) {
+        if (!warnedChats.has(remoteJid)) {
+          warnedChats.set(remoteJid, new Set());
+        }
+        
+        const warnedUsers = warnedChats.get(remoteJid);
+
+        // Si ya le avisamos, lo ignoramos
+        if (warnedUsers.has(sender)) {
+          return; 
+        }
+
+        // Primer aviso
+        warnedUsers.add(sender);
+        return sock.sendMessage(remoteJid, {
+          text: `⚠️ *COLA LLENA*\n\n@${sender.split('@')[0]}, ya hay 2 videos procesándose o en espera en este chat. Por favor, espera a que termine uno para pedir más.`,
+          mentions: [sender]
+        }, { quoted: msg });
+      }
+      
+      const position = queue.length + (isProcessing ? 1 : 0);
       const waitMin = position === 0 ? 0 : position * 2;
 
       // Añadir el trabajo a la cola
