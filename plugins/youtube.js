@@ -14,6 +14,9 @@ const QUEUE_DELAY = 2 * 60 * 1000;
 const queues = new Map();
 const processingChats = new Set();
 
+// 🔥 NUEVO: Para controlar a quiénes ya se les avisó que la cola está llena
+const warnedChats = new Map(); 
+
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -90,6 +93,11 @@ async function processQueue(chatId) {
       }, { quoted: job.msg });
     }
 
+    // 🔥 Una canción ha terminado (con éxito o error).
+    // Se ha liberado un cupo, así que reseteamos las advertencias de este chat
+    // para que la gente pueda volver a pedir su canción sin ser ignorada.
+    warnedChats.delete(chatId);
+
     if (queue.length > 0) {
       await sleep(QUEUE_DELAY);
     }
@@ -97,6 +105,7 @@ async function processQueue(chatId) {
 
   queues.delete(chatId);
   processingChats.delete(chatId);
+  warnedChats.delete(chatId);
 }
 
 async function handleDownload(job) {
@@ -187,11 +196,33 @@ module.exports = {
       }
 
       const queue = queues.get(remoteJid);
+      const isProcessing = processingChats.has(remoteJid);
+      
+      // La cantidad real de canciones es: (lo que está en espera) + (la que se está bajando ahorita)
+      const activeCount = queue.length + (isProcessing ? 1 : 0);
 
-      const position =
-        queue.length +
-        (processingChats.has(remoteJid) ? 1 : 0);
+      // 🔥 LÓGICA DE TOPE (MÁXIMO 2)
+      if (activeCount >= 2) {
+        if (!warnedChats.has(remoteJid)) {
+          warnedChats.set(remoteJid, new Set());
+        }
+        
+        const warnedUsers = warnedChats.get(remoteJid);
 
+        // Si ya advertimos a este usuario, lo ignoramos en completo silencio
+        if (warnedUsers.has(sender)) {
+          return; 
+        }
+
+        // Si es su primer intento estando llena la cola, le avisamos y lo marcamos
+        warnedUsers.add(sender);
+        return sock.sendMessage(remoteJid, {
+          text: `⚠️ *COLA LLENA*\n\n@${sender.split('@')[0]}, ya hay 2 canciones procesándose o en espera en este chat. Por favor, espera un momento a que se libere un espacio para pedir más.`,
+          mentions: [sender]
+        }, { quoted: msg });
+      }
+
+      const position = queue.length + (isProcessing ? 1 : 0);
       const waitMin = position === 0 ? 0 : position * 2;
 
       queue.push({
