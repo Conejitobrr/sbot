@@ -90,11 +90,10 @@ module.exports = {
 🤖 *IA Y BÚSQUEDAS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}bot* / *${p}simi* → Habla con la IA
-➤ *${p}imagina* / *${p}imagen* → Generar imagen
+➤ *${p}imagina* → Generar imagen
 ➤ *${p}google* [texto] → Buscar en Google
 ➤ *${p}wikipedia* [texto] → Buscar info
-➤ *${p}pinterest* [texto] → Buscar imágenes
-➤ *${p}buscarnflx* [serie] → Buscar en Netflix
+➤ *${p}imagen* [texto] → Buscar imágenes
 ➤ *${p}traducir* [texto] → Traductor
 
 ━━━━━━━━━━━━━━━━━━━
@@ -200,7 +199,6 @@ module.exports = {
 ➤ *${p}darmascota* @user Raza | Nombre
 ➤ *${p}editarnombre* @user NuevoNombre
 ➤ *${p}darxpmascota* @user [cant]
-➤ *${p}ruletamascota* → 🤫 Cheat de mascotas
 
 🚀 Usa los comandos y sube de nivel`;
 
