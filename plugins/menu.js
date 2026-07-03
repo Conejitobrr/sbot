@@ -90,10 +90,10 @@ module.exports = {
 🤖 *IA Y BÚSQUEDAS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}bot* / *${p}simi* → Habla con la IA
-➤ *${p}imagina* → Generar imagen
+➤ *${p}imagina* / *${p}imagen* → Generar imagen
 ➤ *${p}google* [texto] → Buscar en Google
 ➤ *${p}wikipedia* [texto] → Buscar info
-➤ *${p}imagen* [texto] → Buscar imágenes
+➤ *${p}pinterest* [texto] → Buscar imágenes
 ➤ *${p}buscarnflx* [serie] → Buscar en Netflix
 ➤ *${p}traducir* [texto] → Traductor
 
@@ -142,6 +142,7 @@ module.exports = {
 ➤ *${p}play* → Audio de YouTube
 ➤ *${p}ytmp4* → Video de YouTube
 ➤ *${p}spotify* → Audio de Spotify (premium)
+➤ *${p}song* → Audio alta calidad (premium)
 ➤ *${p}tiktok* → Video de TikTok
 ➤ *${p}fb* → Video de Facebook
 ➤ *${p}ig* → Video de Instagram
@@ -154,6 +155,7 @@ module.exports = {
 ➤ *${p}tovideo* → Sticker a video
 ➤ *${p}attp* → Texto animado a sticker
 ➤ *${p}letra* → Letra de canciones
+➤ *${p}toanime* → Estilo anime
 ➤ *${p}filtro* → Filtros de voz
 ➤ *${p}tts* → Texto a voz
 ➤ *${p}audios* → Audios divertidos
@@ -164,10 +166,20 @@ module.exports = {
 ━━━━━━━━━━━━━━━━━━━
 🛡️ *ADMINISTRADORES*
 ━━━━━━━━━━━━━━━━━━━
+➤ *${p}antilink* on/off → Bloqueo de links
+➤ *${p}abrirgrupo* / *${p}cerrargrupo*
+➤ *${p}linkgrupo* → Link del chat
+➤ *${p}revoke* → Restablecer link
+➤ *${p}kick* @user → Expulsar del grupo
+➤ *${p}promote* @user → Dar admin
+➤ *${p}demote* @user → Quitar admin
+➤ *${p}warn* @user [motivo] → Dar advertencia
+➤ *${p}unwarn* @user → Quitar advertencia
+➤ *${p}warns* → Lista de usuarios advertidos
+➤ *${p}resetwarn* @user → Limpiar advertencias
 ➤ *${p}enable* / *${p}disable welcome*
 ➤ *${p}enable* / *${p}disable bot*
-➤ *${p}linkgrupo* → Link del chat
-➤ *${p}del* → Eliminar mensaje
+➤ *${p}del* → Eliminar mensaje (respondiendo)
 ➤ *${p}contador* → Ver mensajes de inactivos
 
 ━━━━━━━━━━━━━━━━━━━
@@ -188,6 +200,7 @@ module.exports = {
 ➤ *${p}darmascota* @user Raza | Nombre
 ➤ *${p}editarnombre* @user NuevoNombre
 ➤ *${p}darxpmascota* @user [cant]
+➤ *${p}ruletamascota* → 🤫 Cheat de mascotas
 
 🚀 Usa los comandos y sube de nivel`;
 
