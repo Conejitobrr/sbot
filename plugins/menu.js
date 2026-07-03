@@ -93,7 +93,7 @@ module.exports = {
 ➤ *${p}imagina* / *${p}imagen* → Generar imagen
 ➤ *${p}google* [texto] → Buscar en Google
 ➤ *${p}wikipedia* [texto] → Buscar info
-➤ *${p}pinterest* [texto] → Buscar imágenes
+➤ *${p}imagen* [texto] → Buscar imágenes
 ➤ *${p}buscarnflx* [serie] → Buscar en Netflix
 ➤ *${p}traducir* [texto] → Traductor
 
