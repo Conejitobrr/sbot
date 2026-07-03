@@ -2,10 +2,17 @@
 
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 const db = require('../lib/database');
 
-// 📂 RUTA DE TUS VIDEOS Y FOTOS
+const execAsync = promisify(exec);
+
+// 📂 RUTAS
 const PETS_DIR = path.resolve(__dirname, '../media/mascotas');
+const TEMP_DIR = path.join(process.cwd(), 'temp');
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+
 const NIVEL_EVOLUCION = 10; 
 
 // 🐾 BASE DE DATOS GENÉTICA
@@ -14,7 +21,7 @@ const ANIMALES = {
   raro: ["Lobo", "Zorro", "Oso", "Tigre", "León", "Pantera", "Guepardo", "Leopardo", "Jaguar", "Puma", "Lince", "Hiena", "Chacal", "Coyote", "Dingo", "Canguro", "Gorila", "Chimpancé", "Orangután", "Babuino", "Tucán", "Guacamayo", "Avestruz", "Pingüino", "Foca", "Morsa", "Delfín", "Orca", "Tiburón", "Cocodrilo", "Caimán", "Pitón", "Boa", "Anaconda", "Cobra", "Víbora", "Dragón de Komodo", "Elefante", "Rinoceronte", "Hipopótamo", "Jirafa", "Cebra"],
   epico: ["Lobo Blanco", "Tigre Blanco", "Pantera Negra", "León Dorado", "Oso Polar", "Zorro Ártico", "Águila Dorada", "Halcón Peregrino", "Cóndor", "Cisne Negro", "Ajolote", "Tiburón Blanco", "Megalodón Clonado", "T-Rex Clonado", "Velociraptor Clonado", "Triceratops Clonado", "Mamut Clonado", "Tigre Dientes de Sable", "Lobo Huargo"],
   mitologico: ["Dragón", "Fénix", "Grifo", "Unicornio", "Pegaso", "Cerbero", "Quimera", "Basilisco", "Kraken", "Leviatán", "Behemoth", "Manticora", "Esfinge", "Minotauro", "Centauro", "Kitsune", "Dragón Chino", "Wyvern", "Hipogrifo", "Wendigo", "Gárgola", "Golem"],
-  exclusivo: ["Dragón Ancestral"] // 🔥 MASCOTA ÚNICA: Solo obtenible por el Owner
+  exclusivo: ["Dragón Ancestral"]
 };
 
 const delay = ms => new Promise(res => setTimeout(res, ms));
@@ -30,35 +37,84 @@ function getTarget(msg, args) {
   return null;
 }
 
-// 🔥 NUEVO SISTEMA MULTIMEDIA HÍBRIDO (Soporta .mp4, .jpg, .png, .jpeg)
+// 🔥 SISTEMA DE BÚSQUEDA MULTIMEDIA (Ahora lee CUALQUIER formato)
 function getPetMedia(type, state, level) {
   const stage = level >= NIVEL_EVOLUCION ? 'adulto' : 'bebe';
   const safeType = String(type).toLowerCase().replace(/\s+/g, '_');
   const baseName = `${safeType}_${stage}_${state}`;
 
-  const extensions = ['.mp4', '.jpg', '.png', '.jpeg'];
+  // Ampliado para soportar gifs, mov y priorizar los formatos más comunes
+  const extensions = ['.webp', '.gif', '.mp4', '.mov', '.png', '.jpg', '.jpeg'];
   
   for (const ext of extensions) {
     const filePath = path.join(PETS_DIR, baseName + ext);
     if (fs.existsSync(filePath)) {
       return {
-        buffer: fs.readFileSync(filePath),
-        isVideo: ext === '.mp4'
+        filePath: filePath,
+        isSticker: ext === '.webp',
+        isAnimated: ['.mp4', '.mov', '.gif'].includes(ext), // Detecta si es video/animación
+        ext: ext
       };
     }
   }
   return null; 
 }
 
-// 📦 FUNCIÓN PARA ENVIAR EL MEDIO (FOTO O VIDEO AUTOMÁTICAMENTE)
+// 📦 MOTOR DE CONVERSIÓN A STICKER Y ENVÍO INTELIGENTE
 async function sendMediaMsg(sock, remoteJid, media, text, msg, extra = {}) {
   if (!media) {
     return sock.sendMessage(remoteJid, { text, ...extra }, { quoted: msg });
   }
-  if (media.isVideo) {
-    return sock.sendMessage(remoteJid, { video: media.buffer, caption: text, gifPlayback: true, ...extra }, { quoted: msg });
-  } else {
-    return sock.sendMessage(remoteJid, { image: media.buffer, caption: text, ...extra }, { quoted: msg });
+
+  let stickerBuffer;
+  let tempWebp = null;
+
+  try {
+    if (media.isSticker) {
+      // Si ya es .webp, lo lee directo
+      stickerBuffer = fs.readFileSync(media.filePath);
+    } else {
+      // 🛠️ CONVERSIÓN EN TIEMPO REAL
+      tempWebp = path.join(TEMP_DIR, `pet_sticker_${Date.now()}_${Math.floor(Math.random() * 1000)}.webp`);
+      
+      let ffmpegCmd = '';
+      
+      if (media.isAnimated) {
+        // Comando para Videos y GIFs (Aplica loop y reduce FPS)
+        ffmpegCmd = `ffmpeg -y -i "${media.filePath}" -vcodec libwebp -vf "fps=15,scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=white@0.0" -q:v 50 -compression_level 6 -preset picture -loop 0 -an "${tempWebp}"`;
+      } else {
+        // Comando para Fotos e Imágenes estáticas (.png, .jpg) - Mantiene transparencias
+        ffmpegCmd = `ffmpeg -y -i "${media.filePath}" -vcodec libwebp -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=white@0.0" -q:v 50 -compression_level 6 -preset picture -an "${tempWebp}"`;
+      }
+      
+      await execAsync(ffmpegCmd);
+      stickerBuffer = fs.readFileSync(tempWebp);
+    }
+
+    // 1. Enviamos el Sticker Animado / Estático
+    const mediaMessage = await sock.sendMessage(remoteJid, { sticker: stickerBuffer, ...extra }, { quoted: msg });
+
+    // 2. Enviamos el texto respondiendo al Sticker para ahorrar espacio
+    return sock.sendMessage(remoteJid, { text, ...extra }, { quoted: mediaMessage });
+
+  } catch (err) {
+    console.log('❌ Error convirtiendo mascota a sticker:', err);
+    // FALLBACK DE SEGURIDAD: Si falla ffmpeg, manda el archivo normal
+    const fallbackBuffer = fs.readFileSync(media.filePath);
+    let fallbackMsg;
+    
+    if (media.isAnimated) {
+      fallbackMsg = await sock.sendMessage(remoteJid, { video: fallbackBuffer, gifPlayback: true, ...extra }, { quoted: msg });
+    } else {
+      fallbackMsg = await sock.sendMessage(remoteJid, { image: fallbackBuffer, ...extra }, { quoted: msg });
+    }
+    return sock.sendMessage(remoteJid, { text, ...extra }, { quoted: fallbackMsg });
+    
+  } finally {
+    // 🧹 Limpieza del archivo temporal
+    if (tempWebp && fs.existsSync(tempWebp)) {
+      try { fs.unlinkSync(tempWebp); } catch {}
+    }
   }
 }
 
@@ -67,7 +123,7 @@ function hoursPassed(timestamp, hours) { return (Date.now() - (timestamp || 0)) 
 function getRarezaMascota(tipo) {
   for (const rareza in ANIMALES) {
     if (ANIMALES[rareza].includes(tipo)) {
-      if (rareza === 'exclusivo') return 3.0; // 🔥 MAXIMO PODER
+      if (rareza === 'exclusivo') return 3.0;
       if (rareza === 'mitologico') return 2.0;
       if (rareza === 'epico') return 1.5;
       if (rareza === 'raro') return 1.2;
@@ -81,7 +137,6 @@ function getRarezaMascota(tipo) {
 function obtenerADN(tipo) {
   const t = String(tipo).toLowerCase();
 
-  // 🔥 ADN ÚNICO PARA EL DRAGÓN ANCESTRAL
   if (t.match(/(dragón ancestral)/)) {
     return { preparacion: "hace temblar la realidad con su imponente aura cósmica", ataque: "desata un devastador aliento de fuego estelar", remate: "desintegra por completo a su rival, borrándolo de la existencia" };
   }
