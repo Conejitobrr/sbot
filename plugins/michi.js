@@ -7,14 +7,12 @@ const groupSessions = new Map();
 const MAX_GAMES_PER_GROUP = 3;
 
 // ==========================================
-// FUNCIÓN MEJORADA DE MENCIONES (NUNCA FALLA)
+// FUNCIÓN MEJORADA DE MENCIONES
 // ==========================================
 function cleanJid(jid = '') {
     if (!jid) return '';
     const str = String(jid);
-    // Quitamos los IDs de dispositivo (lo que va después de los ":")
     const user = str.split(':')[0].split('@')[0];
-    // Respetamos si es @s.whatsapp.net o @lid para que la mención siempre pinte azul
     const domain = str.includes('@') ? str.split('@')[1] : 's.whatsapp.net';
     return `${user}@${domain}`;
 }
@@ -32,7 +30,7 @@ function getTarget(msg) {
 }
 
 // ==========================================
-// MECÁNICAS DEL TRES EN RAYA (X negra, O roja)
+// MECÁNICAS DEL TRES EN RAYA
 // ==========================================
 const WIN_COMBOS = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -102,8 +100,22 @@ function startTimeout(sock, remoteJid, session) {
   
   session.timeoutId = setTimeout(async () => {
     const currentTurn = session.turn;
+
+    // 🔥 SISTEMA ANTI-ROBOS: Si P2 nunca jugó, la partida no fue aceptada.
+    if (!session.accepted) {
+        let txt = `⏱️ *¡EL DESAFÍO HA EXPIRADO!*\n\nEl rival no aceptó la partida a tiempo o estaba inactivo.`;
+        if (session.bet > 0) {
+            try { await db.addXP(session.player1, session.bet); } catch(e){}
+            txt += `\n♻️ La partida se cancela y se le devuelven los *${session.bet} XP* a @${number(session.player1)}.`;
+        } else {
+            txt += `\n♻️ La partida ha sido cancelada sin penalizaciones.`;
+        }
+        removeGame(remoteJid, session);
+        return sock.sendMessage(remoteJid, { text: txt, mentions: [session.player1] });
+    }
+
+    // 🏆 CASTIGO NORMAL (ABANDONO EN MEDIO DEL JUEGO OFICIAL)
     const winner = currentTurn === session.player1 ? session.player2 : session.player1;
-    
     let txt = '';
     const mentions = [];
 
@@ -111,7 +123,7 @@ function startTimeout(sock, remoteJid, session) {
        txt = `⏱️ *¡TIEMPO AGOTADO!*\n\n@${number(session.player1)} tardaste más de 1 minuto en mover. Pierdes por inactividad.`;
        mentions.push(session.player1);
        if (session.bet > 0) {
-         txt += `\n💸 Perdiste los *${session.bet} XP* que ya se descontaron de tu cuenta.`;
+         txt += `\n💸 Perdiste los *${session.bet} XP* que apostaste.`;
        }
     } else {
        txt = `⏱️ *¡TIEMPO AGOTADO!*\n\n@${number(currentTurn)} tardó más de 1 minuto en responder y se rindió automáticamente.\n🏆 ¡@${number(winner)} gana por abandono!`;
@@ -124,7 +136,7 @@ function startTimeout(sock, remoteJid, session) {
 
     removeGame(remoteJid, session);
     sock.sendMessage(remoteJid, { text: txt, mentions });
-  }, 60 * 1000); // 60 segundos exactos
+  }, 60 * 1000); // 60 segundos
 }
 
 async function endGame(sock, remoteJid, session, result, winner = null, loser = null, msg) {
@@ -191,15 +203,26 @@ module.exports = {
     const session = getUserGame(remoteJid, p1);
     const action = args[0] ? args[0].toLowerCase().trim() : '';
 
-    // ⛔ LÓGICA DE RENDICIÓN
+    // ⛔ LÓGICA DE RENDICIÓN O CANCELACIÓN
     if (['salir', 'cancelar', 'abandonar'].includes(action)) {
       if (!session) return sock.sendMessage(remoteJid, { text: '❌ No estás en ninguna partida activa.' }, { quoted: msg });
       
       removeGame(remoteJid, session);
       
+      // Si la partida aún no fue aceptada, es una cancelación segura.
+      if (!session.accepted) {
+          let finalMsg = `🏳️ @${number(p1)} ha cancelado el desafío antes de que empiece oficialmente.`;
+          if (session.bet > 0) {
+              try { await db.addXP(session.player1, session.bet); } catch(e){}
+              finalMsg += `\n♻️ Se devolvieron los *${session.bet} XP* apostados a @${number(session.player1)}.`;
+          }
+          return sock.sendMessage(remoteJid, { text: finalMsg, mentions: [p1, session.player1] }, { quoted: msg });
+      }
+
+      // Si fue aceptada, se cuenta como rendición y el otro gana.
       if (session.bet > 0) {
         const winner = session.player1 === p1 ? session.player2 : session.player1;
-        let finalMsg = `🏳️ @${number(p1)} ha huido como un cobarde y pierde la apuesta.`;
+        let finalMsg = `🏳️ @${number(p1)} se ha rendido en plena partida.`;
         const mentions = [p1];
 
         if (winner !== 'bot') {
@@ -209,13 +232,12 @@ module.exports = {
         }
         return sock.sendMessage(remoteJid, { text: finalMsg, mentions }, { quoted: msg });
       } else {
-        return sock.sendMessage(remoteJid, { text: `🏳️ @${number(p1)} ha cancelado la partida.`, mentions: [p1] }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: `🏳️ @${number(p1)} se ha rendido.`, mentions: [p1] }, { quoted: msg });
       }
     }
 
     // 🟢 CREAR NUEVA PARTIDA
     if (!session) {
-      // 🚫 BLOQUEO: Evita que alguien inicie un juego si ya está en uno
       if (getUserGame(remoteJid, p1)) {
         return sock.sendMessage(remoteJid, { text: '❌ Ya estás en una partida activa. Termina o cancela esa primero con *.michi salir*.' }, { quoted: msg });
       }
@@ -240,12 +262,11 @@ module.exports = {
       
       if (!target) target = 'bot';
 
-      // 🚫 BLOQUEO: Evitar que rete a alguien que ya está jugando
       if (target !== 'bot' && getUserGame(remoteJid, target)) {
          return sock.sendMessage(remoteJid, { text: `❌ @${number(target)} ya está jugando otra partida en este momento. Espera a que termine.`, mentions: [target] }, { quoted: msg });
       }
 
-      // Verificar y Descontar Apuestas
+      // Verificamos y descontamos a Jugador 1 (El creador)
       if (bet > 0) {
          const p1Data = await db.getUser(p1);
          if ((p1Data.xp || 0) < bet) {
@@ -258,8 +279,7 @@ module.exports = {
              }
          }
          
-         await db.removeXP(p1, bet);
-         if (target !== 'bot') await db.removeXP(target, bet);
+         await db.removeXP(p1, bet); // Solo descontamos a P1, P2 paga al aceptar.
       }
 
       const newSession = {
@@ -268,6 +288,7 @@ module.exports = {
         board: [1, 2, 3, 4, 5, 6, 7, 8, 9],
         turn: p1,
         bet: bet,
+        accepted: target === 'bot', // Si es contra el bot, se acepta automáticamente
         timeoutId: null
       };
       
@@ -289,7 +310,7 @@ module.exports = {
         if (bet > 0) txt += `💸 *Pozo total:* ${bet * 2} XP\n\n`;
         txt += `✖️ Jugador 1: @${number(p1)}\n⭕ Jugador 2: @${number(target)}\n`;
         txt += renderBoard(newSession.board);
-        txt += `\n👉 Comienza @${number(p1)}.\n⏳ Tienes 1 minuto para responder enviando \`.michi [1-9]\``;
+        txt += `\n👉 Comienza @${number(p1)}.\n⏳ @${number(target)} para aceptar el duelo, haz un movimiento en tu turno.\n\nEscribe \`.michi [1-9]\``;
         mentions.push(target);
       }
 
@@ -310,6 +331,21 @@ module.exports = {
       const index = move - 1;
       if (typeof session.board[index] !== 'number') {
         return sock.sendMessage(remoteJid, { text: '❌ Esa casilla ya está ocupada por otra marca. Elige una libre.' }, { quoted: msg });
+      }
+
+      // 🔥 SISTEMA ANTI-ROBOS: Si Jugador 2 mueve, el desafío es oficialmente aceptado y se le cobra.
+      if (p1 === session.player2 && !session.accepted) {
+          if (session.bet > 0) {
+              const p2Data = await db.getUser(p1);
+              if ((p2Data.xp || 0) < session.bet) {
+                  // Si P2 gastó su dinero mientras esperaba su turno, se cancela todo
+                  removeGame(remoteJid, session);
+                  try { await db.addXP(session.player1, session.bet); } catch(e){}
+                  return sock.sendMessage(remoteJid, { text: `❌ @${number(session.player2)} ya no tiene los *${session.bet} XP* para igualar la apuesta.\n\nEl desafío se canceló y se le devolvió el dinero a @${number(session.player1)}.`, mentions: [session.player2, session.player1] }, { quoted: msg });
+              }
+              await db.removeXP(session.player2, session.bet);
+          }
+          session.accepted = true; // ¡Partida oficialmente en curso!
       }
 
       const currentMark = (session.turn === session.player1) ? 'X' : 'O';
