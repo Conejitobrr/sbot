@@ -104,6 +104,7 @@ module.exports = {
 ➤ *${p}akinator* → Adivina tu personaje
 ➤ *${p}carrera* → Carrera de 🐎
 ➤ *${p}tutti* → Juego de Tuttifrutti
+➤ *${p}michi* → Juega tres en raya
 
 ━━━━━━━━━━━━━━━━━━━
 💖 *SOCIAL Y ROMANCE*
