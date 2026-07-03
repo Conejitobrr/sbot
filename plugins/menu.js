@@ -30,140 +30,165 @@ module.exports = {
 ⚙️ Prefijo: *${p}*
 
 ━━━━━━━━━━━━━━━━━━━
-🎮 *EVENTOS*
+🎮 *EVENTOS ACTIVOS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ ${eventText}
 
 ━━━━━━━━━━━━━━━━━━━
-👀 *unirse al grupo del bot*
+📌 *INFORMACIÓN Y UTILIDAD*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}grupobot*
+➤ *${p}perfil* → Ver tu perfil
+➤ *${p}grupobot* → Únete al grupo oficial
+➤ *${p}infobot* → Información del bot
+➤ *${p}donar* → Apoya al creador
+➤ *${p}clima* [ciudad] → Ver clima actual
 
 ━━━━━━━━━━━━━━━━━━━
-💰 *ECONOMÍA*
+🐾 *MASCOTAS*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}adoptar* [nombre] → Adopta compañero
+➤ *${p}mascota* → Ver estado y perfil
+➤ *${p}alimentar* → Dale de comer
+➤ *${p}jugar* → Diviértete con él
+➤ *${p}entrenar* → Gana mucha XP
+➤ *${p}pasear* → Caminata relajante
+➤ *${p}dormir* → Ponlo a descansar
+➤ *${p}curar* → Sana sus heridas
+➤ *${p}pelear* @user → Combate a muerte
+➤ *${p}sacrificar* → Despedida irreversible
+
+━━━━━━━━━━━━━━━━━━━
+💰 *ECONOMÍA Y APUESTAS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}claim* → Recompensa diaria
 ➤ *${p}rank* → Ranking del chat
-➤ *${p}cazar* → Los animales no son tus amigos☠️
-➤ *${p}pescar* → Ten cuidado⚠️ 
-➤ *${p}minar* → Minar no es seguro☠️
-➤ *${p}chambear* → Trabajas
-➤ *${p}robar* → Robar XP
-➤ *${p}dar* → Transferir XP
-➤ *${p}tienda* → Ver tienda
+➤ *${p}chambear* → Trabaja legalmente
+➤ *${p}minar* → Minar no es seguro ☠️
+➤ *${p}cazar* → Los animales no son amigos ☠️
+➤ *${p}pescar* → Ten cuidado en el agua ⚠️
+➤ *${p}robar* @user → Roba XP
+➤ *${p}dar* @user → Transferir XP
+➤ *${p}apostar* [cant] → Apuesta tu XP
+➤ *${p}dado* → Lanza los dados
+➤ *${p}tienda* → Ver catálogo
 ➤ *${p}comprar* → Comprar objetos
 ➤ *${p}inventario* → Ver tus objetos
-➤ *${p}usar* → Usar objetos comprados
+➤ *${p}usar* → Usar objeto (ej: escudo)
 
 ━━━━━━━━━━━━━━━━━━━
 🚔 *POLICÍA Y CÁRCEL*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}policia* → Atrapar ladrones recientes
-➤ *${p}denunciar* → Denunciar robo reciente
+➤ *${p}policia* → Atrapar ladrones
+➤ *${p}denunciar* → Denunciar robo
 ➤ *${p}carcel* → Ver estado de cárcel
 ➤ *${p}fama* → Ver fama criminal
-➤ *${p}sobornar* → Ver costo de soborno
-➤ *${p}sobornar pagar* → Intentar sobornar
-➤ *${p}fianza* → Ver costo de fianza
-➤ *${p}fianza pagar* → Pagar fianza
-➤ *${p}usar llave* → Usar llave de celda
+➤ *${p}sobornar* → Pagar soborno
+➤ *${p}fianza* → Pagar fianza
+➤ *${p}usar llave* → Escapar de la celda
 
 ━━━━━━━━━━━━━━━━━━━
-😂 *DIVERSIÓN*
+🤖 *IA Y BÚSQUEDAS*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}piropo*
-➤ *${p}pregunta*
-➤ *${p}trivia*
+➤ *${p}bot* / *${p}simi* → Habla con la IA
+➤ *${p}imagina* / *${p}imagen* → Generar imagen
+➤ *${p}google* [texto] → Buscar en Google
+➤ *${p}wikipedia* [texto] → Buscar info
+➤ *${p}pinterest* [texto] → Buscar imágenes
+➤ *${p}buscarnflx* [serie] → Buscar en Netflix
+➤ *${p}traducir* [texto] → Traductor
+
+━━━━━━━━━━━━━━━━━━━
+🎲 *JUEGOS*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}trivia* → Juego de preguntas
+➤ *${p}ahorcado* → Adivina la palabra
+➤ *${p}akinator* → Adivina tu personaje
 ➤ *${p}carrera* → Carrera de 🐎
-➤ *${p}felizcumple* menciona para felicitar
-➤ *${p}formarpareja*
-➤ *${p}formarparejas*
-➤ *${p}love*
-➤ *${p}gay2*
-➤ *${p}topgays*
-➤ *${p}hornycard*
-➤ *${p}verdad*
-➤ *${p}reto*
-➤ *${p}tutti* añade los seg que desean
-➤ *${p}consejo*
-➤ *${p}frase*
-➤ *${p}historiaromantica*
-➤ *${p}clon*
-➤ *${p}proponer* menciona para casarte
-➤ *${p}follar*
+➤ *${p}tutti* → Juego de Tuttifrutti
 
 ━━━━━━━━━━━━━━━━━━━
-🎲 *CALCULADOR*
+💖 *SOCIAL Y ROMANCE*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}gay* → Calculador random
-➤ *${p}lesbiana* → Calculador random
-➤ *${p}pajero* → Calculador random
-➤ *${p}pajera* → Calculador random
-➤ *${p}puto* → Calculador random
-➤ *${p}puta* → Calculador random
-➤ *${p}manco* → Calculador random
-➤ *${p}manca* → Calculador random
-➤ *${p}rata* → Calculador random
-➤ *${p}prostituto* → Calculador random
-➤ *${p}prostituta* → Calculador random
+➤ *${p}formarpareja(s)* → Cupido aleatorio
+➤ *${p}proponer* @user → Pídele matrimonio
+➤ *${p}love* @user → Medidor de amor
+➤ *${p}felizcumple* @user → Felicitar
+➤ *${p}historiaromantica*
+➤ *${p}piropo* / *${p}frase* / *${p}consejo*
+➤ *${p}verdad* / *${p}reto*
+➤ *${p}follar* @user
+➤ *${p}hack* @user → Broma de hackeo
+➤ *${p}clon* → Clona tu mensaje
+
+━━━━━━━━━━━━━━━━━━━
+🏆 *TOPS Y RANKINGS*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}top* [texto] → Crea un top 10 random
+➤ *${p}topgays* → Top más gays del grupo
+
+━━━━━━━━━━━━━━━━━━━
+🤡 *CALCULADOR RANDOM*
+━━━━━━━━━━━━━━━━━━━
+➤ *${p}calculador* [texto] → Mide lo que sea
+➤ *${p}gay* / *${p}lesbiana* / *${p}gay2*
+➤ *${p}pajero* / *${p}pajera*
+➤ *${p}puto* / *${p}puta*
+➤ *${p}manco* / *${p}manca*
+➤ *${p}rata* / *${p}prostituto(a)*
 
 ━━━━━━━━━━━━━━━━━━━
 🎵 *DESCARGAS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}play* → Audio de YouTube
-➤ *${p}spotify* → Audio de Spotify (premium)
-➤ *${p}song* → Audio de YouTube (premium)
 ➤ *${p}ytmp4* → Video de YouTube
+➤ *${p}spotify* → Audio de Spotify (premium)
 ➤ *${p}tiktok* → Video de TikTok
 ➤ *${p}fb* → Video de Facebook
 ➤ *${p}ig* → Video de Instagram
 
 ━━━━━━━━━━━━━━━━━━━
-🎨 *MULTIMEDIA*
+🎨 *MULTIMEDIA Y STICKERS*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}letra* → letra de canciones
-➤ *${p}sticker* → Crear sticker
+➤ *${p}sticker* → Imagen/Video a sticker
 ➤ *${p}toimage* → Sticker a imagen
 ➤ *${p}tovideo* → Sticker a video
-➤ *${p}toanime* → Estilo anime
-➤ *${p}filtro* → Filtro de voz
+➤ *${p}attp* → Texto animado a sticker
+➤ *${p}letra* → Letra de canciones
+➤ *${p}filtro* → Filtros de voz
 ➤ *${p}tts* → Texto a voz
-➤ *${p}attp* → Texto a sticker
-➤ *${p}ver* → Ver archivo de 1 sola vez(premium)
-➤ *${p}fakeig* → Crear comentario fake de IG
+➤ *${p}audios* → Audios divertidos
+➤ *${p}fakeig* → Comentario fake de IG
 ➤ *${p}galaxia* → Crear HTML Galaxy of Love
-➤ *${p}perfil* → Ver perfil de usuario
+➤ *${p}hornycard* → Tarjeta horny
 
 ━━━━━━━━━━━━━━━━━━━
-🛡️ *ADMINS*
+🛡️ *ADMINISTRADORES*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}enable welcome* → Activar bienvenida
-➤ *${p}disable welcome* → Desactivar bienvenida
-➤ *${p}enable bot* → Activar bot
-➤ *${p}disable bot* → Desactivar bot
+➤ *${p}enable* / *${p}disable welcome*
+➤ *${p}enable* / *${p}disable bot*
+➤ *${p}linkgrupo* → Link del chat
+➤ *${p}del* → Eliminar mensaje
+➤ *${p}contador* → Ver mensajes de inactivos
 
 ━━━━━━━━━━━━━━━━━━━
-🤖 *IA / BOT*
-━━━━━━━━━━━━━━━━━━━
-➤ *${p}bot* → Hablar con SiriusBot
-
-━━━━━━━━━━━━━━━━━━━
-⚙️ *PREMIUM*
+💎 *PREMIUM*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}prem* → Estado premium
 ➤ *${p}notify* → Notificaciones
+➤ *${p}ver* → Ver archivo de 1 sola vez
 
 ━━━━━━━━━━━━━━━━━━━
-👑 *OWNER*
+👑 *ZONA OWNER*
 ━━━━━━━━━━━━━━━━━━━
-➤ *${p}addxp* → Añadir XP
-➤ *${p}antidelete* → Activar/desactivar antidelete
-➤ *${p}banuser* → Banear usuario del bot
-➤ *${p}unbanuser* → Quitar ban del bot
 ➤ *${p}update* → Actualizar bot
-➤ *${p}setgrupooficial*
+➤ *${p}addxp* @user [cant] → Dar XP
+➤ *${p}banuser* / *${p}unbanuser* @user
+➤ *${p}antidelete* → Activar/Desactivar
+➤ *${p}setgrupooficial* → Fijar grupo base
+➤ *${p}darmascota* @user Raza | Nombre
+➤ *${p}editarnombre* @user NuevoNombre
+➤ *${p}darxpmascota* @user [cant]
 
-━━━━━━━━━━━━━━━━━━━
 🚀 Usa los comandos y sube de nivel`;
 
     await sock.sendMessage(
