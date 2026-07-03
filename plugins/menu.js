@@ -90,7 +90,7 @@ module.exports = {
 🤖 *IA Y BÚSQUEDAS*
 ━━━━━━━━━━━━━━━━━━━
 ➤ *${p}bot* / *${p}simi* → Habla con la IA
-➤ *${p}imagina* / *${p}imagen* → Generar imagen
+➤ *${p}imagina* → Generar imagen
 ➤ *${p}google* [texto] → Buscar en Google
 ➤ *${p}wikipedia* [texto] → Buscar info
 ➤ *${p}imagen* [texto] → Buscar imágenes
