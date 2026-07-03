@@ -7,17 +7,20 @@ const groupSessions = new Map();
 const MAX_GAMES_PER_GROUP = 3;
 
 // ==========================================
-// FUNCIONES EXACTAS DEL PLUGIN CARRERAS (Anti-Bugs de Menciones)
+// FUNCIÓN MEJORADA DE MENCIONES (NUNCA FALLA)
 // ==========================================
 function cleanJid(jid = '') {
-    // Esto preserva si el ID termina en @lid o @s.whatsapp.net nativo
-    return String(jid).split(':')[0];
+    if (!jid) return '';
+    const str = String(jid);
+    // Quitamos los IDs de dispositivo (lo que va después de los ":")
+    const user = str.split(':')[0].split('@')[0];
+    // Respetamos si es @s.whatsapp.net o @lid para que la mención siempre pinte azul
+    const domain = str.includes('@') ? str.split('@')[1] : 's.whatsapp.net';
+    return `${user}@${domain}`;
 }
 
 function number(jid = '') {
-    return cleanJid(jid)
-        .split('@')[0]
-        .replace(/\D/g, '');
+    return String(jid).split(':')[0].split('@')[0].replace(/\D/g, '');
 }
 
 function getTarget(msg) {
@@ -29,7 +32,7 @@ function getTarget(msg) {
 }
 
 // ==========================================
-// MECÁNICAS DEL TRES EN RAYA
+// MECÁNICAS DEL TRES EN RAYA (X negra, O roja)
 // ==========================================
 const WIN_COMBOS = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -48,8 +51,8 @@ function renderBoard(board) {
     7: '7️⃣', 8: '8️⃣', 9: '9️⃣'
   };
   const b = board.map(val => {
-    if (val === 'X') return '❌';
-    if (val === 'O') return '⭕';
+    if (val === 'X') return '✖️'; // X Negra
+    if (val === 'O') return '⭕';  // O Roja
     return numEmojis[val];
   });
   return `\n  ${b[0]} │ ${b[1]} │ ${b[2]} \n ───┼───┼─── \n  ${b[3]} │ ${b[4]} │ ${b[5]} \n ───┼───┼─── \n  ${b[6]} │ ${b[7]} │ ${b[8]} \n`;
@@ -139,13 +142,12 @@ async function endGame(sock, remoteJid, session, result, winner = null, loser = 
      
      if (session.bet > 0) {
        if (loser === 'bot') {
-         try { await db.addXP(winner, session.bet * 2); } catch(e){} // Le devuelve el suyo y gana lo del bot
+         try { await db.addXP(winner, session.bet * 2); } catch(e){} 
          txt += `\n💰 ¡Le ganaste a la máquina! Te llevas el premio de *${session.bet * 2} XP*.`;
        } else if (winner === 'bot') {
-         // Ya se le descontó al inicio, no hace falta quitarle más
          txt += `\n💸 @${number(loser)} perdió sus *${session.bet} XP* apostados contra el sistema.`;
        } else {
-         try { await db.addXP(winner, session.bet * 2); } catch(e){} // Se lleva el pozo entero
+         try { await db.addXP(winner, session.bet * 2); } catch(e){} 
          txt += `\n💰 @${number(winner)} se lleva el pozo completo de *${session.bet * 2} XP*.`;
        }
      } else {
@@ -162,7 +164,6 @@ async function endGame(sock, remoteJid, session, result, winner = null, loser = 
      else mentions.push(session.player1);
      
      if (session.bet > 0) {
-        // Devolvemos las apuestas
         try { await db.addXP(session.player1, session.bet); } catch(e){}
         if (session.player2 !== 'bot') { try { await db.addXP(session.player2, session.bet); } catch(e){} }
         txt += `\n♻️ El pozo ha sido devuelto a los jugadores.`;
@@ -214,6 +215,11 @@ module.exports = {
 
     // 🟢 CREAR NUEVA PARTIDA
     if (!session) {
+      // 🚫 BLOQUEO: Evita que alguien inicie un juego si ya está en uno
+      if (getUserGame(remoteJid, p1)) {
+        return sock.sendMessage(remoteJid, { text: '❌ Ya estás en una partida activa. Termina o cancela esa primero con *.michi salir*.' }, { quoted: msg });
+      }
+
       let games = groupSessions.get(remoteJid) || [];
       if (games.length >= MAX_GAMES_PER_GROUP) {
           return sock.sendMessage(remoteJid, { text: `❌ Ya hay ${MAX_GAMES_PER_GROUP} partidas simultáneas en este grupo. Espera a que termine una para jugar.` }, { quoted: msg });
@@ -233,6 +239,11 @@ module.exports = {
       if (target === p1) return sock.sendMessage(remoteJid, { text: '❌ No puedes jugar contigo mismo. Menciona a otro o escribe solo *.michi* para jugar contra mí.' }, { quoted: msg });
       
       if (!target) target = 'bot';
+
+      // 🚫 BLOQUEO: Evitar que rete a alguien que ya está jugando
+      if (target !== 'bot' && getUserGame(remoteJid, target)) {
+         return sock.sendMessage(remoteJid, { text: `❌ @${number(target)} ya está jugando otra partida en este momento. Espera a que termine.`, mentions: [target] }, { quoted: msg });
+      }
 
       // Verificar y Descontar Apuestas
       if (bet > 0) {
@@ -270,13 +281,13 @@ module.exports = {
       if (target === 'bot') {
         txt += `🤖 *¡DUELO CONTRA EL BOT!* 🤖\n\n`;
         if (bet > 0) txt += `💸 *Apostaste:* ${bet} XP\n\n`;
-        txt += `❌ Tú juegas con: ❌\n⭕ SiriusBot juega con: ⭕\n`;
+        txt += `✖️ Tú juegas con: ✖️\n⭕ SiriusBot juega con: ⭕\n`;
         txt += renderBoard(newSession.board);
         txt += `\n👉 Te toca @${number(p1)}.\n⏳ Tienes 1 minuto para responder enviando \`.michi [1-9]\``;
       } else {
         txt += `⚔️ *¡NUEVO DESAFÍO A MUERTE!* ⚔️\n\n`;
         if (bet > 0) txt += `💸 *Pozo total:* ${bet * 2} XP\n\n`;
-        txt += `❌ Jugador 1: @${number(p1)}\n⭕ Jugador 2: @${number(target)}\n`;
+        txt += `✖️ Jugador 1: @${number(p1)}\n⭕ Jugador 2: @${number(target)}\n`;
         txt += renderBoard(newSession.board);
         txt += `\n👉 Comienza @${number(p1)}.\n⏳ Tienes 1 minuto para responder enviando \`.michi [1-9]\``;
         mentions.push(target);
@@ -336,7 +347,7 @@ module.exports = {
       const nextPlayer = session.turn;
       let nextTxt = `🎮 *TURNO CAMBIADO* 🎮\n`;
       nextTxt += renderBoard(session.board);
-      nextTxt += `\n👉 Siguiente turno: @${number(nextPlayer)} (*${nextPlayer === session.player1 ? '❌' : '⭕'}*)\n`;
+      nextTxt += `\n👉 Siguiente turno: @${number(nextPlayer)} (*${nextPlayer === session.player1 ? '✖️' : '⭕'}*)\n`;
       nextTxt += `⏳ Tienes 1 minuto para responder.`;
 
       return sock.sendMessage(remoteJid, { text: nextTxt, mentions: [nextPlayer] }, { quoted: msg });
