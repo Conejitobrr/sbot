@@ -1,72 +1,113 @@
 'use strict';
 
-// Función para limpiar el texto y dejar solo los números
+// ==========================================
+// FUNCIONES DE LIMPIEZA
+// ==========================================
+function cleanJid(jid = '') {
+    const str = String(jid || '');
+    if (!str) return '';
+    const user = str.split(':')[0].split('@')[0];
+    const domain = str.includes('@') ? str.split('@')[1] : 's.whatsapp.net';
+    return `${user}@${domain}`;
+}
+
 function cleanNumber(num = '') {
-    return num.replace(/\D/g, ''); // Borra espacios, letras y signos como el "+"
+    return num.replace(/\D/g, ''); // Deja solo los números
+}
+
+// ==========================================
+// FUNCIONES EXTRAÍDAS DE TU PLUGIN FUNCIONAL
+// ==========================================
+function isAdminParticipant(participant = {}) {
+    return (
+        participant?.admin === 'admin' ||
+        participant?.admin === 'superadmin' ||
+        participant?.isAdmin === true
+    );
+}
+
+// Función que pide la lista de admins en TIEMPO REAL
+async function checkPermissions(sock, remoteJid, senderJid) {
+    try {
+        const metadata = await sock.groupMetadata(remoteJid);
+        const participants = metadata.participants || [];
+
+        // Buscamos al bot en la lista del grupo
+        const botRaw = sock.user?.id || sock.user?.jid || '';
+        const botJid = cleanJid(botRaw);
+        const botParticipant = participants.find(p => cleanJid(p.id) === botJid);
+        const isBotAdmin = isAdminParticipant(botParticipant);
+
+        // Buscamos al usuario que envió el comando
+        const userParticipant = participants.find(p => cleanJid(p.id) === cleanJid(senderJid));
+        const isUserAdmin = isAdminParticipant(userParticipant);
+
+        return { isBotAdmin, isUserAdmin };
+    } catch (error) {
+        console.error("Error obteniendo la metadata del grupo:", error);
+        return { isBotAdmin: false, isUserAdmin: false };
+    }
 }
 
 module.exports = {
     commands: ['add', 'agregar', 'añadir'],
     
     execute: async (ctx) => {
-        const { sock, remoteJid, msg, args, fromGroup, isAdmin, isOwner, isBotAdmin } = ctx;
+        const { sock, remoteJid, msg, sender, args, fromGroup, isOwner } = ctx;
 
-        // 1. Verificación: Que se use dentro de un grupo
         if (!fromGroup) {
             return sock.sendMessage(remoteJid, { text: '❌ Este comando solo funciona dentro de grupos.' }, { quoted: msg });
         }
 
-        // 2. Verificación de Permisos del Usuario (Solo Admin o Owner)
-        if (!isAdmin && !isOwner) {
-            return sock.sendMessage(remoteJid, { text: '❌ Solo los administradores del grupo o mi creador (Owner) pueden usar este comando.' }, { quoted: msg });
+        // 🔥 OBTENEMOS LOS PERMISOS REALES AL INSTANTE 🔥
+        const { isBotAdmin, isUserAdmin } = await checkPermissions(sock, remoteJid, sender);
+
+        // Verificamos si el que envió el comando es Admin O es el Owner (creador)
+        if (!isUserAdmin && !isOwner) {
+            return sock.sendMessage(remoteJid, { text: '❌ Solo los administradores del grupo o mi creador pueden usar este comando.' }, { quoted: msg });
         }
 
-        // 3. Verificación de Permisos del Bot
+        // Verificamos si el Bot tiene permiso para añadir
         if (!isBotAdmin) {
             return sock.sendMessage(remoteJid, { text: '❌ Necesito ser administrador del grupo para poder agregar personas.' }, { quoted: msg });
         }
 
-        // 4. Procesar el número ingresado
-        const rawInput = args.join(''); // Une los argumentos por si dejaron espacios
+        const rawInput = args.join('');
         const targetNumber = cleanNumber(rawInput);
 
-        // Si no escribieron nada o el número es muy corto
         if (!targetNumber || targetNumber.length < 10) {
             return sock.sendMessage(remoteJid, { 
-                text: '❌ Debes escribir un número de teléfono válido junto al código de país.\n\n*Ejemplo:*\n*.add 51999999999*' 
+                text: '❌ Debes escribir un número válido junto al código de país sin el +.\n\n*Ejemplos:*\n➤ Perú: `.add 51920027884`\n➤ México: `.add 5215512345678`' 
             }, { quoted: msg });
         }
 
         const targetJid = `${targetNumber}@s.whatsapp.net`;
 
         try {
-            // Mensaje de espera para que se vea interactivo
             await sock.sendMessage(remoteJid, { text: `⏳ Intentando agregar a @${targetNumber}...`, mentions: [targetJid] }, { quoted: msg });
 
-            // 5. Ejecutar la acción en WhatsApp
             const response = await sock.groupParticipantsUpdate(remoteJid, [targetJid], 'add');
             
-            // 6. Manejo de la respuesta de WhatsApp
-            // Dependiendo de la privacidad del usuario, WhatsApp devuelve un código de estado.
+            // Analizamos el código de respuesta de los servidores de WhatsApp
             const status = response[0]?.status || response[targetJid]?.code || '200';
 
             if (status === '403' || status == 403) {
                 return sock.sendMessage(remoteJid, { 
-                    text: `⚠️ No pude agregar a @${targetNumber} porque su configuración de privacidad bloquea que lo agreguen a grupos directamente.\n\nTendrás que enviarle el link del grupo manualmente.`, 
+                    text: `⚠️ La privacidad de @${targetNumber} no me permite agregarlo directamente.\n\nTendrás que enviarle el link de invitación del grupo de forma manual.`, 
                     mentions: [targetJid] 
                 }, { quoted: msg });
             } 
             else if (status === '409' || status == 409) {
-                return sock.sendMessage(remoteJid, { text: `⚠️ El usuario @${targetNumber} ya se encuentra en este grupo.`, mentions: [targetJid] }, { quoted: msg });
+                return sock.sendMessage(remoteJid, { text: `⚠️ El usuario @${targetNumber} ya se encuentra dentro de este grupo.`, mentions: [targetJid] }, { quoted: msg });
             } 
             else {
-                return sock.sendMessage(remoteJid, { text: `✅ ¡@${targetNumber} ha sido agregado exitosamente al grupo!`, mentions: [targetJid] }, { quoted: msg });
+                return sock.sendMessage(remoteJid, { text: `✅ ¡@${targetNumber} ha sido agregado exitosamente!`, mentions: [targetJid] }, { quoted: msg });
             }
 
         } catch (error) {
             console.error('❌ Error en comando add:', error);
             return sock.sendMessage(remoteJid, { 
-                text: `❌ Ocurrió un error al intentar agregar a @${targetNumber}.\n\n*Posibles causas:*\n- El número no tiene WhatsApp.\n- Esa persona bloqueó al bot.\n- Me han restringido por spam.`,
+                text: `❌ Ocurrió un error al intentar agregar a @${targetNumber}.\n\n*Revisa que:*\n- El número exista en WhatsApp.\n- El número no me tenga bloqueado.`,
                 mentions: [targetJid]
             }, { quoted: msg });
         }
