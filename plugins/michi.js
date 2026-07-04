@@ -5,6 +5,7 @@ const db = require('../lib/database');
 // Mapeo de juegos por grupo. Clave: remoteJid, Valor: Array de partidas activas.
 const groupSessions = new Map();
 const MAX_GAMES_PER_GROUP = 3;
+const MAX_BET = 2000; // 🔥 LÍMITE MÁXIMO DE APUESTA
 
 // ==========================================
 // FUNCIÓN MEJORADA DE MENCIONES
@@ -256,6 +257,11 @@ module.exports = {
           bet = num;
           break;
         }
+      }
+
+      // 🔥 VALIDACIÓN DE LÍMITE DE APUESTA
+      if (bet > MAX_BET) {
+          return sock.sendMessage(remoteJid, { text: `❌ La apuesta máxima permitida es de *${MAX_BET} XP*.` }, { quoted: msg });
       }
 
       if (target === p1) return sock.sendMessage(remoteJid, { text: '❌ No puedes jugar contigo mismo. Menciona a otro o escribe solo *.michi* para jugar contra mí.' }, { quoted: msg });
