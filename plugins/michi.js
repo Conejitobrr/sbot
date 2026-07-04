@@ -2,16 +2,15 @@
 
 const db = require('../lib/database');
 
-// Mapeo de juegos por grupo. Clave: remoteJid, Valor: Array de partidas activas.
 const groupSessions = new Map();
-const botBetCooldowns = new Map(); // 🔥 NUEVO: Control de tiempo para apuestas vs Bot
+const botBetCooldowns = new Map(); 
 
 const MAX_GAMES_PER_GROUP = 3;
-const MAX_BET = 2000;
-const BOT_COOLDOWN_MINS = 10; // ⏱️ Tiempo de espera en minutos
+const MAX_BET = 2000; 
+const BOT_COOLDOWN_MINS = 10; 
 
 // ==========================================
-// FUNCIÓN MEJORADA DE MENCIONES
+// FUNCIONES DE UTILIDAD Y MENCIONES
 // ==========================================
 function cleanJid(jid = '') {
     if (!jid) return '';
@@ -36,11 +35,7 @@ function getTarget(msg) {
 // ==========================================
 // MECÁNICAS DEL TRES EN RAYA
 // ==========================================
-const WIN_COMBOS = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8],
-  [0, 3, 6], [1, 4, 7], [2, 5, 8],
-  [0, 4, 8], [2, 4, 6]
-];
+const WIN_COMBOS = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
 
 function checkWin(board, mark) {
   return WIN_COMBOS.some(combo => combo.every(idx => board[idx] === mark));
@@ -54,7 +49,7 @@ function renderBoard(board) {
   };
   const b = board.map(val => {
     if (val === 'X') return '✖️'; // X Negra
-    if (val === 'O') return '⭕';  // O Roja
+    if (val === 'O') return '⭕'; // O Roja
     return numEmojis[val];
   });
   return `\n  ${b[0]} │ ${b[1]} │ ${b[2]} \n ───┼───┼─── \n  ${b[3]} │ ${b[4]} │ ${b[5]} \n ───┼───┼─── \n  ${b[6]} │ ${b[7]} │ ${b[8]} \n`;
@@ -84,7 +79,7 @@ function getBotMove(board) {
 }
 
 // ==========================================
-// GESTIÓN DE SESIONES MÚLTIPLES Y TIMEOUTS
+// GESTIÓN DE SESIONES Y TIEMPO
 // ==========================================
 function getUserGame(remoteJid, userJid) {
     const games = groupSessions.get(remoteJid) || [];
@@ -105,37 +100,30 @@ function startTimeout(sock, remoteJid, session) {
   session.timeoutId = setTimeout(async () => {
     const currentTurn = session.turn;
 
-    // SISTEMA ANTI-ROBOS
+    // 🔥 SISTEMA ANTI-ROBOS: Si P2 nunca jugó, la partida no fue aceptada.
     if (!session.accepted) {
-        let txt = `⏱️ *¡EL DESAFÍO HA EXPIRADO!*\n\nEl rival no aceptó la partida a tiempo o estaba inactivo.`;
+        let txt = `⏱️ *¡EL DESAFÍO HA EXPIRADO!*\n\n@${number(session.player2)} no estaba activo o no aceptó el duelo a tiempo.`;
         if (session.bet > 0) {
-            try { await db.addXP(session.player1, session.bet); } catch(e){}
-            txt += `\n♻️ La partida se cancela y se le devuelven los *${session.bet} XP* a @${number(session.player1)}.`;
+            try { await db.addXP(session.player1, session.bet); } catch(e){} // Se le devuelve a P1
+            txt += `\n♻️ La partida se cancela y se le devuelven los *${session.bet} XP* apostados a @${number(session.player1)}.`;
         } else {
             txt += `\n♻️ La partida ha sido cancelada sin penalizaciones.`;
         }
         removeGame(remoteJid, session);
-        return sock.sendMessage(remoteJid, { text: txt, mentions: [session.player1] });
+        return sock.sendMessage(remoteJid, { text: txt, mentions: [session.player2, session.player1] });
     }
 
-    // CASTIGO POR ABANDONO
+    // 🏆 CASTIGO POR ABANDONO EN PARTIDA OFICIAL (Ya aceptada)
     const winner = currentTurn === session.player1 ? session.player2 : session.player1;
-    let txt = '';
-    const mentions = [];
+    let txt = `⏱️ *¡TIEMPO AGOTADO!*\n\n@${number(currentTurn)} tardó más de 1 minuto en mover.`;
+    const mentions = [currentTurn];
 
-    if (session.player2 === 'bot') {
-       txt = `⏱️ *¡TIEMPO AGOTADO!*\n\n@${number(session.player1)} tardaste más de 1 minuto en mover. Pierdes por inactividad.`;
-       mentions.push(session.player1);
-       if (session.bet > 0) {
-         txt += `\n💸 Perdiste los *${session.bet} XP* que apostaste.`;
-       }
+    if (session.bet > 0) {
+        txt += `\n\n🏆 ¡@${number(winner)} gana por rendición automática!\n💰 Se lleva el pozo de *${session.bet * 2} XP*.`;
+        mentions.push(winner);
+        try { await db.addXP(winner, session.bet * 2); } catch(e){}
     } else {
-       txt = `⏱️ *¡TIEMPO AGOTADO!*\n\n@${number(currentTurn)} tardó más de 1 minuto en responder y se rindió automáticamente.\n🏆 ¡@${number(winner)} gana por abandono!`;
-       mentions.push(currentTurn, winner);
-       if (session.bet > 0) {
-         try { await db.addXP(winner, session.bet * 2); } catch(e){}
-         txt += `\n💰 @${number(winner)} se lleva el pozo de *${session.bet * 2} XP*.`;
-       }
+        txt += `\n\n🏳️ Partida cancelada por abandono.`;
     }
 
     removeGame(remoteJid, session);
@@ -151,57 +139,35 @@ async function endGame(sock, remoteJid, session, result, winner = null, loser = 
   
   if (result === 'win') {
      txt = `🏆 *¡HAY UN GANADOR!* 🏆\n\n🥇 Ganador: @${number(winner)}\n`;
-     if (loser !== 'bot') mentions.push(winner, loser);
-     else mentions.push(winner);
-     
+     if (loser !== 'bot') mentions.push(winner, loser); else mentions.push(winner);
      txt += renderBoard(session.board);
      
      if (session.bet > 0) {
-       if (loser === 'bot') {
-         try { await db.addXP(winner, session.bet * 2); } catch(e){} 
-         txt += `\n💰 ¡Le ganaste a la máquina! Te llevas el premio de *${session.bet * 2} XP*.`;
-       } else if (winner === 'bot') {
-         txt += `\n💸 @${number(loser)} perdió sus *${session.bet} XP* apostados contra el sistema.`;
-       } else {
-         try { await db.addXP(winner, session.bet * 2); } catch(e){} 
-         txt += `\n💰 @${number(winner)} se lleva el pozo completo de *${session.bet * 2} XP*.`;
-       }
+       try { await db.addXP(winner, session.bet * 2); } catch(e){} 
+       txt += `\n💰 @${number(winner)} se lleva el pozo de *${session.bet * 2} XP*.`;
      } else {
-         if (winner !== 'bot') {
-             try { await db.addXP(winner, 50); } catch(e){}
-             txt += `\n🎁 Te llevas *+50 XP* por la victoria.`;
-         }
+       if (winner !== 'bot') { try { await db.addXP(winner, 50); } catch(e){} txt += `\n🎁 Te llevas *+50 XP* por la victoria.`; }
      }
-  } else if (result === 'tie') {
-     txt = `🤝 *¡EMPATE!* 🤝\n\nEl tablero se ha llenado y ninguno cedió espacio.\n`;
-     txt += renderBoard(session.board);
-     
-     if (session.player2 !== 'bot') mentions.push(session.player1, session.player2);
-     else mentions.push(session.player1);
+  } else {
+     txt = `🤝 *¡EMPATE!* 🤝\n` + renderBoard(session.board);
+     if (session.player2 !== 'bot') mentions.push(session.player1, session.player2); else mentions.push(session.player1);
      
      if (session.bet > 0) {
-        try { await db.addXP(session.player1, session.bet); } catch(e){}
-        if (session.player2 !== 'bot') { try { await db.addXP(session.player2, session.bet); } catch(e){} }
+        try { await db.addXP(session.player1, session.bet); await db.addXP(session.player2, session.bet); } catch(e){}
         txt += `\n♻️ El pozo ha sido devuelto a los jugadores.`;
      } else {
-        try { await db.addXP(session.player1, 10); } catch(e){}
-        if (session.player2 !== 'bot') { try { await db.addXP(session.player2, 10); } catch(e){} }
-        txt += `\n🎁 Recompensa de consolación: *+10 XP* para cada uno.`;
+        try { await db.addXP(session.player1, 10); if(session.player2 !== 'bot') await db.addXP(session.player2, 10); } catch(e){}
+        txt += `\n🎁 Recompensa: *+10 XP* para cada uno.`;
      }
   }
-  
   sock.sendMessage(remoteJid, { text: txt, mentions }, { quoted: msg });
 }
 
 module.exports = {
   commands: ['michi', 'tictactoe', 'tresenraya'],
-
   async execute(ctx) {
     const { sock, remoteJid, msg, sender, args, fromGroup } = ctx;
-
-    if (!fromGroup) {
-      return sock.sendMessage(remoteJid, { text: '❌ Este juego solo se puede disfrutar en grupos.' }, { quoted: msg });
-    }
+    if (!fromGroup) return sock.sendMessage(remoteJid, { text: '❌ Solo en grupos.' }, { quoted: msg });
 
     const p1 = cleanJid(sender);
     const session = getUserGame(remoteJid, p1);
@@ -209,226 +175,118 @@ module.exports = {
 
     // ⛔ LÓGICA DE RENDICIÓN
     if (['salir', 'cancelar', 'abandonar'].includes(action)) {
-      if (!session) return sock.sendMessage(remoteJid, { text: '❌ No estás en ninguna partida activa.' }, { quoted: msg });
+      if (!session) return sock.sendMessage(remoteJid, { text: '❌ No estás jugando.', mentions: [p1] }, { quoted: msg });
       
-      removeGame(remoteJid, session);
-      
+      // Si el P2 aún no aceptaba y alguien cancela, devolvemos dinero a P1
       if (!session.accepted) {
-          let finalMsg = `🏳️ @${number(p1)} ha cancelado el desafío antes de que empiece oficialmente.`;
           if (session.bet > 0) {
               try { await db.addXP(session.player1, session.bet); } catch(e){}
-              finalMsg += `\n♻️ Se devolvieron los *${session.bet} XP* apostados a @${number(session.player1)}.`;
+              removeGame(remoteJid, session);
+              return sock.sendMessage(remoteJid, { text: `🏳️ @${number(p1)} canceló el duelo antes de empezar. Se devolvieron los *${session.bet} XP* a @${number(session.player1)}.`, mentions: [p1, session.player1] }, { quoted: msg });
           }
-          return sock.sendMessage(remoteJid, { text: finalMsg, mentions: [p1, session.player1] }, { quoted: msg });
+          removeGame(remoteJid, session);
+          return sock.sendMessage(remoteJid, { text: `🏳️ Partida cancelada.`, mentions: [p1] }, { quoted: msg });
       }
 
+      const winner = session.player1 === p1 ? session.player2 : session.player1;
       if (session.bet > 0) {
-        const winner = session.player1 === p1 ? session.player2 : session.player1;
-        let finalMsg = `🏳️ @${number(p1)} se ha rendido en plena partida.`;
-        const mentions = [p1];
-
-        if (winner !== 'bot') {
-            try { await db.addXP(winner, session.bet * 2); } catch(e){}
-            finalMsg += `\n💰 @${number(winner)} se lleva el pozo de *${session.bet * 2} XP* por abandono del rival.`;
-            mentions.push(winner);
-        }
-        return sock.sendMessage(remoteJid, { text: finalMsg, mentions }, { quoted: msg });
+        try { await db.addXP(winner, session.bet * 2); } catch(e){}
+        sock.sendMessage(remoteJid, { text: `🏳️ @${number(p1)} se rindió. ¡Gana @${number(winner)}!`, mentions: [p1, winner] }, { quoted: msg });
       } else {
-        return sock.sendMessage(remoteJid, { text: `🏳️ @${number(p1)} se ha rendido.`, mentions: [p1] }, { quoted: msg });
+        sock.sendMessage(remoteJid, { text: `🏳️ @${number(p1)} se rindió.`, mentions: [p1] }, { quoted: msg });
       }
+      removeGame(remoteJid, session);
+      return;
     }
 
     // 🟢 CREAR NUEVA PARTIDA
     if (!session) {
-      if (getUserGame(remoteJid, p1)) {
-        return sock.sendMessage(remoteJid, { text: '❌ Ya estás en una partida activa. Termina o cancela esa primero con *.michi salir*.' }, { quoted: msg });
-      }
+      if (getUserGame(remoteJid, p1)) return sock.sendMessage(remoteJid, { text: '❌ Ya estás en otra partida.' }, { quoted: msg });
 
-      let games = groupSessions.get(remoteJid) || [];
-      if (games.length >= MAX_GAMES_PER_GROUP) {
-          return sock.sendMessage(remoteJid, { text: `❌ Ya hay ${MAX_GAMES_PER_GROUP} partidas simultáneas en este grupo. Espera a que termine una para jugar.` }, { quoted: msg });
-      }
+      let target = getTarget(msg) || 'bot';
+      let bet = parseInt(args.find(a => !isNaN(a) && !a.includes('@'))) || 0;
 
-      let target = getTarget(msg);
-      let bet = 0;
-
-      for (const arg of args) {
-        const num = parseInt(arg);
-        if (!isNaN(num) && num > 0 && !arg.includes('@')) {
-          bet = num;
-          break;
-        }
-      }
-
-      if (bet > MAX_BET) {
-          return sock.sendMessage(remoteJid, { text: `❌ La apuesta máxima permitida es de *${MAX_BET} XP*.` }, { quoted: msg });
-      }
-
-      if (target === p1) return sock.sendMessage(remoteJid, { text: '❌ No puedes jugar contigo mismo. Menciona a otro o escribe solo *.michi* para jugar contra mí.' }, { quoted: msg });
+      if (bet > MAX_BET) return sock.sendMessage(remoteJid, { text: `❌ Límite: *${MAX_BET} XP*.` }, { quoted: msg });
+      if (target === p1) return sock.sendMessage(remoteJid, { text: '❌ No puedes jugar contigo mismo.' }, { quoted: msg });
       
-      if (!target) target = 'bot';
-
-      if (target !== 'bot' && getUserGame(remoteJid, target)) {
-         return sock.sendMessage(remoteJid, { text: `❌ @${number(target)} ya está jugando otra partida en este momento. Espera a que termine.`, mentions: [target] }, { quoted: msg });
-      }
-
-      // 🔥 ANTI-LUDOPATÍA: Verificación de Cooldown contra el Bot 🔥
+      // Cooldown vs Bot con apuesta
       if (target === 'bot' && bet > 0) {
-          const lastPlayed = botBetCooldowns.get(p1) || 0;
-          const timePassed = Date.now() - lastPlayed;
-          const cooldownMs = BOT_COOLDOWN_MINS * 60 * 1000;
-
-          if (timePassed < cooldownMs) {
-              const timeLeft = Math.ceil((cooldownMs - timePassed) / 60000);
-              return sock.sendMessage(remoteJid, { 
-                  text: `⏳ *¡CÁLMATE LUDÓPATA!*\n\nPara evitar la bancarrota del casino, debes esperar *${timeLeft} minutos* antes de volver a apostar XP contra SiriusBot.\n\n_Puedes seguir jugando contra mí gratis sin apostar o apostarle a otras personas._` 
-              }, { quoted: msg });
+          const last = botBetCooldowns.get(p1) || 0;
+          if (Date.now() - last < BOT_COOLDOWN_MINS * 60000) {
+              const timeLeft = Math.ceil((BOT_COOLDOWN_MINS * 60000 - (Date.now() - last)) / 60000);
+              return sock.sendMessage(remoteJid, { text: `⏳ *¡CÁLMATE LUDÓPATA!*\n\nEspera *${timeLeft} min* para volver a apostar vs SiriusBot.` }, { quoted: msg });
           }
       }
 
+      // Descuento SOLO a P1 al iniciar
       if (bet > 0) {
          const p1Data = await db.getUser(p1);
-         if ((p1Data.xp || 0) < bet) {
-             return sock.sendMessage(remoteJid, { text: `❌ No tienes suficientes XP para apostar *${bet}*. Tienes *${p1Data.xp || 0} XP*.` }, { quoted: msg });
-         }
+         if ((p1Data.xp || 0) < bet) return sock.sendMessage(remoteJid, { text: '❌ XP insuficiente.' }, { quoted: msg });
          if (target !== 'bot') {
              const p2Data = await db.getUser(target);
-             if ((p2Data.xp || 0) < bet) {
-                 return sock.sendMessage(remoteJid, { text: `❌ @${number(target)} no tiene suficientes XP para igualar tu apuesta de *${bet}*.`, mentions: [target] }, { quoted: msg });
-             }
+             if ((p2Data.xp || 0) < bet) { return sock.sendMessage(remoteJid, { text: `❌ @${number(target)} no tiene XP suficiente para apostar.`, mentions: [target] }, { quoted: msg }); }
          }
-         
          await db.removeXP(p1, bet); 
       }
 
-      // Sorteo aleatorio de quién empieza (50% de probabilidad)
       const startingPlayer = Math.random() < 0.5 ? p1 : target;
 
       const newSession = {
-        player1: p1,
-        player2: target,
-        board: [1, 2, 3, 4, 5, 6, 7, 8, 9],
-        turn: startingPlayer,
-        bet: bet,
-        accepted: target === 'bot', 
-        timeoutId: null
+        player1: p1, player2: target, board: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        turn: startingPlayer, bet, accepted: target === 'bot', timeoutId: null
       };
 
-      // Si el bot fue elegido en el sorteo para empezar, juega inmediatamente
-      let botStarted = false;
       if (newSession.turn === 'bot') {
-          const botIndex = getBotMove(newSession.board);
-          newSession.board[botIndex] = 'O'; // El bot marca su jugada
-          newSession.turn = p1; // Se la devuelve al jugador
-          botStarted = true;
+          newSession.board[getBotMove(newSession.board)] = 'O';
+          newSession.turn = p1;
       }
       
-      games.push(newSession);
-      groupSessions.set(remoteJid, games);
-
-      // Si fue apuesta válida contra el bot, aplicamos el cooldown a partir de aquí
-      if (target === 'bot' && bet > 0) {
-          botBetCooldowns.set(p1, Date.now());
-      }
-
+      groupSessions.set(remoteJid, [...(groupSessions.get(remoteJid) || []), newSession]);
       startTimeout(sock, remoteJid, newSession);
+      if (target === 'bot' && bet > 0) botBetCooldowns.set(p1, Date.now());
 
-      let txt = '';
-      const mentions = [p1];
-
-      if (target === 'bot') {
-        txt += `🤖 *¡DUELO CONTRA EL BOT!* 🤖\n\n`;
-        if (bet > 0) txt += `💸 *Apostaste:* ${bet} XP\n\n`;
-        txt += `✖️ Tú juegas con: ✖️\n⭕ SiriusBot juega con: ⭕\n`;
-
-        if (botStarted) {
-            txt += `\n🎲 *Sorteo:* ¡SiriusBot ganó el turno y ya jugó!\n`;
-        } else {
-            txt += `\n🎲 *Sorteo:* ¡Ganaste el turno!\n`;
-        }
-
-        txt += renderBoard(newSession.board);
-        txt += `\n👉 Te toca @${number(p1)}.\n⏳ Tienes 1 minuto para responder enviando \`.michi [1-9]\``;
-      } else {
-        txt += `⚔️ *¡NUEVO DESAFÍO A MUERTE!* ⚔️\n\n`;
-        if (bet > 0) txt += `💸 *Pozo total:* ${bet * 2} XP\n\n`;
-        txt += `✖️ Jugador 1: @${number(p1)}\n⭕ Jugador 2: @${number(target)}\n`;
-        txt += renderBoard(newSession.board);
-        txt += `\n🎲 *Sorteo:* ¡Empieza @${number(startingPlayer)}!\n\n`;
-        txt += `⏳ @${number(target)} recuerda que para aceptar el duelo oficial, debes hacer tu movimiento cuando sea tu turno.\n\nEscribe \`.michi [1-9]\``;
-        mentions.push(target);
-      }
-
-      return sock.sendMessage(remoteJid, { text: txt, mentions }, { quoted: msg });
+      const txt = `⚔️ *PARTIDA DE MICHI* ⚔️\n` + 
+                  (bet > 0 ? `💰 Pozo: ${bet * 2} XP\n` : '') +
+                  `✖️ P1: @${number(p1)}\n⭕ P2: @${number(target)}\n` +
+                  renderBoard(newSession.board) +
+                  `\n🎲 Empieza: @${number(startingPlayer)}\n⏳ Tienes 1 minuto.` + 
+                  (target !== 'bot' ? `\n_Para aceptar el reto, haz tu primera jugada._` : '');
+      
+      return sock.sendMessage(remoteJid, { text: txt, mentions: [p1, target] }, { quoted: msg });
     }
 
     // 🎮 PROCESAMIENTO DE TURNOS
-    if (session) {
-      if (session.turn !== p1) {
-        return sock.sendMessage(remoteJid, { text: `⏳ No te adelantes, es el turno de @${number(session.turn)}.`, mentions: [session.turn] }, { quoted: msg });
-      }
+    if (session.turn !== p1) return sock.sendMessage(remoteJid, { text: `⏳ Es el turno de @${number(session.turn)}`, mentions: [session.turn] }, { quoted: msg });
+    const idx = parseInt(action) - 1;
+    if (idx < 0 || idx > 8 || typeof session.board[idx] !== 'number') return sock.sendMessage(remoteJid, { text: '❌ Casilla inválida.' }, { quoted: msg });
 
-      const move = parseInt(action);
-      if (isNaN(move) || move < 1 || move > 9) {
-        return sock.sendMessage(remoteJid, { text: '❌ Casilla inválida. Elige un número del 1 al 9.\nEjemplo: *.michi 5*' }, { quoted: msg });
-      }
-
-      const index = move - 1;
-      if (typeof session.board[index] !== 'number') {
-        return sock.sendMessage(remoteJid, { text: '❌ Esa casilla ya está ocupada por otra marca. Elige una libre.' }, { quoted: msg });
-      }
-
-      if (p1 === session.player2 && !session.accepted) {
-          if (session.bet > 0) {
-              const p2Data = await db.getUser(p1);
-              if ((p2Data.xp || 0) < session.bet) {
-                  removeGame(remoteJid, session);
-                  try { await db.addXP(session.player1, session.bet); } catch(e){}
-                  return sock.sendMessage(remoteJid, { text: `❌ @${number(session.player2)} ya no tiene los *${session.bet} XP* para igualar la apuesta.\n\nEl desafío se canceló y se le devolvió el dinero a @${number(session.player1)}.`, mentions: [session.player2, session.player1] }, { quoted: msg });
-              }
-              await db.removeXP(session.player2, session.bet);
-          }
-          session.accepted = true; 
-      }
-
-      const currentMark = (session.turn === session.player1) ? 'X' : 'O';
-      session.board[index] = currentMark;
-
-      if (checkWin(session.board, currentMark)) {
-        return endGame(sock, remoteJid, session, 'win', p1, p1 === session.player1 ? session.player2 : session.player1, msg);
-      }
-
-      if (session.board.every(val => typeof val === 'string')) {
-        return endGame(sock, remoteJid, session, 'tie', null, null, msg);
-      }
-
-      session.turn = (session.turn === session.player1) ? session.player2 : session.player1;
-
-      if (session.turn === 'bot') {
-        const botIndex = getBotMove(session.board);
-        if (botIndex !== -1) {
-          session.board[botIndex] = 'O';
-
-          if (checkWin(session.board, 'O')) {
-            return endGame(sock, remoteJid, session, 'win', 'bot', session.player1, msg);
-          }
-
-          if (session.board.every(val => typeof val === 'string')) {
-            return endGame(sock, remoteJid, session, 'tie', null, null, msg);
-          }
+    // 🔥 ACEPTACIÓN OFICIAL: Si P2 mueve por primera vez, se le cobra y se sella la partida.
+    if (p1 === session.player2 && !session.accepted) {
+        if (session.bet > 0) {
+            const p2Data = await db.getUser(p1);
+            if ((p2Data.xp || 0) < session.bet) {
+                removeGame(remoteJid, session);
+                try { await db.addXP(session.player1, session.bet); } catch(e){}
+                return sock.sendMessage(remoteJid, { text: `❌ @${number(session.player2)} ya no tiene la XP. Duelo cancelado y dinero devuelto a P1.`, mentions: [session.player2, session.player1] }, { quoted: msg });
+            }
+            await db.removeXP(session.player2, session.bet);
         }
-        session.turn = session.player1; 
-      }
-
-      startTimeout(sock, remoteJid, session);
-
-      const nextPlayer = session.turn;
-      let nextTxt = `🎮 *TURNO CAMBIADO* 🎮\n`;
-      nextTxt += renderBoard(session.board);
-      nextTxt += `\n👉 Siguiente turno: @${number(nextPlayer)} (*${nextPlayer === session.player1 ? '✖️' : '⭕'}*)\n`;
-      nextTxt += `⏳ Tienes 1 minuto para responder.`;
-
-      return sock.sendMessage(remoteJid, { text: nextTxt, mentions: [nextPlayer] }, { quoted: msg });
+        session.accepted = true; 
     }
+
+    session.board[idx] = (session.turn === session.player1) ? 'X' : 'O';
+    
+    if (checkWin(session.board, session.board[idx])) return endGame(sock, remoteJid, session, 'win', p1, p1 === session.player1 ? session.player2 : session.player1, msg);
+    if (session.board.every(val => typeof val === 'string')) return endGame(sock, remoteJid, session, 'tie', null, null, msg);
+
+    session.turn = (session.turn === session.player1) ? session.player2 : session.player1;
+    if (session.turn === 'bot') {
+        session.board[getBotMove(session.board)] = 'O';
+        if (checkWin(session.board, 'O')) return endGame(sock, remoteJid, session, 'win', 'bot', p1, msg);
+        if (session.board.every(val => typeof val === 'string')) return endGame(sock, remoteJid, session, 'tie', null, null, msg);
+        session.turn = p1;
+    }
+    startTimeout(sock, remoteJid, session);
+    sock.sendMessage(remoteJid, { text: `👉 Turno: @${number(session.turn)}` + renderBoard(session.board), mentions: [session.turn] }, { quoted: msg });
   }
 };
