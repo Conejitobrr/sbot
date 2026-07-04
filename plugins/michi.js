@@ -4,8 +4,11 @@ const db = require('../lib/database');
 
 // Mapeo de juegos por grupo. Clave: remoteJid, Valor: Array de partidas activas.
 const groupSessions = new Map();
+const botBetCooldowns = new Map(); // 🔥 NUEVO: Control de tiempo para apuestas vs Bot
+
 const MAX_GAMES_PER_GROUP = 3;
-const MAX_BET = 2000; // 🔥 LÍMITE MÁXIMO DE APUESTA
+const MAX_BET = 2000;
+const BOT_COOLDOWN_MINS = 10; // ⏱️ Tiempo de espera en minutos
 
 // ==========================================
 // FUNCIÓN MEJORADA DE MENCIONES
@@ -102,7 +105,7 @@ function startTimeout(sock, remoteJid, session) {
   session.timeoutId = setTimeout(async () => {
     const currentTurn = session.turn;
 
-    // 🔥 SISTEMA ANTI-ROBOS: Si P2 nunca jugó, la partida no fue aceptada.
+    // SISTEMA ANTI-ROBOS
     if (!session.accepted) {
         let txt = `⏱️ *¡EL DESAFÍO HA EXPIRADO!*\n\nEl rival no aceptó la partida a tiempo o estaba inactivo.`;
         if (session.bet > 0) {
@@ -115,7 +118,7 @@ function startTimeout(sock, remoteJid, session) {
         return sock.sendMessage(remoteJid, { text: txt, mentions: [session.player1] });
     }
 
-    // 🏆 CASTIGO NORMAL (ABANDONO EN MEDIO DEL JUEGO OFICIAL)
+    // CASTIGO POR ABANDONO
     const winner = currentTurn === session.player1 ? session.player2 : session.player1;
     let txt = '';
     const mentions = [];
@@ -137,7 +140,7 @@ function startTimeout(sock, remoteJid, session) {
 
     removeGame(remoteJid, session);
     sock.sendMessage(remoteJid, { text: txt, mentions });
-  }, 60 * 1000); // 60 segundos
+  }, 60 * 1000); 
 }
 
 async function endGame(sock, remoteJid, session, result, winner = null, loser = null, msg) {
@@ -204,13 +207,12 @@ module.exports = {
     const session = getUserGame(remoteJid, p1);
     const action = args[0] ? args[0].toLowerCase().trim() : '';
 
-    // ⛔ LÓGICA DE RENDICIÓN O CANCELACIÓN
+    // ⛔ LÓGICA DE RENDICIÓN
     if (['salir', 'cancelar', 'abandonar'].includes(action)) {
       if (!session) return sock.sendMessage(remoteJid, { text: '❌ No estás en ninguna partida activa.' }, { quoted: msg });
       
       removeGame(remoteJid, session);
       
-      // Si la partida aún no fue aceptada, es una cancelación segura.
       if (!session.accepted) {
           let finalMsg = `🏳️ @${number(p1)} ha cancelado el desafío antes de que empiece oficialmente.`;
           if (session.bet > 0) {
@@ -220,7 +222,6 @@ module.exports = {
           return sock.sendMessage(remoteJid, { text: finalMsg, mentions: [p1, session.player1] }, { quoted: msg });
       }
 
-      // Si fue aceptada, se cuenta como rendición y el otro gana.
       if (session.bet > 0) {
         const winner = session.player1 === p1 ? session.player2 : session.player1;
         let finalMsg = `🏳️ @${number(p1)} se ha rendido en plena partida.`;
@@ -259,7 +260,6 @@ module.exports = {
         }
       }
 
-      // 🔥 VALIDACIÓN DE LÍMITE DE APUESTA
       if (bet > MAX_BET) {
           return sock.sendMessage(remoteJid, { text: `❌ La apuesta máxima permitida es de *${MAX_BET} XP*.` }, { quoted: msg });
       }
@@ -272,7 +272,20 @@ module.exports = {
          return sock.sendMessage(remoteJid, { text: `❌ @${number(target)} ya está jugando otra partida en este momento. Espera a que termine.`, mentions: [target] }, { quoted: msg });
       }
 
-      // Verificamos y descontamos a Jugador 1 (El creador)
+      // 🔥 ANTI-LUDOPATÍA: Verificación de Cooldown contra el Bot 🔥
+      if (target === 'bot' && bet > 0) {
+          const lastPlayed = botBetCooldowns.get(p1) || 0;
+          const timePassed = Date.now() - lastPlayed;
+          const cooldownMs = BOT_COOLDOWN_MINS * 60 * 1000;
+
+          if (timePassed < cooldownMs) {
+              const timeLeft = Math.ceil((cooldownMs - timePassed) / 60000);
+              return sock.sendMessage(remoteJid, { 
+                  text: `⏳ *¡CÁLMATE LUDÓPATA!*\n\nPara evitar la bancarrota del casino, debes esperar *${timeLeft} minutos* antes de volver a apostar XP contra SiriusBot.\n\n_Puedes seguir jugando contra mí gratis sin apostar o apostarle a otras personas._` 
+              }, { quoted: msg });
+          }
+      }
+
       if (bet > 0) {
          const p1Data = await db.getUser(p1);
          if ((p1Data.xp || 0) < bet) {
@@ -285,21 +298,39 @@ module.exports = {
              }
          }
          
-         await db.removeXP(p1, bet); // Solo descontamos a P1, P2 paga al aceptar.
+         await db.removeXP(p1, bet); 
       }
+
+      // Sorteo aleatorio de quién empieza (50% de probabilidad)
+      const startingPlayer = Math.random() < 0.5 ? p1 : target;
 
       const newSession = {
         player1: p1,
         player2: target,
         board: [1, 2, 3, 4, 5, 6, 7, 8, 9],
-        turn: p1,
+        turn: startingPlayer,
         bet: bet,
-        accepted: target === 'bot', // Si es contra el bot, se acepta automáticamente
+        accepted: target === 'bot', 
         timeoutId: null
       };
+
+      // Si el bot fue elegido en el sorteo para empezar, juega inmediatamente
+      let botStarted = false;
+      if (newSession.turn === 'bot') {
+          const botIndex = getBotMove(newSession.board);
+          newSession.board[botIndex] = 'O'; // El bot marca su jugada
+          newSession.turn = p1; // Se la devuelve al jugador
+          botStarted = true;
+      }
       
       games.push(newSession);
       groupSessions.set(remoteJid, games);
+
+      // Si fue apuesta válida contra el bot, aplicamos el cooldown a partir de aquí
+      if (target === 'bot' && bet > 0) {
+          botBetCooldowns.set(p1, Date.now());
+      }
+
       startTimeout(sock, remoteJid, newSession);
 
       let txt = '';
@@ -309,6 +340,13 @@ module.exports = {
         txt += `🤖 *¡DUELO CONTRA EL BOT!* 🤖\n\n`;
         if (bet > 0) txt += `💸 *Apostaste:* ${bet} XP\n\n`;
         txt += `✖️ Tú juegas con: ✖️\n⭕ SiriusBot juega con: ⭕\n`;
+
+        if (botStarted) {
+            txt += `\n🎲 *Sorteo:* ¡SiriusBot ganó el turno y ya jugó!\n`;
+        } else {
+            txt += `\n🎲 *Sorteo:* ¡Ganaste el turno!\n`;
+        }
+
         txt += renderBoard(newSession.board);
         txt += `\n👉 Te toca @${number(p1)}.\n⏳ Tienes 1 minuto para responder enviando \`.michi [1-9]\``;
       } else {
@@ -316,7 +354,8 @@ module.exports = {
         if (bet > 0) txt += `💸 *Pozo total:* ${bet * 2} XP\n\n`;
         txt += `✖️ Jugador 1: @${number(p1)}\n⭕ Jugador 2: @${number(target)}\n`;
         txt += renderBoard(newSession.board);
-        txt += `\n👉 Comienza @${number(p1)}.\n⏳ @${number(target)} para aceptar el duelo, haz un movimiento en tu turno.\n\nEscribe \`.michi [1-9]\``;
+        txt += `\n🎲 *Sorteo:* ¡Empieza @${number(startingPlayer)}!\n\n`;
+        txt += `⏳ @${number(target)} recuerda que para aceptar el duelo oficial, debes hacer tu movimiento cuando sea tu turno.\n\nEscribe \`.michi [1-9]\``;
         mentions.push(target);
       }
 
@@ -339,19 +378,17 @@ module.exports = {
         return sock.sendMessage(remoteJid, { text: '❌ Esa casilla ya está ocupada por otra marca. Elige una libre.' }, { quoted: msg });
       }
 
-      // 🔥 SISTEMA ANTI-ROBOS: Si Jugador 2 mueve, el desafío es oficialmente aceptado y se le cobra.
       if (p1 === session.player2 && !session.accepted) {
           if (session.bet > 0) {
               const p2Data = await db.getUser(p1);
               if ((p2Data.xp || 0) < session.bet) {
-                  // Si P2 gastó su dinero mientras esperaba su turno, se cancela todo
                   removeGame(remoteJid, session);
                   try { await db.addXP(session.player1, session.bet); } catch(e){}
                   return sock.sendMessage(remoteJid, { text: `❌ @${number(session.player2)} ya no tiene los *${session.bet} XP* para igualar la apuesta.\n\nEl desafío se canceló y se le devolvió el dinero a @${number(session.player1)}.`, mentions: [session.player2, session.player1] }, { quoted: msg });
               }
               await db.removeXP(session.player2, session.bet);
           }
-          session.accepted = true; // ¡Partida oficialmente en curso!
+          session.accepted = true; 
       }
 
       const currentMark = (session.turn === session.player1) ? 'X' : 'O';
@@ -367,7 +404,6 @@ module.exports = {
 
       session.turn = (session.turn === session.player1) ? session.player2 : session.player1;
 
-      // Turno automático del Bot
       if (session.turn === 'bot') {
         const botIndex = getBotMove(session.board);
         if (botIndex !== -1) {
