@@ -1,7 +1,7 @@
 'use strict';
 
 // ==========================================
-// FUNCIONES EXACTAS DE TU PLUGIN FUNCIONAL
+// FUNCIONES DE UTILIDAD Y PERMISOS
 // ==========================================
 function cleanJid(jid = '') {
   const value = String(jid || '');
@@ -18,15 +18,8 @@ function number(jid = '') {
 }
 
 function getParticipantIds(participant = {}) {
-  return [
-    participant.id,
-    participant.jid,
-    participant.participant,
-    participant.lid
-  ]
-    .filter(Boolean)
-    .map(cleanJid)
-    .filter(Boolean);
+  return [participant.id, participant.jid, participant.participant, participant.lid]
+    .filter(Boolean).map(cleanJid).filter(Boolean);
 }
 
 function isAdminParticipant(participant = {}) {
@@ -97,56 +90,76 @@ module.exports = {
       return sock.sendMessage(remoteJid, { text: '❌ Este comando solo funciona en grupos.' }, { quoted: msg });
     }
 
-    // Usamos el motor exacto de tu .kick para detectar administradores
+    // Validación de permisos
     let senderIsAdmin = false;
-    try {
-       senderIsAdmin = await isUserAdmin(sock, remoteJid, sender, groupMetadata);
-    } catch (e) {}
+    try { senderIsAdmin = await isUserAdmin(sock, remoteJid, sender, groupMetadata); } catch (e) {}
 
-    // Verificamos al que ejecuta el comando (Admin o Owner)
     if (!senderIsAdmin && !isOwner) {
       return sock.sendMessage(remoteJid, { text: '❌ Solo admins del grupo o el owner pueden usar este comando.' }, { quoted: msg });
     }
 
-    // Verificamos al bot con la función infalible
     const botAdmin = await isBotAdmin(sock, remoteJid, groupMetadata);
     if (!botAdmin) {
       return sock.sendMessage(remoteJid, { text: '❌ Necesito ser administrador del grupo para agregar personas.' }, { quoted: msg });
     }
 
-    // Extraer y limpiar el número (soporta 52, 521, +51, espacios, etc.)
+    // Limpieza de número ingresado
     const targetNumber = args.join('').replace(/\D/g, '');
     
     if (!targetNumber || targetNumber.length < 10) {
-      return sock.sendMessage(remoteJid, { text: '❌ Debes escribir un número de teléfono válido. Ejemplo: .add 5215512345678' }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: '❌ Escribe un número de teléfono válido.\n*Ejemplo:* .add 528992577246' }, { quoted: msg });
     }
 
-    const targetJid = `${targetNumber}@s.whatsapp.net`;
-
     try {
-      await sock.sendMessage(remoteJid, { text: `⏳ Agregando a @${targetNumber}...`, mentions: [targetJid] }, { quoted: msg });
+      await sock.sendMessage(remoteJid, { text: `🔍 Consultando el ID interno en los servidores de WhatsApp...` }, { quoted: msg });
       
-      const response = await sock.groupParticipantsUpdate(remoteJid, [targetJid], 'add');
+      // 🔥 ESCÁNER ONWHATSAPP (MAGIA PURA PARA NÚMEROS MEXICANOS/CONFLICTIVOS) 🔥
+      const waStatus = await sock.onWhatsApp(targetNumber);
+      let realTargetJid = '';
+
+      if (waStatus && waStatus.length > 0 && waStatus[0].exists) {
+          realTargetJid = waStatus[0].jid;
+      } else {
+          // Truco de enrutamiento: Intercambiar 52 y 521 si WhatsApp no lo encuentra a la primera
+          if (targetNumber.startsWith('52') && targetNumber.length === 12) {
+              const altMex = await sock.onWhatsApp('521' + targetNumber.substring(2));
+              if (altMex && altMex.length > 0 && altMex[0].exists) realTargetJid = altMex[0].jid;
+          } else if (targetNumber.startsWith('521') && targetNumber.length === 13) {
+              const altMex2 = await sock.onWhatsApp('52' + targetNumber.substring(3));
+              if (altMex2 && altMex2.length > 0 && altMex2[0].exists) realTargetJid = altMex2[0].jid;
+          }
+      }
+
+      // Si definitivamente no existe en WhatsApp, abortamos para no crashear
+      if (!realTargetJid) {
+          return sock.sendMessage(remoteJid, { text: `❌ El número ${targetNumber} no tiene una cuenta de WhatsApp activa o el código de país está mal puesto.` }, { quoted: msg });
+      }
+
+      const verifiedNumber = realTargetJid.split('@')[0];
+
+      await sock.sendMessage(remoteJid, { text: `⏳ Agregando a @${verifiedNumber}...`, mentions: [realTargetJid] }, { quoted: msg });
       
-      // Control de estados de privacidad de WhatsApp
-      const status = response[0]?.status || response[targetJid]?.code || '200';
+      // Acción de agregar con el JID verificado
+      const response = await sock.groupParticipantsUpdate(remoteJid, [realTargetJid], 'add');
+      
+      const status = response[0]?.status || response[realTargetJid]?.code || '200';
 
       if (status === '403' || status == 403) {
           return sock.sendMessage(remoteJid, { 
-              text: `⚠️ No pude agregarlo. La privacidad de @${targetNumber} bloquea invitaciones directas a grupos.`, 
-              mentions: [targetJid] 
+              text: `⚠️ La configuración de privacidad de @${verifiedNumber} bloquea invitaciones directas a grupos.`, 
+              mentions: [realTargetJid] 
           }, { quoted: msg });
       } 
       else if (status === '409' || status == 409) {
-          return sock.sendMessage(remoteJid, { text: `⚠️ @${targetNumber} ya está en este grupo.`, mentions: [targetJid] }, { quoted: msg });
+          return sock.sendMessage(remoteJid, { text: `⚠️ El usuario @${verifiedNumber} ya está en este grupo.`, mentions: [realTargetJid] }, { quoted: msg });
       } 
       else {
-          return sock.sendMessage(remoteJid, { text: `✅ ¡@${targetNumber} ha sido agregado exitosamente!`, mentions: [targetJid] }, { quoted: msg });
+          return sock.sendMessage(remoteJid, { text: `✅ ¡@${verifiedNumber} ha sido agregado exitosamente!`, mentions: [realTargetJid] }, { quoted: msg });
       }
 
     } catch (error) {
       console.log('Error en comando add:', error);
-      return sock.sendMessage(remoteJid, { text: `❌ Ocurrió un error al intentar agregar a @${targetNumber}. Verifica que el número sea correcto.`, mentions: [targetJid] }, { quoted: msg });
+      return sock.sendMessage(remoteJid, { text: `❌ Ocurrió un error inesperado al intentar agregar a @${targetNumber}.` }, { quoted: msg });
     }
   }
 };
