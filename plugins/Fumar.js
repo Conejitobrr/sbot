@@ -46,43 +46,44 @@ module.exports = {
             return sock.sendMessage(remoteJid, { text: '🛡️ Yo soy intocable, causa. A mí no me funa nadie.' }, { quoted: msg });
         }
 
-        // 🔥 LISTA DE TITULARES HUMILLANTES 🔥
+        // 🔥 LISTA DE TITULARES RECONTRA RIDÍCULOS Y QUEMANTES 🔥
         const motivos = [
-            `Fue captado robando el WiFi de su vecino durante los últimos 3 años.`,
-            `Le echó mayonesa y kétchup al ceviche. Un delito imperdonable.`,
-            `Se filtró su historial de Google: "Cómo saber si soy guapo test online 100% real".`,
-            `Se le escapó un "te amo" mientras le pagaba a la cajera del supermercado.`,
-            `Fue descubierto usando hacks en el Buscaminas porque no podía ganar.`,
-            `Aún duerme con la luz prendida porque le da miedo que se le aparezca el Ayuwoki.`,
-            `Intentó pagar el pasaje del bus con una tarjeta del Uno.`,
-            `Lo encontraron llorando en su cuarto porque su mascota virtual de Pou se murió de hambre.`,
-            `Finge que tiene novia, pero descubrieron que es una cuenta falsa administrada por él mismo.`,
-            `Fue visto declarándosele a un poste de luz a las 3 AM después de una fiesta.`,
-            `Lleva 5 días usando la misma ropa interior argumentando que "la volteó para que esté limpia".`,
-            `Descubrieron que usa ChatGPT hasta para responder "jaja sí" en WhatsApp.`,
-            `Se cayó en la calle y para disimular se puso a hacer flexiones.`,
-            `Le pidió a su mamá que lo defienda en una discusión por Facebook.`
+            `Fue atrapado pajeándose con una skin de Minecraft con curvas a las 4 AM.`,
+            `Lo encontraron pajeándose viendo fijamente el fondo de pantalla por defecto de Windows XP.`,
+            `Fue captado en flagrante delito pajeándose con una foto del Pou tuneado.`,
+            `Le descubrieron un altar secreto en su clóset dedicado a la mamá de su mejor amigo.`,
+            `Tiene una cuenta secreta de TikTok donde sube videos vestido de mucama otaku.`,
+            `Fue visto declarándosele a una licuadora prendida a las 3 AM pensando que era el amor de su vida.`,
+            `Fue captado intentando besar su propio reflejo en el espejo de un baño público y lo rechazaron.`,
+            `Le echa mayonesa, kétchup y chicha morada al ceviche. Un psicópata total.`,
+            `Fue descubierto robándole el WiFi al vecino para descargar fotos de monas chinas sin ropa.`,
+            `Se filtró su historial de búsqueda: "cómo enamorar a una tía millonaria de 80 años buscar".`,
+            `Lleva una semana usando la misma ropa interior argumentando que "si la voltea por el revés dura otra semana".`,
+            `Se le escapó un "gracias mi amor" con voz temblorosa mientras le pagaba al chofer de la combi.`,
+            `Lo encontraron llorando desconsoladamente porque su novia virtual de Roblox lo dejó por un usuario premium.`,
+            `Se cayó feo en la calle y para disimular se puso a hacer flexiones en el suelo todo sangrado.`,
+            `Le pidió a su mamá que entre a un grupo de compra y venta de Facebook para que lo defienda de un baneo.`
         ];
 
         // Elegimos un motivo aleatorio
         const motivoElegido = motivos[Math.floor(Math.random() * motivos.length)];
 
         // Le avisamos al grupo que estamos procesando la funa
-        await sock.sendMessage(remoteJid, { text: `📸 Contactando a los reporteros y recopilando pruebas contra @${number(target)}...`, mentions: [target] });
+        await sock.sendMessage(remoteJid, { text: `📸 Contactando a los reporteros y recopilando las pruebas más turbias contra @${number(target)}...`, mentions: [target] });
 
         // Intentamos obtener la foto de perfil de WhatsApp del usuario
         let ppUrl;
         try {
             ppUrl = await sock.profilePictureUrl(target, 'image');
         } catch (e) {
-            // Si tiene la foto oculta o no tiene, usamos una imagen de "Usuario Anónimo" por defecto
-            ppUrl = 'https://i.ibb.co/3pXnFzx/silueta.jpg'; // Un placeholder de silueta en gris
+            // Si tiene la foto oculta, usamos la silueta anónima
+            ppUrl = 'https://i.ibb.co/3pXnFzx/silueta.jpg';
         }
 
         // Armamos el titular de Última Hora
-        const caption = `🚨 *¡ÚLTIMA HORA - FUNA NACIONAL!* 🚨\n\n📺 *EXTRA, EXTRA:* El mundo del internet está en shock. El usuario @${number(target)} acaba de ser cancelado en todas las redes sociales.\n\n🎤 *ACUSACIÓN OFICIAL:*\n_"${motivoElegido}"_\n\n📉 *Consecuencias:* Ha perdido todo el respeto de este grupo.\n\n_¿Qué opinan ustedes? Los leemos en los comentarios._ 🎙️🔥`;
+        const caption = `🚨 *¡ÚLTIMA HORA - FUNA HISTÓRICA!* 🚨\n\n📺 *EXTRA, EXTRA:* El mundo del internet está horrorizado. El usuario @${number(target)} acaba de ser completamente cancelado del planeta tierra.\n\n🎤 *PRUEBAS DE LA ACUSACIÓN:*\n_"${motivoElegido}"_\n\n📉 *Estado actual:* Perdió toda la dignidad que le quedaba en este grupo.\n\n_¿Qué opinan ustedes de este caso tan perturbador? Los leemos en los comentarios._ 🎙️🔥`;
 
-        // Pequeño delay de 2 segundos para dar suspenso
+        // Delay de 2 segundos para dar suspenso antes de mandar la bomba
         setTimeout(async () => {
             await sock.sendMessage(remoteJid, {
                 image: { url: ppUrl },
