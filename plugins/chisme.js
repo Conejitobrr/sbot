@@ -49,20 +49,26 @@ module.exports = {
                 random2 = realUsers[Math.floor(Math.random() * realUsers.length)];
             }
 
-            // Lista de plantillas para generar chismes aleatorios
+            // 🔥 NUEVA LISTA DE CHISMES VIRTUALES Y DE REDES SOCIALES 🔥
             const chismes = [
-                `Me enteré por ahí que @user1 le tiene unas ganas tremendas a @user2... 🤫🔥`,
-                `Ayer me pareció ver a @user1 y @user2 muy juntitos en la esquina. ¿Qué estarán ocultando? 👀`,
-                `Un pajarito me contó que @user1 le dedica sus estados de WhatsApp a @user2 🎶💖`,
-                `Dice el rumor que @user1 guarda fotos secretas de @user2 en su galería 📸😳`,
-                `La tensión sexual entre @user1 y @user2 se puede cortar con un cuchillo 🔪🔥`,
-                `Últimamente @user1 no para de hablarme por privado sobre @user2... ¡Alguien está enamorado! 💘`,
-                `Vi a @user1 buscando anillos de compromiso en internet... Y todo apunta a que son para @user2 💍👰`,
-                `El mayor secreto de este grupo es que @user1 y @user2 se escapan juntos en las madrugadas 🏃‍♂️🏃‍♀️💨`,
-                `A mí no me engañan, todas esas peleas entre @user1 y @user2 son pura tensión acumulada 😏`,
-                `Confesión anónima interceptada: "@user1 daría toda su experiencia (XP) por un beso de @user2" 🙊`,
-                `Alguien me dijo que @user1 se pone celoso/a cuando @user2 habla con otros en el grupo 😒💔`,
-                `Lo voy a soltar: @user1 sueña con @user2 todas las noches. De nada por el dato. 🛌✨`
+                `Me enteré por ahí que @user1 y @user2 se quedan en llamada de WhatsApp hasta las 4 AM... 🤫🔥`,
+                `Dice el rumor que @user1 tiene fijado el chat privado de @user2 📌👀`,
+                `Un pajarito me contó que @user1 le responde los estados a @user2 en menos de 1 minuto ⏱️💖`,
+                `La tensión entre @user1 y @user2 cuando escriben en el grupo se nota a kilómetros... ¡Ya cásense! 💍`,
+                `Alguien filtró que @user1 y @user2 se escapan para jugar juntos en la madrugada 🎮👩‍❤️‍👨`,
+                `A mí no me engañan, esos mensajes eliminados de @user1 eran declaraciones para @user2 😏`,
+                `Confesión anónima interceptada: "@user1 se pone celoso/a cuando le comentan o etiquetan a @user2" 🚩🙊`,
+                `Dicen las malas lenguas que @user1 tiene una colección secreta de stickers de @user2 📁😳`,
+                `Lo voy a soltar: @user1 le envía TikToks y Reels de amor a @user2 todo el día. De nada por el dato. 📱✨`,
+                `Me pasaron captura de que @user1 y @user2 se mandan audios de más de 10 minutos por interno 🎙️🔥`,
+                `¿Alguien más notó que @user1 siempre reacciona rápido a los mensajes de @user2 en el grupo? 🕵️‍♂️`,
+                `Se rumorea que @user1 y @user2 planean ponerse fotos de perfil compartidas (goals) en secreto 🤫🖼️`,
+                `En el fondo todos sabemos que @user1 sigue en este grupo solo para leer lo que escribe @user2 🤭`,
+                `Me datearon que @user1 y @user2 se dedican canciones de Rata Blanca por interno... 🎸🖤`,
+                `A @user1 se le escapan los "te quiero" cuando habla por privado con @user2 💌`,
+                `El mayor secreto de este grupo es que @user1 le revisa la última conexión a @user2 a cada rato 👁️👄👁️`,
+                `Alguien me dijo que @user1 se pone a sonreír a la pantalla cada vez que @user2 escribe en el chat 📱🥰`,
+                `Tengo info clasificada de que @user1 y @user2 tienen un servidor de Discord solo para ellos dos 🎧🙊`
             ];
 
             // Elegimos un chisme al azar
@@ -75,7 +81,7 @@ module.exports = {
 
             // Enviamos el mensaje al grupo etiquetando a las dos víctimas
             return sock.sendMessage(remoteJid, { 
-                text: `🗣️ *CHISMITO FRESCO* 🗣️\n\n${textoFinal}`, 
+                text: `🗣️ *CHISMESITO FRESCO* 🗣️\n\n${textoFinal}`, 
                 mentions: [random1, random2] 
             }, { quoted: msg });
 
