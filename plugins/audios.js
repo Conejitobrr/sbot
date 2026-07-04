@@ -154,7 +154,7 @@ module.exports = {
       { triggers: ['coger'], file: 'Coger' },
       { triggers: ['viernes'], file: 'viernes' },
       { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu', 'siuuuuu', 'siuuuuuu'], file: 'siu' },
-      { triggers: ['noche'], file: 'Noche' },
+      { triggers: ['noche de paz'], file: 'Noche' },
       { triggers: ['sexo'], file: 'S3x0g' },
       { triggers: ['mff'], file: 'Mff' },
       { triggers: ['linda'], file: 'Linda' },
