@@ -66,7 +66,7 @@ module.exports = {
                 estiloPista: estiloPista,
                 animalesUsados: [miAnimal],
                 participantes: [{ id: cleanJid(sender), userKey: userKey, animal: miAnimal, posicion: 0 }],
-                longitudPista: 15, // Pista un poco más larga para dar tiempo a los eventos
+                longitudPista: 15,
                 timeoutId: null
             };
 
@@ -128,7 +128,6 @@ module.exports = {
                 return reply('❌ Solo el que creó la carrera puede arrancarla antes de tiempo.');
             }
 
-            // Cancelamos el temporizador automático y forzamos el inicio
             clearTimeout(carrera.timeoutId);
             iniciarCarrera(sock, remoteJid, db);
         }
@@ -136,17 +135,28 @@ module.exports = {
 };
 
 // ==========================================
-// LÓGICA DE INICIO
+// LÓGICA DE INICIO Y PERSONALIDAD DEL BOT
 // ==========================================
 async function iniciarCarrera(sock, remoteJid, db) {
     let carrera = carreras[remoteJid];
     if (!carrera || carrera.estado !== 'esperando') return;
 
     if (carrera.participantes.length === 1) {
-        await sock.sendMessage(remoteJid, { text: "🤖 SiriusBot no encontró rivales.\n\nEl 🐉 entrará a la pista para competir contigo." });
+        // 🔥 FRASES CREÍDAS DEL BOT 🔥
+        const frasesToxicas = [
+            "🙄 ¿En serio nadie más se unió? Qué grupo tan aburrido... Supongo que tendré que bajar de mi nube de código para humillarte yo mismo. ¡Prepárate para llorar! 💅",
+            "🤖 Al parecer a nadie le sobra el valor (o el XP) aquí. Me toca ensuciarme las manos... Jugar contra mí es perder tu tiempo, pero dale, ¡arranca! 🏎️💨",
+            "🥱 Pff, te dejaron más solo que al admin en San Valentín. Ni modo, yo mismo te voy a dar una paliza en la pista. ¡Ve despidiéndote de tu dinero! 💸",
+            "🤖 ¿Nadie? Ok, veo que en este grupo hay puro miedoso. Calentando motores... Te voy a demostrar por qué soy el mejor bot de WhatsApp. 😎🏁"
+        ];
+        
+        const fraseElegida = frasesToxicas[Math.floor(Math.random() * frasesToxicas.length)];
+        
+        await sock.sendMessage(remoteJid, { text: fraseElegida });
+        
         const animalBot = getAnimalAleatorio(carrera.animalesUsados);
         carrera.participantes.push({ id: 'bot', userKey: 'bot', animal: animalBot, posicion: 0 });
-        await esperar(2000);
+        await esperar(2500); // Le damos un par de segundos más para que lean su frase creída
     } else {
         await sock.sendMessage(remoteJid, { text: "🏁 ¡CERRANDO INSCRIPCIONES! Que empiece el caos..." });
         await esperar(1500);
@@ -195,8 +205,6 @@ async function animarCarrera(sock, remoteJid, db) {
                 hayGanador = true;
             }
 
-            // 🔥 NUEVA DIRECCIÓN DE PISTA: DERECHA A IZQUIERDA 🔥
-            // Meta (Izquierda) <--- [Espacios Adelante] --- ANIMAL --- [Espacios Atrás] <--- Salida (Derecha)
             let espaciosAdelante = Math.max(0, carrera.longitudPista - corredor.posicion);
             let espaciosAtras = Math.max(0, corredor.posicion);
             
@@ -205,7 +213,7 @@ async function animarCarrera(sock, remoteJid, db) {
             
             let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
             
-            // Se imprime de esta forma: 🏁 |≈≈≈≈≈🐎≈≈≈≈≈≈≈≈| @usuario
+            // 🏁 |≈≈≈≈≈🐎≈≈≈≈≈≈≈≈| @usuario
             textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 👤 ${tagNombre}\n`;
         }
 
@@ -235,7 +243,7 @@ async function animarCarrera(sock, remoteJid, db) {
         let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
 
         if (ganadores.some(g => g.id === 'bot')) {
-            textoFinal += `🤖 ¡SiriusBot aplastó a todos y se lleva los *${pozoTotal} XP*! El casino siempre gana.`;
+            textoFinal += `🤖 ¡Se los dije! SiriusBot los aplastó a todos y se lleva los *${pozoTotal} XP*. Vayan a llorar a su cuarto. 💅✨`;
         } else {
             let tagsGanadores = ganadores.map(g => `@${number(g.id)}`).join(', ');
             textoFinal += `🎉 ¡Victoria para ${tagsGanadores}!\n💰 Has ganado *${premioPorGanador} XP*.`;
@@ -246,7 +254,7 @@ async function animarCarrera(sock, remoteJid, db) {
         }
     } else {
         if (ganadores.some(g => g.id === 'bot')) {
-            textoFinal += `🤖 ¡La bestia de SiriusBot cruzó la meta primero!`;
+            textoFinal += `🤖 ¡Qué aburrido jugar contra ustedes! La gloria es toda mía. 😎`;
         } else {
             let tagsGanadores = ganadores.map(g => `@${number(g.id)}`).join(', ');
             textoFinal += `🎉 ¡La gloria es para ${tagsGanadores}!`;
