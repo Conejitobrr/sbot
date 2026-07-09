@@ -5,7 +5,7 @@ const carreras = {};
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Catálogo de corredores salvajes
-const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
+const ANIMALES = ['🐎', '🐢', '🐄', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
 const PISTAS = ['─', '═']; // Usamos solo estas dos líneas porque en Android no deforman el texto
 
 // Frases de relleno para mantener la altura del mensaje estática
