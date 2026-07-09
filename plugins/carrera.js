@@ -58,7 +58,7 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Registramos la carrera (Pista reducida a 12 para que quepa en una sola línea)
+            // Registramos la carrera (Pista en 15 ahora que tenemos espacio)
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -66,7 +66,7 @@ module.exports = {
                 estiloPista: estiloPista,
                 animalesUsados: [miAnimal],
                 participantes: [{ id: cleanJid(sender), userKey: userKey, animal: miAnimal, posicion: 0 }],
-                longitudPista: 12, 
+                longitudPista: 15, 
                 timeoutId: null
             };
 
@@ -185,7 +185,6 @@ async function animarCarrera(sock, remoteJid, db) {
         for (let corredor of carrera.participantes) {
             let avance = Math.floor(Math.random() * 2) + 1;
             
-            // 🎲 EVENTOS ALEATORIOS EXPANDIDOS
             let chance = Math.random();
             if (chance < 0.08) { 
                 avance += 3; // Súper Turbo
@@ -217,12 +216,15 @@ async function animarCarrera(sock, remoteJid, db) {
             
             let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
             
-            // 🔥 MARCO VISUAL PERFECTO Y COMPACTO 🔥
-            textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 🚩 ${corredor.animal} ${tagNombre}\n`;
+            // 🔥 DISEÑO LIMPIO EN DOS LÍNEAS 🔥
+            // Línea 1: La pista de carreras pura
+            textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 🚩\n`;
+            // Línea 2: La mención debajo con una flecha apuntando
+            textoFrame += ` ↳ ${corredor.animal} ${tagNombre}\n\n`; 
         }
 
         if (eventosTexto.length > 0) {
-            textoFrame += `\n📢 *Narrador:*\n${eventosTexto.join('\n')}`;
+            textoFrame += `📢 *Narrador:*\n${eventosTexto.join('\n')}`;
         }
 
         if (!mensajeId) {
