@@ -6,7 +6,7 @@ const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Catálogo de corredores salvajes
 const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
-const PISTAS = ['─', '═', '≈', '〰']; // Diferentes terrenos visuales
+const PISTAS = ['─', '═']; // Solo usamos líneas rectas para evitar que Android ensanche la pantalla
 
 // Frases de relleno para mantener la altura del mensaje estática
 const NARRADOR_IDLE = [
@@ -67,7 +67,7 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Registramos la carrera (Pista aumentada a 20)
+            // Pista fijada en 14 para que NUNCA salte de línea
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -75,7 +75,7 @@ module.exports = {
                 estiloPista: estiloPista,
                 animalesUsados: [miAnimal],
                 participantes: [{ id: cleanJid(sender), userKey: userKey, animal: miAnimal, posicion: 0 }],
-                longitudPista: 20, 
+                longitudPista: 14, 
                 timeoutId: null
             };
 
@@ -163,7 +163,7 @@ async function iniciarCarrera(sock, remoteJid, db) {
         
         const animalBot = getAnimalAleatorio(carrera.animalesUsados);
         carrera.participantes.push({ id: 'bot', userKey: 'bot', animal: animalBot, posicion: 0 });
-        await esperar(2500); 
+        await esperar(3000); 
     } else {
         await sock.sendMessage(remoteJid, { text: "🏁 ¡CERRANDO INSCRIPCIONES! Que empiece el caos..." });
         await esperar(1500);
@@ -187,32 +187,29 @@ async function animarCarrera(sock, remoteJid, db) {
 
     while (!hayGanador) {
         let textoFrame = `🏁 *CARRERA EXTREMA* 🏁\n`;
-        textoFrame += `━━━━━━━━━━━━━━━━━━━━━\n`; // <--- BLOQUEA EL ANCHO DE LA BURBUJA
+        textoFrame += `━━━━━━━━━━━━━━━━━━\n`; 
         textoFrame += carrera.apuesta > 0 ? `💰 Pozo: *${pozoTotal} XP*\n\n` : `🎮 Amistosa\n\n`;
 
         let eventosTexto = []; 
 
         for (let corredor of carrera.participantes) {
-            let avance = Math.floor(Math.random() * 2) + 1;
+            // 🔥 NUEVA LÓGICA DE MOVIMIENTO: Siempre avanzan de 1 a 3 espacios
+            let avance = Math.floor(Math.random() * 3) + 1; 
             
             let chance = Math.random();
-            if (chance < 0.08) { 
-                avance += 3; // Súper Turbo
-                eventosTexto.push(`🚀 ¡Imparable! El ${corredor.animal} encontró un atajo secreto.`);
-            } else if (chance < 0.16) { 
-                avance += 2; // Turbo Normal
+            if (chance < 0.12) { 
+                avance += 2; // Turbo 
+                eventosTexto.push(`🚀 ¡Imparable! El ${corredor.animal} encontró un atajo.`);
+            } else if (chance < 0.25) { 
+                avance += 1; // Acelerón 
                 eventosTexto.push(`⚡ ¡El ${corredor.animal} se tomó un RedBull y aceleró!`);
-            } else if (chance > 0.92 && corredor.posicion > 0) { 
-                avance = -2; // Resbalón Grave
-                eventosTexto.push(`🍌 ¡Nooo! El ${corredor.animal} resbaló con una cáscara de plátano.`);
-            } else if (chance > 0.84 && corredor.posicion > 0) {
-                avance = -1; // Tropiezo leve
-                eventosTexto.push(`💥 El ${corredor.animal} se distrajo saludando al público.`);
+            } else if (chance > 0.95 && corredor.posicion > 0) { 
+                // Ya no retroceden. Simplemente se les resta 1 al avance base de este turno
+                avance -= 1; 
+                eventosTexto.push(`💥 El ${corredor.animal} tropezó un poco, pero no se rinde.`);
             }
 
             corredor.posicion += avance;
-            if (corredor.posicion < 0) corredor.posicion = 0; 
-            
             if (corredor.posicion >= carrera.longitudPista) {
                 corredor.posicion = carrera.longitudPista;
                 hayGanador = true;
@@ -226,17 +223,15 @@ async function animarCarrera(sock, remoteJid, db) {
             
             let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
             
-            // Pista larga (20 de largo) dividida en 2 líneas perfectamente limpias
             textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 🚩\n`;
             textoFrame += ` ↳ ${corredor.animal} ${tagNombre}\n\n`; 
         }
 
-        // 🔥 BLOQUEO DE ALTURA (Si no hay evento, el narrador dice una frase de relleno)
         if (eventosTexto.length === 0) {
             eventosTexto.push(NARRADOR_IDLE[Math.floor(Math.random() * NARRADOR_IDLE.length)]);
         }
 
-        textoFrame += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        textoFrame += `━━━━━━━━━━━━━━━━━━\n`;
         textoFrame += `📢 *Narrador:*\n${eventosTexto.join('\n')}`;
 
         if (!mensajeId) {
@@ -248,14 +243,15 @@ async function animarCarrera(sock, remoteJid, db) {
             } catch (err) {} 
         }
 
-        await esperar(2600); 
+        // 🔥 EDICIÓN MUCHO MÁS LENTA: 3.8 segundos para leer cómodamente
+        await esperar(3800); 
     }
 
     // ==========================================
     // CIERRE Y PREMIACIÓN
     // ==========================================
     let ganadores = carrera.participantes.filter(c => c.posicion >= carrera.longitudPista);
-    let textoFinal = "🏆 *¡CRUZARON LA META!*\n━━━━━━━━━━━━━━━━━━━━━\n\n";
+    let textoFinal = "🏆 *¡CRUZARON LA META!*\n━━━━━━━━━━━━━━━━━━\n\n";
 
     if (carrera.apuesta > 0) {
         let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
