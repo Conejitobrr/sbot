@@ -4,7 +4,7 @@
 const carreras = {};
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Catálogo de corredores (todos miran hacia la izquierda por defecto)
+// Catálogo de corredores salvajes
 const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
 const PISTAS = ['─', '═', '≈', '〰']; // Diferentes terrenos visuales
 
@@ -58,7 +58,7 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Registramos la carrera con el creador
+            // Registramos la carrera (Pista más larga: 22 espacios)
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -66,7 +66,7 @@ module.exports = {
                 estiloPista: estiloPista,
                 animalesUsados: [miAnimal],
                 participantes: [{ id: cleanJid(sender), userKey: userKey, animal: miAnimal, posicion: 0 }],
-                longitudPista: 15,
+                longitudPista: 22, 
                 timeoutId: null
             };
 
@@ -142,7 +142,6 @@ async function iniciarCarrera(sock, remoteJid, db) {
     if (!carrera || carrera.estado !== 'esperando') return;
 
     if (carrera.participantes.length === 1) {
-        // 🔥 FRASES CREÍDAS DEL BOT 🔥
         const frasesToxicas = [
             "🙄 ¿En serio nadie más se unió? Qué grupo tan aburrido... Supongo que tendré que bajar de mi nube de código para humillarte yo mismo. ¡Prepárate para llorar! 💅",
             "🤖 Al parecer a nadie le sobra el valor (o el XP) aquí. Me toca ensuciarme las manos... Jugar contra mí es perder tu tiempo, pero dale, ¡arranca! 🏎️💨",
@@ -151,12 +150,11 @@ async function iniciarCarrera(sock, remoteJid, db) {
         ];
         
         const fraseElegida = frasesToxicas[Math.floor(Math.random() * frasesToxicas.length)];
-        
         await sock.sendMessage(remoteJid, { text: fraseElegida });
         
         const animalBot = getAnimalAleatorio(carrera.animalesUsados);
         carrera.participantes.push({ id: 'bot', userKey: 'bot', animal: animalBot, posicion: 0 });
-        await esperar(2500); // Le damos un par de segundos más para que lean su frase creída
+        await esperar(2500); 
     } else {
         await sock.sendMessage(remoteJid, { text: "🏁 ¡CERRANDO INSCRIPCIONES! Que empiece el caos..." });
         await esperar(1500);
@@ -187,14 +185,20 @@ async function animarCarrera(sock, remoteJid, db) {
         for (let corredor of carrera.participantes) {
             let avance = Math.floor(Math.random() * 2) + 1;
             
-            // 🎲 EVENTOS ALEATORIOS
+            // 🎲 EVENTOS ALEATORIOS EXPANDIDOS
             let chance = Math.random();
-            if (chance < 0.10) { 
-                avance += 2; // Turbo
-                eventosTexto.push(`⚡ ¡El ${corredor.animal} activó su turbo!`);
-            } else if (chance > 0.90 && corredor.posicion > 0) { 
-                avance = -1; // Tropiezo
-                eventosTexto.push(`💥 ¡Oh no! El ${corredor.animal} se tropezó.`);
+            if (chance < 0.08) { 
+                avance += 3; // Súper Turbo
+                eventosTexto.push(`🚀 ¡Imparable! El ${corredor.animal} encontró un atajo secreto.`);
+            } else if (chance < 0.16) { 
+                avance += 2; // Turbo Normal
+                eventosTexto.push(`⚡ ¡El ${corredor.animal} se tomó un RedBull y aceleró!`);
+            } else if (chance > 0.92 && corredor.posicion > 0) { 
+                avance = -2; // Resbalón Grave
+                eventosTexto.push(`🍌 ¡Nooo! El ${corredor.animal} resbaló con una cáscara de plátano.`);
+            } else if (chance > 0.84 && corredor.posicion > 0) {
+                avance = -1; // Tropiezo leve
+                eventosTexto.push(`💥 El ${corredor.animal} se distrajo saludando al público.`);
             }
 
             corredor.posicion += avance;
@@ -213,8 +217,8 @@ async function animarCarrera(sock, remoteJid, db) {
             
             let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
             
-            // 🏁 |≈≈≈≈≈🐎≈≈≈≈≈≈≈≈| @usuario
-            textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 👤 ${tagNombre}\n`;
+            // 🔥 MARCO VISUAL PERFECTO: 🏁 Meta | Pista | Salida 🚩 Emoji @usuario
+            textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 🚩 ${corredor.animal} ${tagNombre}\n`;
         }
 
         if (eventosTexto.length > 0) {
@@ -230,7 +234,7 @@ async function animarCarrera(sock, remoteJid, db) {
             } catch (err) {} 
         }
 
-        // 🔥 AQUÍ ESTÁ EL CAMBIO: 2.6 segundos de espera para que WhatsApp procese bien y se lea mejor
+        // El tiempo de espera maestro que elegiste
         await esperar(2600); 
     }
 
