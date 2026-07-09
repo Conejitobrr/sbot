@@ -5,7 +5,7 @@ const carreras = {};
 const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Catálogo de corredores salvajes
-const ANIMALES = ['🐎', '🐢', '🐄', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
+const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
 const PISTAS = ['─', '═']; // Usamos solo estas dos líneas porque en Android no deforman el texto
 
 // Frases de relleno para mantener la altura del mensaje estática
@@ -67,7 +67,7 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Pista fijada en 20 de longitud para una carrera más larga y épica
+            // Pista fijada en 20 de longitud
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -187,14 +187,12 @@ async function animarCarrera(sock, remoteJid, db) {
 
     while (!hayGanador) {
         let textoFrame = `🏁 *CARRERA EXTREMA* 🏁\n`;
-        // Barras extendidas para soportar la pista de 20 sin que el mensaje se achique
         textoFrame += `──────────────────────────────\n`; 
         textoFrame += carrera.apuesta > 0 ? `💰 Pozo: *${pozoTotal} XP*\n\n` : `🎮 Amistosa\n\n`;
 
         let eventosTexto = []; 
 
         for (let corredor of carrera.participantes) {
-            // Avance constante y limpio
             let avance = Math.floor(Math.random() * 2) + 1; 
             
             let chance = Math.random();
@@ -223,7 +221,8 @@ async function animarCarrera(sock, remoteJid, db) {
             
             let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
             
-            textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 🚩\n`;
+            // 🔥 Banderas rojas eliminadas aquí 🔥
+            textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}|\n`;
             textoFrame += ` ↳ ${corredor.animal} ${tagNombre}\n\n`; 
         }
 
