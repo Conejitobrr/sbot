@@ -6,7 +6,7 @@ const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Catálogo de corredores salvajes
 const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
-const PISTAS = ['─', '═']; // Solo usamos líneas rectas para evitar que Android ensanche la pantalla
+const PISTAS = ['─', '═']; // Usamos solo estas dos líneas porque en Android no deforman el texto
 
 // Frases de relleno para mantener la altura del mensaje estática
 const NARRADOR_IDLE = [
@@ -67,7 +67,7 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Pista fijada en 14 para que NUNCA salte de línea
+            // Pista fijada en 16 de longitud para que se vea larga y épica
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -75,12 +75,12 @@ module.exports = {
                 estiloPista: estiloPista,
                 animalesUsados: [miAnimal],
                 participantes: [{ id: cleanJid(sender), userKey: userKey, animal: miAnimal, posicion: 0 }],
-                longitudPista: 14, 
+                longitudPista: 16, 
                 timeoutId: null
             };
 
             let msgInicial = `🏁 *¡SE ABRE LA PISTA!* 🏁\n`;
-            msgInicial += `━━━━━━━━━━━━━━━━━━━━\n`;
+            msgInicial += `───────────────────────\n`;
             if (apuesta > 0) msgInicial += `💰 Apuesta fijada: *${apuesta} XP*\n\n`;
             else msgInicial += `🎮 *Carrera amistosa* (Sin apuestas)\n\n`;
             
@@ -187,14 +187,15 @@ async function animarCarrera(sock, remoteJid, db) {
 
     while (!hayGanador) {
         let textoFrame = `🏁 *CARRERA EXTREMA* 🏁\n`;
-        textoFrame += `━━━━━━━━━━━━━━━━━━\n`; 
+        // ⚠️ IMPORTANTE: No acortes esta línea, evita que el globo de WhatsApp brinque
+        textoFrame += `───────────────────────\n`; 
         textoFrame += carrera.apuesta > 0 ? `💰 Pozo: *${pozoTotal} XP*\n\n` : `🎮 Amistosa\n\n`;
 
         let eventosTexto = []; 
 
         for (let corredor of carrera.participantes) {
-            // 🔥 NUEVA LÓGICA DE MOVIMIENTO: Siempre avanzan de 1 a 3 espacios
-            let avance = Math.floor(Math.random() * 3) + 1; 
+            // 🔥 NUEVA LÓGICA DE MOVIMIENTO: Siempre avanzan de 1 a 2 espacios
+            let avance = Math.floor(Math.random() * 2) + 1; 
             
             let chance = Math.random();
             if (chance < 0.12) { 
@@ -203,8 +204,8 @@ async function animarCarrera(sock, remoteJid, db) {
             } else if (chance < 0.25) { 
                 avance += 1; // Acelerón 
                 eventosTexto.push(`⚡ ¡El ${corredor.animal} se tomó un RedBull y aceleró!`);
-            } else if (chance > 0.95 && corredor.posicion > 0) { 
-                // Ya no retroceden. Simplemente se les resta 1 al avance base de este turno
+            } else if (chance > 0.90 && corredor.posicion > 0) { 
+                // En vez de retroceder, se les resta 1 al avance. Así nunca van hacia atrás.
                 avance -= 1; 
                 eventosTexto.push(`💥 El ${corredor.animal} tropezó un poco, pero no se rinde.`);
             }
@@ -231,7 +232,8 @@ async function animarCarrera(sock, remoteJid, db) {
             eventosTexto.push(NARRADOR_IDLE[Math.floor(Math.random() * NARRADOR_IDLE.length)]);
         }
 
-        textoFrame += `━━━━━━━━━━━━━━━━━━\n`;
+        // ⚠️ IMPORTANTE: No acortes esta línea tampoco
+        textoFrame += `───────────────────────\n`;
         textoFrame += `📢 *Narrador:*\n${eventosTexto.join('\n')}`;
 
         if (!mensajeId) {
@@ -243,15 +245,15 @@ async function animarCarrera(sock, remoteJid, db) {
             } catch (err) {} 
         }
 
-        // 🔥 EDICIÓN MUCHO MÁS LENTA: 3.8 segundos para leer cómodamente
-        await esperar(3800); 
+        // 🔥 EDICIÓN EQUILIBRADA: 3.2 segundos (Ni muy rápido, ni muy lento)
+        await esperar(3200); 
     }
 
     // ==========================================
     // CIERRE Y PREMIACIÓN
     // ==========================================
     let ganadores = carrera.participantes.filter(c => c.posicion >= carrera.longitudPista);
-    let textoFinal = "🏆 *¡CRUZARON LA META!*\n━━━━━━━━━━━━━━━━━━\n\n";
+    let textoFinal = "🏆 *¡CRUZARON LA META!*\n───────────────────────\n\n";
 
     if (carrera.apuesta > 0) {
         let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
