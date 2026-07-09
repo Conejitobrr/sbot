@@ -58,7 +58,7 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Registramos la carrera (Pista más larga: 22 espacios)
+            // Registramos la carrera (Pista reducida a 12 para que quepa en una sola línea)
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -66,7 +66,7 @@ module.exports = {
                 estiloPista: estiloPista,
                 animalesUsados: [miAnimal],
                 participantes: [{ id: cleanJid(sender), userKey: userKey, animal: miAnimal, posicion: 0 }],
-                longitudPista: 22, 
+                longitudPista: 12, 
                 timeoutId: null
             };
 
@@ -217,7 +217,7 @@ async function animarCarrera(sock, remoteJid, db) {
             
             let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
             
-            // 🔥 MARCO VISUAL PERFECTO: 🏁 Meta | Pista | Salida 🚩 Emoji @usuario
+            // 🔥 MARCO VISUAL PERFECTO Y COMPACTO 🔥
             textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 🚩 ${corredor.animal} ${tagNombre}\n`;
         }
 
@@ -234,7 +234,6 @@ async function animarCarrera(sock, remoteJid, db) {
             } catch (err) {} 
         }
 
-        // El tiempo de espera maestro que elegiste
         await esperar(2600); 
     }
 
