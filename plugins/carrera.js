@@ -8,7 +8,7 @@ const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
 const PISTAS = ['─', '═']; 
 
-// Frases de relleno para mantener la altura del mensaje estática
+// Frases de relleno para mantener la altura del mensaje
 const NARRADOR_IDLE = [
     "👀 El público observa con muchísima tensión...",
     "🔥 La pista está que arde, nadie quiere ceder.",
@@ -78,8 +78,7 @@ module.exports = {
                 timeoutId: null
             };
 
-            let msgInicial = `🏁 *¡SE ABRE LA PISTA!* 🏁\n`;
-            msgInicial += `──────────────────────────────\n`;
+            let msgInicial = `🏁 *¡SE ABRE LA PISTA!* 🏁\n\n`;
             if (apuesta > 0) msgInicial += `💰 Apuesta fijada: *${apuesta} XP*\n\n`;
             else msgInicial += `🎮 *Carrera amistosa* (Sin apuestas)\n\n`;
             
@@ -150,7 +149,6 @@ async function iniciarCarrera(sock, remoteJid, db) {
     if (!carrera || carrera.estado !== 'esperando') return;
 
     if (carrera.participantes.length === 1) {
-        // 🔥 FRASES DE SIRIUSBOT CUANDO JUEGA SOLO (Nuevas y variadas) 🔥
         const frasesToxicas = [
             "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🙄 ¿En serio nadie más se unió? Qué grupo tan aburrido... Supongo que tendré que bajar de mi nube de código para humillarte yo mismo. ¡Prepárate para llorar! 💅",
             "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤖 Al parecer a nadie le sobra el valor (o el XP) aquí. Me toca ensuciarme las manos... Jugar contra mí es perder tu tiempo, pero dale, ¡arranca! 🏎️💨",
@@ -188,38 +186,42 @@ async function animarCarrera(sock, remoteJid, db) {
     let arrayMenciones = carrera.participantes.filter(p => p.id !== 'bot').map(p => p.id);
 
     while (!hayGanador) {
-        let textoFrame = `🏁 *CARRERA EXTREMA* 🏁\n`;
-        textoFrame += `──────────────────────────────\n`; 
+        let textoFrame = `🏁 *CARRERA EXTREMA* 🏁\n\n`;
         textoFrame += carrera.apuesta > 0 ? `💰 Pozo: *${pozoTotal} XP*\n\n` : `🎮 Amistosa\n\n`;
 
         let eventosTexto = []; 
+        
+        // Buscamos quién va ganando para activar la "remontada épica" a los que van perdiendo
+        let maxPosicionActual = Math.max(...carrera.participantes.map(c => c.posicion));
 
         for (let corredor of carrera.participantes) {
-            let avance = Math.floor(Math.random() * 2) + 1; 
+            // Avance base ampliado (de 1 a 3 espacios)
+            let avance = Math.floor(Math.random() * 3) + 1; 
             
             let chance = Math.random();
+            let atrasado = (maxPosicionActual - corredor.posicion) >= 3; // ¿Va perdiendo por 3 espacios o más?
+
+            // Si está muy atrás, manipulamos su suerte para que alcance al resto
+            if (atrasado) chance -= 0.15; 
+
             if (chance < 0.12) { 
-                avance += 2; 
-                eventosTexto.push(`🚀 ¡Imparable! El ${corredor.animal} encontró un atajo.`);
-            } else if (chance < 0.25) { 
-                avance += 1; 
-                eventosTexto.push(`⚡ ¡El ${corredor.animal} se tomó un RedBull y aceleró!`);
-            } else if (chance > 0.90 && corredor.posicion > 0) { 
-                avance -= 1; 
-                eventosTexto.push(`💥 El ${corredor.animal} tropezó un poco, pero no se rinde.`);
+                avance += 3; // Súper atajo salvaje
+                eventosTexto.push(`🚀 ¡INCREÍBLE! El ${corredor.animal} tomó un atajo y voló en la pista.`);
+            } else if (chance < 0.28) { 
+                avance += 2; // Turbo fuerte
+                eventosTexto.push(`⚡ ¡El ${corredor.animal} pisó el acelerador a fondo!`);
+            } else if (chance > 0.88 && corredor.posicion > 0 && !atrasado) { 
+                // Los que van ganando tienen más chance de tropezar y perder el ritmo
+                avance = Math.max(0, avance - 2); 
+                eventosTexto.push(`💥 ¡Oh no! El ${corredor.animal} tropezó y perdió su ventaja.`);
             }
 
-            // AHORA EL AVANCE NO SE BLOQUEA EN LA META (Esto sirve para el desempate interno)
             corredor.posicion += avance;
-            
-            // Si alguien llega o pasa la meta, activamos el final de carrera
             if (corredor.posicion >= carrera.longitudPista) {
                 hayGanador = true;
             }
 
-            // Visualmente lo detenemos en la meta para que no rompa la barra
             let posVisual = Math.min(corredor.posicion, carrera.longitudPista);
-
             let espaciosAdelante = Math.max(0, carrera.longitudPista - posVisual);
             let espaciosAtras = Math.max(0, posVisual);
             
@@ -236,7 +238,6 @@ async function animarCarrera(sock, remoteJid, db) {
             eventosTexto.push(NARRADOR_IDLE[Math.floor(Math.random() * NARRADOR_IDLE.length)]);
         }
 
-        textoFrame += `──────────────────────────────\n`;
         textoFrame += `📢 *Narrador:*\n${eventosTexto.join('\n')}`;
 
         if (!mensajeId) {
@@ -252,15 +253,12 @@ async function animarCarrera(sock, remoteJid, db) {
     }
 
     // ==========================================
-    // CIERRE, DESEMPATE Y PREMIACIÓN
+    // CIERRE Y PREMIACIÓN
     // ==========================================
-    
-    // 📸 SISTEMA DE FOTOFINISH (DESEMPATE)
-    // Buscamos quién fue el que avanzó más allá de la meta
     let maxPosicion = Math.max(...carrera.participantes.map(c => c.posicion));
     let ganadores = carrera.participantes.filter(c => c.posicion === maxPosicion && c.posicion >= carrera.longitudPista);
 
-    let textoFinal = "🏆 *¡CRUZARON LA META!*\n──────────────────────────────\n\n";
+    let textoFinal = "🏆 *¡CRUZARON LA META!*\n\n";
 
     if (carrera.apuesta > 0) {
         let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
