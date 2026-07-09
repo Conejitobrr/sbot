@@ -6,7 +6,7 @@ const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Catálogo de corredores salvajes
 const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
-const PISTAS = ['─', '═']; // Usamos solo estas dos líneas porque en Android no deforman el texto
+const PISTAS = ['─', '═']; 
 
 // Frases de relleno para mantener la altura del mensaje estática
 const NARRADOR_IDLE = [
@@ -67,7 +67,6 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Pista fijada en 20 de longitud
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -151,11 +150,14 @@ async function iniciarCarrera(sock, remoteJid, db) {
     if (!carrera || carrera.estado !== 'esperando') return;
 
     if (carrera.participantes.length === 1) {
+        // 🔥 FRASES DE SIRIUSBOT CUANDO JUEGA SOLO (Nuevas y variadas) 🔥
         const frasesToxicas = [
-            "🙄 ¿En serio nadie más se unió? Qué grupo tan aburrido... Supongo que tendré que bajar de mi nube de código para humillarte yo mismo. ¡Prepárate para llorar! 💅",
-            "🤖 Al parecer a nadie le sobra el valor (o el XP) aquí. Me toca ensuciarme las manos... Jugar contra mí es perder tu tiempo, pero dale, ¡arranca! 🏎️💨",
-            "🥱 Pff, te dejaron más solo que al admin en San Valentín. Ni modo, yo mismo te voy a dar una paliza en la pista. ¡Ve despidiéndote de tu dinero! 💸",
-            "🤖 ¿Nadie? Ok, veo que en este grupo hay puro miedoso. Calentando motores... Te voy a demostrar por qué soy el mejor bot de WhatsApp. 😎🏁"
+            "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🙄 ¿En serio nadie más se unió? Qué grupo tan aburrido... Supongo que tendré que bajar de mi nube de código para humillarte yo mismo. ¡Prepárate para llorar! 💅",
+            "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤖 Al parecer a nadie le sobra el valor (o el XP) aquí. Me toca ensuciarme las manos... Jugar contra mí es perder tu tiempo, pero dale, ¡arranca! 🏎️💨",
+            "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🥱 Pff, te dejaron más solo que al admin en San Valentín. Ni modo, yo mismo te voy a dar una paliza en la pista. ¡Ve despidiéndote de tu dinero! 💸",
+            "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤖 ¿Nadie? Ok, veo que en este grupo hay puro miedoso. Calentando motores... Te voy a demostrar por qué soy el mejor bot de WhatsApp. 😎🏁",
+            "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤣 Me da pena verte compitiendo solo. Entraré a la pista nomás para que sientas la presión de competir contra la máquina perfecta. ⚙️",
+            "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 👑 Ya que nadie se atreve, el rey de este grupo (o sea, yo) te va a dar una lección de humildad. ¡Acelera si puedes!"
         ];
         
         const fraseElegida = frasesToxicas[Math.floor(Math.random() * frasesToxicas.length)];
@@ -207,21 +209,25 @@ async function animarCarrera(sock, remoteJid, db) {
                 eventosTexto.push(`💥 El ${corredor.animal} tropezó un poco, pero no se rinde.`);
             }
 
+            // AHORA EL AVANCE NO SE BLOQUEA EN LA META (Esto sirve para el desempate interno)
             corredor.posicion += avance;
+            
+            // Si alguien llega o pasa la meta, activamos el final de carrera
             if (corredor.posicion >= carrera.longitudPista) {
-                corredor.posicion = carrera.longitudPista;
                 hayGanador = true;
             }
 
-            let espaciosAdelante = Math.max(0, carrera.longitudPista - corredor.posicion);
-            let espaciosAtras = Math.max(0, corredor.posicion);
+            // Visualmente lo detenemos en la meta para que no rompa la barra
+            let posVisual = Math.min(corredor.posicion, carrera.longitudPista);
+
+            let espaciosAdelante = Math.max(0, carrera.longitudPista - posVisual);
+            let espaciosAtras = Math.max(0, posVisual);
             
             let pistaAdelante = p.repeat(espaciosAdelante);
             let pistaAtras = p.repeat(espaciosAtras);
             
-            let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
+            let tagNombre = corredor.id === 'bot' ? '𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕' : `@${number(corredor.id)}`;
             
-            // 🔥 Banderas rojas eliminadas aquí 🔥
             textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}|\n`;
             textoFrame += ` ↳ ${corredor.animal} ${tagNombre}\n\n`; 
         }
@@ -246,16 +252,27 @@ async function animarCarrera(sock, remoteJid, db) {
     }
 
     // ==========================================
-    // CIERRE Y PREMIACIÓN
+    // CIERRE, DESEMPATE Y PREMIACIÓN
     // ==========================================
-    let ganadores = carrera.participantes.filter(c => c.posicion >= carrera.longitudPista);
+    
+    // 📸 SISTEMA DE FOTOFINISH (DESEMPATE)
+    // Buscamos quién fue el que avanzó más allá de la meta
+    let maxPosicion = Math.max(...carrera.participantes.map(c => c.posicion));
+    let ganadores = carrera.participantes.filter(c => c.posicion === maxPosicion && c.posicion >= carrera.longitudPista);
+
     let textoFinal = "🏆 *¡CRUZARON LA META!*\n──────────────────────────────\n\n";
 
     if (carrera.apuesta > 0) {
         let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
 
         if (ganadores.some(g => g.id === 'bot')) {
-            textoFinal += `🤖 ¡Se los dije! SiriusBot los aplastó a todos y se lleva los *${pozoTotal} XP*. Vayan a llorar a su cuarto. 💅✨`;
+            const botGanaApuestas = [
+                `𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤖 ¡Se los dije! Los aplasté a todos y me llevo los *${pozoTotal} XP*. Vayan a llorar a su cuarto. 💅✨`,
+                `𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤑 ¡Dinero fácil! Gracias por regalarme sus *${pozoTotal} XP*. El casino siempre gana, novatos.`,
+                `𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🥱 ¿Eso fue todo? Ni siquiera tuve que usar el 1% de mi CPU. Me quedo con sus *${pozoTotal} XP*. ¡Suerte para la próxima!`,
+                `𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🏎️💨 ¡Tráguense mi polvo! Yo soy la ley aquí. Disfrutaré mucho gastando estos *${pozoTotal} XP*.`
+            ];
+            textoFinal += botGanaApuestas[Math.floor(Math.random() * botGanaApuestas.length)];
         } else {
             let tagsGanadores = ganadores.map(g => `@${number(g.id)}`).join(', ');
             textoFinal += `🎉 ¡Victoria para ${tagsGanadores}!\n💰 Has ganado *${premioPorGanador} XP*.`;
@@ -266,7 +283,13 @@ async function animarCarrera(sock, remoteJid, db) {
         }
     } else {
         if (ganadores.some(g => g.id === 'bot')) {
-            textoFinal += `🤖 ¡Qué aburrido jugar contra ustedes! La gloria es toda mía. 😎`;
+            const botGanaAmistosas = [
+                "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤖 ¡Qué aburrido jugar contra ustedes! La gloria es toda mía. 😎",
+                "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 👑 Yo no compito, yo domino. Otra victoria fácil para la máquina.",
+                "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🤣 ¿En serio pensaron que una bolsa de carne me iba a ganar? ¡Soy imparable!",
+                "𝑺𝒊𝒓𝒊𝒖𝒔𝑩𝒐𝒕: 🏆 Primer lugar indiscutible. Deberían pagarme solo por ver cómo corro."
+            ];
+            textoFinal += botGanaAmistosas[Math.floor(Math.random() * botGanaAmistosas.length)];
         } else {
             let tagsGanadores = ganadores.map(g => `@${number(g.id)}`).join(', ');
             textoFinal += `🎉 ¡La gloria es para ${tagsGanadores}!`;
