@@ -230,7 +230,8 @@ async function animarCarrera(sock, remoteJid, db) {
             } catch (err) {} 
         }
 
-        await esperar(1600); 
+        // 🔥 AQUÍ ESTÁ EL CAMBIO: 2.6 segundos de espera para que WhatsApp procese bien y se lea mejor
+        await esperar(2600); 
     }
 
     // ==========================================
