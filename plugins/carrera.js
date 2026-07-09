@@ -8,6 +8,15 @@ const esperar = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const ANIMALES = ['🐎', '🐢', '🐖', '🐕', '🐅', '🐉', '🦖', '🦘', '🦏', '🦍', '🐆', '🐏'];
 const PISTAS = ['─', '═', '≈', '〰']; // Diferentes terrenos visuales
 
+// Frases de relleno para mantener la altura del mensaje estática
+const NARRADOR_IDLE = [
+    "👀 El público observa con muchísima tensión...",
+    "🔥 La pista está que arde, nadie quiere ceder.",
+    "👟 Los corredores mantienen un ritmo constante...",
+    "💨 ¡Qué velocidad la de estas bestias!",
+    "📸 Se preparan para un final de fotografía..."
+];
+
 function cleanJid(jid = '') {
     return String(jid).split(':')[0];
 }
@@ -18,7 +27,7 @@ function number(jid = '') {
 
 function getAnimalAleatorio(usados) {
     let disponibles = ANIMALES.filter(a => !usados.includes(a));
-    if (disponibles.length === 0) disponibles = ANIMALES; // Por si juegan más de 12 personas
+    if (disponibles.length === 0) disponibles = ANIMALES; 
     return disponibles[Math.floor(Math.random() * disponibles.length)];
 }
 
@@ -58,7 +67,7 @@ module.exports = {
             const miAnimal = getAnimalAleatorio([]);
             const estiloPista = PISTAS[Math.floor(Math.random() * PISTAS.length)];
 
-            // Registramos la carrera (Pista en 15 ahora que tenemos espacio)
+            // Registramos la carrera (Pista aumentada a 20)
             carreras[remoteJid] = {
                 estado: 'esperando',
                 creador: userKey,
@@ -66,11 +75,12 @@ module.exports = {
                 estiloPista: estiloPista,
                 animalesUsados: [miAnimal],
                 participantes: [{ id: cleanJid(sender), userKey: userKey, animal: miAnimal, posicion: 0 }],
-                longitudPista: 15, 
+                longitudPista: 20, 
                 timeoutId: null
             };
 
-            let msgInicial = `🏁 *¡SE ABRE LA PISTA!* 🏁\n\n`;
+            let msgInicial = `🏁 *¡SE ABRE LA PISTA!* 🏁\n`;
+            msgInicial += `━━━━━━━━━━━━━━━━━━━━\n`;
             if (apuesta > 0) msgInicial += `💰 Apuesta fijada: *${apuesta} XP*\n\n`;
             else msgInicial += `🎮 *Carrera amistosa* (Sin apuestas)\n\n`;
             
@@ -79,7 +89,6 @@ module.exports = {
 
             reply(msgInicial);
 
-            // Temporizador de 90 segundos
             carreras[remoteJid].timeoutId = setTimeout(async () => {
                 iniciarCarrera(sock, remoteJid, db);
             }, 90000);
@@ -177,7 +186,8 @@ async function animarCarrera(sock, remoteJid, db) {
     let arrayMenciones = carrera.participantes.filter(p => p.id !== 'bot').map(p => p.id);
 
     while (!hayGanador) {
-        let textoFrame = `🏁 *CARRERA EXTREMA*\n`;
+        let textoFrame = `🏁 *CARRERA EXTREMA* 🏁\n`;
+        textoFrame += `━━━━━━━━━━━━━━━━━━━━━\n`; // <--- BLOQUEA EL ANCHO DE LA BURBUJA
         textoFrame += carrera.apuesta > 0 ? `💰 Pozo: *${pozoTotal} XP*\n\n` : `🎮 Amistosa\n\n`;
 
         let eventosTexto = []; 
@@ -216,16 +226,18 @@ async function animarCarrera(sock, remoteJid, db) {
             
             let tagNombre = corredor.id === 'bot' ? 'SiriusBot' : `@${number(corredor.id)}`;
             
-            // 🔥 DISEÑO LIMPIO EN DOS LÍNEAS 🔥
-            // Línea 1: La pista de carreras pura
+            // Pista larga (20 de largo) dividida en 2 líneas perfectamente limpias
             textoFrame += `🏁 |${pistaAdelante}${corredor.animal}${pistaAtras}| 🚩\n`;
-            // Línea 2: La mención debajo con una flecha apuntando
             textoFrame += ` ↳ ${corredor.animal} ${tagNombre}\n\n`; 
         }
 
-        if (eventosTexto.length > 0) {
-            textoFrame += `📢 *Narrador:*\n${eventosTexto.join('\n')}`;
+        // 🔥 BLOQUEO DE ALTURA (Si no hay evento, el narrador dice una frase de relleno)
+        if (eventosTexto.length === 0) {
+            eventosTexto.push(NARRADOR_IDLE[Math.floor(Math.random() * NARRADOR_IDLE.length)]);
         }
+
+        textoFrame += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        textoFrame += `📢 *Narrador:*\n${eventosTexto.join('\n')}`;
 
         if (!mensajeId) {
             let msg = await sock.sendMessage(remoteJid, { text: textoFrame, mentions: arrayMenciones });
@@ -243,7 +255,7 @@ async function animarCarrera(sock, remoteJid, db) {
     // CIERRE Y PREMIACIÓN
     // ==========================================
     let ganadores = carrera.participantes.filter(c => c.posicion >= carrera.longitudPista);
-    let textoFinal = "🏆 *¡CRUZARON LA META!*\n\n";
+    let textoFinal = "🏆 *¡CRUZARON LA META!*\n━━━━━━━━━━━━━━━━━━━━━\n\n";
 
     if (carrera.apuesta > 0) {
         let premioPorGanador = Math.floor(pozoTotal / ganadores.length);
