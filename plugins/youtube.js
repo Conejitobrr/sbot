@@ -59,7 +59,7 @@ async function downloadAudio(url, output) {
     // 🔥 CAMBIO APLICADO: Forzamos el disfraz de humano con el archivo
     '--cookies', cookiesPath,
 
-    '-f', 'ba/b',
+    '-f', 'bestaudio/best',
 
     '-x',
     '--audio-format', 'mp3',
