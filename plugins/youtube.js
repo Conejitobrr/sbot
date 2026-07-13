@@ -2,12 +2,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const yts = require('yt-search');
 
+const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-// ⏳ COLA POR CHAT: 1 canción cada 2 minutos
 const QUEUE_DELAY = 2 * 60 * 1000;
 const queues = new Map();
 const processingChats = new Set();
@@ -39,39 +40,26 @@ async function searchYouTube(query) {
   );
 }
 
+// 🔥 AQUÍ OCURRE LA MAGIA DEL VPN 🔥
 async function downloadAudio(url, output) {
-  let audioUrl = null;
+  await execFileAsync('yt-dlp', [
+    // Conectamos yt-dlp al túnel de Cloudflare WARP.
+    // YouTube verá la IP limpia de Cloudflare, no la de tu servidor bloqueado.
+    '--proxy', 'socks5://127.0.0.1:40000', 
+    
+    '--no-playlist',
+    '--ignore-errors',
+    '--no-warnings',
+    
+    // Descargamos directo en la mejor calidad de audio
+    '-f', 'bestaudio/best',
+    '-x',
+    '--audio-format', 'mp3',
+    '--audio-quality', '320K',
 
-  // 🔥 BATERÍA DE 4 APIs INMUNES Y ACTUALIZADAS (Nunca fallan todas a la vez)
-  const apis = [
-    { url: `https://api.ryzendesu.vip/api/downloader/ytmp3?url=${encodeURIComponent(url)}`, path: data => data?.url },
-    { url: `https://api.vreden.my.id/api/ytmp3?url=${encodeURIComponent(url)}`, path: data => data?.result?.download?.url },
-    { url: `https://api.dorratz.com/v2/yt-mp3?url=${encodeURIComponent(url)}`, path: data => data?.media },
-    { url: `https://bk9.fun/download/youtube?url=${encodeURIComponent(url)}`, path: data => data?.BK9?.mp3 }
-  ];
-
-  for (let api of apis) {
-    try {
-      console.log(`⏳ Probando API externa: ${api.url.split('/')[2]}`);
-      const { data } = await axios.get(api.url, { timeout: 15000 });
-      audioUrl = api.path(data);
-      
-      if (audioUrl) {
-        console.log(`✅ ¡API exitosa! Descargando pista...`);
-        break; // Salimos del bucle si encontramos el link de la canción
-      }
-    } catch (err) {
-      console.log(`⚠️ API caída o falló (404/500). Pasando a la siguiente API de respaldo...`);
-    }
-  }
-
-  if (!audioUrl) {
-    throw new Error("Todas las APIs externas están caídas en este momento.");
-  }
-
-  // Descargamos el MP3 final a tu servidor y luego al chat
-  const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
-  fs.writeFileSync(output, audioBuffer.data);
+    '-o', output,
+    url
+  ]);
 }
 
 function sanitizeFileName(name = 'audio') {
@@ -109,6 +97,7 @@ async function processQueue(chatId) {
 
 async function handleDownload(job) {
   const { sock, remoteJid, msg, query } = job;
+  let file = null;
   let finalPath = null;
 
   try {
@@ -128,16 +117,23 @@ async function handleDownload(job) {
     }
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-    finalPath = path.join(TEMP_DIR, `yt_audio_${id}.mp3`);
+    file = path.join(TEMP_DIR, `yt_audio_${id}.%(ext)s`);
 
-    await downloadAudio(url, finalPath);
+    await downloadAudio(url, file);
 
-    if (!fs.existsSync(finalPath)) {
+    const files = fs.readdirSync(TEMP_DIR);
+    const downloaded = files.find(f =>
+      f.startsWith(`yt_audio_${id}`) &&
+      f.endsWith('.mp3')
+    );
+
+    if (!downloaded) {
       return sock.sendMessage(remoteJid, {
         text: '❌ No se pudo descargar el audio.'
       }, { quoted: msg });
     }
 
+    finalPath = path.join(TEMP_DIR, downloaded);
     const sizeMB = fs.statSync(finalPath).size / 1024 / 1024;
 
     if (sizeMB > 95) {
