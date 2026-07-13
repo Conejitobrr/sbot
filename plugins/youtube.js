@@ -49,17 +49,19 @@ async function downloadAudio(url, output) {
   const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
 
   await execFileAsync('yt-dlp', [
-    // 🔥 ELIMINAMOS el extractor-args de Android porque ya tenemos cookies
+    // 🔥 EL TRUCO FINAL: Obligamos a YouTube a enviar la versión de PC de escritorio
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    
     '--geo-bypass',
     '--no-playlist',
     '--ignore-errors',
     '--no-warnings',
     
-    // 🔥 Tus cookies que ya están funcionando
+    // Tus cookies que ya pasaron la seguridad de bots
     '--cookies', cookiesPath,
 
-    // 🔥 Formato de audio estándar universal
-    '-f', 'bestaudio',
+    // 🔥 FORMATO INVENCIBLE: Buscará audio, si falla, bajará video y le arrancará el audio
+    '-f', 'bestaudio/best',
 
     '-x',
     '--audio-format', 'mp3',
@@ -99,8 +101,6 @@ async function processQueue(chatId) {
     }
 
     // 🔥 Una canción ha terminado (con éxito o error).
-    // Se ha liberado un cupo, así que reseteamos las advertencias de este chat
-    // para que la gente pueda volver a pedir su canción sin ser ignorada.
     warnedChats.delete(chatId);
 
     if (queue.length > 0) {
@@ -203,10 +203,8 @@ module.exports = {
       const queue = queues.get(remoteJid);
       const isProcessing = processingChats.has(remoteJid);
       
-      // La cantidad real de canciones es: (lo que está en espera) + (la que se está bajando ahorita)
       const activeCount = queue.length + (isProcessing ? 1 : 0);
 
-      // 🔥 LÓGICA DE TOPE (MÁXIMO 2)
       if (activeCount >= 2) {
         if (!warnedChats.has(remoteJid)) {
           warnedChats.set(remoteJid, new Set());
@@ -214,12 +212,10 @@ module.exports = {
         
         const warnedUsers = warnedChats.get(remoteJid);
 
-        // Si ya advertimos a este usuario, lo ignoramos en completo silencio
         if (warnedUsers.has(sender)) {
           return; 
         }
 
-        // Si es su primer intento estando llena la cola, le avisamos y lo marcamos
         warnedUsers.add(sender);
         return sock.sendMessage(remoteJid, {
           text: `⚠️ *COLA LLENA*\n\n@${sender.split('@')[0]}, ya hay 2 canciones procesándose o en espera en este chat. Por favor, espera un momento a que se libere un espacio para pedir más.`,
