@@ -46,13 +46,18 @@ async function searchYouTube(query) {
 }
 
 async function downloadAudio(url, output) {
+  // 🔥 CAMBIO APLICADO: Ruta absoluta para leer las cookies
+  const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
+
   await execFileAsync('yt-dlp', [
     '--extractor-args', 'youtube:player_client=android',
     '--geo-bypass',
-    '--force-ipv4',
     '--no-playlist',
     '--ignore-errors',
     '--no-warnings',
+    
+    // 🔥 CAMBIO APLICADO: Forzamos el disfraz de humano con el archivo
+    '--cookies', cookiesPath,
 
     '-f', 'ba/b',
 
