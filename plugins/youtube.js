@@ -46,20 +46,20 @@ async function searchYouTube(query) {
 }
 
 async function downloadAudio(url, output) {
-  // 🔥 CAMBIO APLICADO: Ruta absoluta para leer las cookies
   const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
 
   await execFileAsync('yt-dlp', [
-    '--extractor-args', 'youtube:player_client=android',
+    // 🔥 ELIMINAMOS el extractor-args de Android porque ya tenemos cookies
     '--geo-bypass',
     '--no-playlist',
     '--ignore-errors',
     '--no-warnings',
     
-    // 🔥 CAMBIO APLICADO: Forzamos el disfraz de humano con el archivo
+    // 🔥 Tus cookies que ya están funcionando
     '--cookies', cookiesPath,
 
-    '-f', 'bestaudio/best',
+    // 🔥 Formato de audio estándar universal
+    '-f', 'bestaudio',
 
     '-x',
     '--audio-format', 'mp3',
