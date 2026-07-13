@@ -14,7 +14,6 @@ const QUEUE_DELAY = 2 * 60 * 1000;
 const queues = new Map();
 const processingChats = new Set();
 
-// 🔥 NUEVO: Para controlar a quiénes ya se les avisó que la cola está llena
 const warnedChats = new Map(); 
 
 function ensureTemp() {
@@ -49,20 +48,19 @@ async function downloadAudio(url, output) {
   const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
 
   await execFileAsync('yt-dlp', [
-    // 🔥 EL TRUCO FINAL: Obligamos a YouTube a enviar la versión de PC de escritorio
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    // 🔥 EL TRUCO MAESTRO: Obligamos a yt-dlp a intentar con 3 APIs distintas de YouTube
+    '--extractor-args', 'youtube:player_client=ios,android,web',
     
     '--geo-bypass',
     '--no-playlist',
     '--ignore-errors',
     '--no-warnings',
     
-    // Tus cookies que ya pasaron la seguridad de bots
+    // Tus cookies (que ya pasaron el sistema anti-bots)
     '--cookies', cookiesPath,
 
-    // 🔥 FORMATO INVENCIBLE: Buscará audio, si falla, bajará video y le arrancará el audio
-    '-f', 'bestaudio/best',
-
+    // 🔥 BORRAMOS LA RESTRICCIÓN DE FORMATO. 
+    // Dejamos que yt-dlp baje lo que encuentre y extraiga el audio a la fuerza.
     '-x',
     '--audio-format', 'mp3',
     '--audio-quality', '320K',
@@ -100,7 +98,6 @@ async function processQueue(chatId) {
       }, { quoted: job.msg });
     }
 
-    // 🔥 Una canción ha terminado (con éxito o error).
     warnedChats.delete(chatId);
 
     if (queue.length > 0) {
