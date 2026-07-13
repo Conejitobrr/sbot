@@ -47,26 +47,35 @@ async function searchYouTube(query) {
 async function downloadAudio(url, output) {
   const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
 
+  // 🔥 TRUCO VITAL: Le pasamos la ubicación exacta de Node.js a yt-dlp
+  // para que deje de estar ciego y pueda resolver las firmas de YouTube.
+  const nodeDir = path.dirname(process.execPath);
+  const customEnv = { ...process.env, PATH: `${process.env.PATH}:${nodeDir}` };
+
   await execFileAsync('yt-dlp', [
-    // 1. Evitar que descargue playlists completas por accidente
-    '--no-playlist',
+    // 1. Limpiamos la caché para borrar los errores de intentos anteriores
+    '--rm-cache-dir', 
     
-    // 2. Usar únicamente tus cookies (El Pase VIP real)
+    // 2. Usamos la API de Smart TVs que no tiene bloqueos molestos
+    '--extractor-args', 'youtube:player_client=tv,web', 
+    
+    '--no-playlist',
+    '--ignore-errors',
+    '--no-warnings',
+    
+    // 3. Tus cookies que ya validaron que eres humano
     '--cookies', cookiesPath,
 
-    // 3. Pedir específicamente el mejor formato de audio
     '-f', 'bestaudio/best',
-
-    // 4. Convertir a MP3
     '-x',
     '--audio-format', 'mp3',
     '--audio-quality', '320K',
 
-    // 5. Archivo de salida y enlace
     '-o', output,
     url
-  ]);
+  ], { env: customEnv }); // <- Aquí le inyectamos la vista de Node.js
 }
+
 
 function sanitizeFileName(name = 'audio') {
   return String(name)
