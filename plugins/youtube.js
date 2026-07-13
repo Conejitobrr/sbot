@@ -13,7 +13,6 @@ const TEMP_DIR = path.join(process.cwd(), 'temp');
 const QUEUE_DELAY = 2 * 60 * 1000;
 const queues = new Map();
 const processingChats = new Set();
-
 const warnedChats = new Map(); 
 
 function ensureTemp() {
@@ -32,9 +31,7 @@ function sleep(ms) {
 
 async function searchYouTube(query) {
   const res = await yts(query);
-
   if (!res.videos?.length) return null;
-
   return (
     res.videos.find(v =>
       v.url &&
@@ -47,35 +44,33 @@ async function searchYouTube(query) {
 async function downloadAudio(url, output) {
   const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
 
-  // 🔥 TRUCO VITAL: Le pasamos la ubicación exacta de Node.js a yt-dlp
-  // para que deje de estar ciego y pueda resolver las firmas de YouTube.
-  const nodeDir = path.dirname(process.execPath);
-  const customEnv = { ...process.env, PATH: `${process.env.PATH}:${nodeDir}` };
-
   await execFileAsync('yt-dlp', [
-    // 1. Limpiamos la caché para borrar los errores de intentos anteriores
-    '--rm-cache-dir', 
+    // 1. Limpiamos basura de intentos anteriores
+    '--rm-cache-dir',
     
-    // 2. Usamos la API de Smart TVs que no tiene bloqueos molestos
-    '--extractor-args', 'youtube:player_client=tv,web', 
+    // 2. PUERTA TRASERA: Usamos SOLO clientes móviles. Prohibido usar "web" o "tv".
+    '--extractor-args', 'youtube:player_client=ios,android',
     
     '--no-playlist',
     '--ignore-errors',
     '--no-warnings',
     
-    // 3. Tus cookies que ya validaron que eres humano
+    // 3. Tus cookies de PC para mantener la sesión viva
     '--cookies', cookiesPath,
 
-    '-f', 'bestaudio/best',
+    // 🔥 4. EL TRUCO FINAL: Pedimos el formato "b" (Video+Audio antiguo).
+    // YouTube no protege este formato con el rompecabezas JS.
+    '-f', 'b',
+    
+    // 5. Extraemos el audio a la fuerza de ese video
     '-x',
     '--audio-format', 'mp3',
-    '--audio-quality', '320K',
+    '--audio-quality', '192K', // 192K asegura que FFmpeg no falle por peso
 
     '-o', output,
     url
-  ], { env: customEnv }); // <- Aquí le inyectamos la vista de Node.js
+  ]);
 }
-
 
 function sanitizeFileName(name = 'audio') {
   return String(name)
@@ -86,27 +81,20 @@ function sanitizeFileName(name = 'audio') {
 
 async function processQueue(chatId) {
   if (processingChats.has(chatId)) return;
-
   processingChats.add(chatId);
-
   const queue = queues.get(chatId) || [];
 
   while (queue.length > 0) {
     const job = queue.shift();
-
     try {
       await handleDownload(job);
-
     } catch (err) {
       console.log('❌ Error en cola youtube/play:', err?.message || err);
-
       await job.sock.sendMessage(job.remoteJid, {
         text: '❌ Error al procesar esta canción.'
       }, { quoted: job.msg });
     }
-
     warnedChats.delete(chatId);
-
     if (queue.length > 0) {
       await sleep(QUEUE_DELAY);
     }
@@ -119,40 +107,31 @@ async function processQueue(chatId) {
 
 async function handleDownload(job) {
   const { sock, remoteJid, msg, query } = job;
-
   let file = null;
   let finalPath = null;
 
   try {
     ensureTemp();
-
     let url = query;
     let title = 'Audio de YouTube';
 
     if (!isYouTubeUrl(query)) {
       const video = await searchYouTube(query);
-
       if (!video) {
         return sock.sendMessage(remoteJid, {
           text: '❌ No se encontraron resultados.'
         }, { quoted: msg });
       }
-
       url = video.url;
       title = video.title || title;
     }
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-
-    file = path.join(
-      TEMP_DIR,
-      `yt_audio_${id}.%(ext)s`
-    );
+    file = path.join(TEMP_DIR, `yt_audio_${id}.%(ext)s`);
 
     await downloadAudio(url, file);
 
     const files = fs.readdirSync(TEMP_DIR);
-
     const downloaded = files.find(f =>
       f.startsWith(`yt_audio_${id}`) &&
       f.endsWith('.mp3')
@@ -165,12 +144,11 @@ async function handleDownload(job) {
     }
 
     finalPath = path.join(TEMP_DIR, downloaded);
-
     const sizeMB = fs.statSync(finalPath).size / 1024 / 1024;
 
     if (sizeMB > 95) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ El audio pesa demasiado para enviarlo por WhatsApp.'
+        text: '❌ El audio pesa demasiado.'
       }, { quoted: msg });
     }
 
@@ -199,30 +177,24 @@ module.exports = {
       }
 
       const query = args.join(' ').trim();
-
       if (!queues.has(remoteJid)) {
         queues.set(remoteJid, []);
       }
 
       const queue = queues.get(remoteJid);
       const isProcessing = processingChats.has(remoteJid);
-      
       const activeCount = queue.length + (isProcessing ? 1 : 0);
 
       if (activeCount >= 2) {
         if (!warnedChats.has(remoteJid)) {
           warnedChats.set(remoteJid, new Set());
         }
-        
         const warnedUsers = warnedChats.get(remoteJid);
-
-        if (warnedUsers.has(sender)) {
-          return; 
-        }
-
+        if (warnedUsers.has(sender)) return; 
+        
         warnedUsers.add(sender);
         return sock.sendMessage(remoteJid, {
-          text: `⚠️ *COLA LLENA*\n\n@${sender.split('@')[0]}, ya hay 2 canciones procesándose o en espera en este chat. Por favor, espera un momento a que se libere un espacio para pedir más.`,
+          text: `⚠️ *COLA LLENA*\n\n@${sender.split('@')[0]}, ya hay 2 canciones procesándose. Espera un momento.`,
           mentions: [sender]
         }, { quoted: msg });
       }
@@ -231,32 +203,19 @@ module.exports = {
       const waitMin = position === 0 ? 0 : position * 2;
 
       queue.push({
-        sock,
-        remoteJid,
-        args,
-        msg,
-        sender,
-        pushName: pushName || 'Usuario',
-        query
+        sock, remoteJid, args, msg, sender, pushName: pushName || 'Usuario', query
       });
 
       await sock.sendMessage(remoteJid, {
-        text:
-position === 0
+        text: position === 0
 ? `📥 *Canción añadida a la cola*
-
 👤 Pedido por: @${sender.split('@')[0]}
 🎶 Búsqueda: *${query}*
-
-⏳ Tu canción se procesará automáticamente.`
+⏳ Procesando...`
 : `📥 *Canción añadida a la cola*
-
 👤 Pedido por: @${sender.split('@')[0]}
 🎶 Búsqueda: *${query}*
-📌 Posición en cola: *#${position + 1}*
-
-⏳ Tu pedido se cargará automáticamente en *${waitMin} minuto(s)*.
-🚫 No necesitas volver a usar el comando.`,
+📌 Posición: *#${position + 1}*`,
         mentions: [sender]
       }, { quoted: msg });
 
@@ -264,13 +223,8 @@ position === 0
 
     } catch (err) {
       console.log('❌ Error en youtube/play:', err?.message || err);
-
       await sock.sendMessage(remoteJid, {
-        text:
-`❌ Error al descargar audio.
-
-📌 Prueba otra canción o link.
-📌 Verifica yt-dlp y ffmpeg.`
+        text: `❌ Error al descargar audio.`
       }, { quoted: msg });
     }
   }
