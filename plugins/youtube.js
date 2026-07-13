@@ -48,23 +48,21 @@ async function downloadAudio(url, output) {
   const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
 
   await execFileAsync('yt-dlp', [
-    // 🔥 EL TRUCO MAESTRO: Obligamos a yt-dlp a intentar con 3 APIs distintas de YouTube
-    '--extractor-args', 'youtube:player_client=ios,android,web',
-    
-    '--geo-bypass',
+    // 1. Evitar que descargue playlists completas por accidente
     '--no-playlist',
-    '--ignore-errors',
-    '--no-warnings',
     
-    // Tus cookies (que ya pasaron el sistema anti-bots)
+    // 2. Usar únicamente tus cookies (El Pase VIP real)
     '--cookies', cookiesPath,
 
-    // 🔥 BORRAMOS LA RESTRICCIÓN DE FORMATO. 
-    // Dejamos que yt-dlp baje lo que encuentre y extraiga el audio a la fuerza.
+    // 3. Pedir específicamente el mejor formato de audio
+    '-f', 'bestaudio/best',
+
+    // 4. Convertir a MP3
     '-x',
     '--audio-format', 'mp3',
     '--audio-quality', '320K',
 
+    // 5. Archivo de salida y enlace
     '-o', output,
     url
   ]);
