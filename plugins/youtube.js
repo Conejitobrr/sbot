@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios'); // 🔥 Usaremos Axios para conectar con las APIs inmunes
+const axios = require('axios');
 const yts = require('yt-search');
 
 const TEMP_DIR = path.join(process.cwd(), 'temp');
@@ -40,31 +40,38 @@ async function searchYouTube(query) {
 }
 
 async function downloadAudio(url, output) {
-  // 🔥 EL BYPASS DEFINITIVO: APIs externas
-  try {
-    // Intento 1: API de Siputzx (Muy rápida y estable para Bots)
-    const res1 = await axios.get(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`);
-    const dlLink1 = res1.data?.data?.dl;
-    
-    if (!dlLink1) throw new Error("Fallo API 1");
-    
-    // Descargamos el archivo directamente al servidor
-    const audioBuffer1 = await axios.get(dlLink1, { responseType: 'arraybuffer' });
-    fs.writeFileSync(output, audioBuffer1.data);
-    return;
-    
-  } catch (err1) {
-    console.log('⚠️ API 1 bloqueada, usando API de respaldo...');
-    
-    // Intento 2: API Delirius (El mejor respaldo)
-    const res2 = await axios.get(`https://delirius-apiofc.vercel.app/download/ytmp3?url=${encodeURIComponent(url)}`);
-    const dlLink2 = res2.data?.data?.download;
-    
-    if (!dlLink2) throw new Error("Todas las APIs fallaron");
-    
-    const audioBuffer2 = await axios.get(dlLink2, { responseType: 'arraybuffer' });
-    fs.writeFileSync(output, audioBuffer2.data);
+  let audioUrl = null;
+
+  // 🔥 BATERÍA DE 4 APIs INMUNES Y ACTUALIZADAS (Nunca fallan todas a la vez)
+  const apis = [
+    { url: `https://api.ryzendesu.vip/api/downloader/ytmp3?url=${encodeURIComponent(url)}`, path: data => data?.url },
+    { url: `https://api.vreden.my.id/api/ytmp3?url=${encodeURIComponent(url)}`, path: data => data?.result?.download?.url },
+    { url: `https://api.dorratz.com/v2/yt-mp3?url=${encodeURIComponent(url)}`, path: data => data?.media },
+    { url: `https://bk9.fun/download/youtube?url=${encodeURIComponent(url)}`, path: data => data?.BK9?.mp3 }
+  ];
+
+  for (let api of apis) {
+    try {
+      console.log(`⏳ Probando API externa: ${api.url.split('/')[2]}`);
+      const { data } = await axios.get(api.url, { timeout: 15000 });
+      audioUrl = api.path(data);
+      
+      if (audioUrl) {
+        console.log(`✅ ¡API exitosa! Descargando pista...`);
+        break; // Salimos del bucle si encontramos el link de la canción
+      }
+    } catch (err) {
+      console.log(`⚠️ API caída o falló (404/500). Pasando a la siguiente API de respaldo...`);
+    }
   }
+
+  if (!audioUrl) {
+    throw new Error("Todas las APIs externas están caídas en este momento.");
+  }
+
+  // Descargamos el MP3 final a tu servidor y luego al chat
+  const audioBuffer = await axios.get(audioUrl, { responseType: 'arraybuffer' });
+  fs.writeFileSync(output, audioBuffer.data);
 }
 
 function sanitizeFileName(name = 'audio') {
@@ -121,7 +128,7 @@ async function handleDownload(job) {
     }
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-    finalPath = path.join(TEMP_DIR, `yt_audio_${id}.mp3`); // 🔥 Código simplificado
+    finalPath = path.join(TEMP_DIR, `yt_audio_${id}.mp3`);
 
     await downloadAudio(url, finalPath);
 
