@@ -2,11 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
+const axios = require('axios'); // 🔥 Usaremos Axios para conectar con las APIs inmunes
 const yts = require('yt-search');
 
-const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
 // ⏳ COLA POR CHAT: 1 canción cada 2 minutos
@@ -42,34 +40,31 @@ async function searchYouTube(query) {
 }
 
 async function downloadAudio(url, output) {
-  const cookiesPath = path.join(process.cwd(), 'youtube.com_cookies.txt');
-
-  await execFileAsync('yt-dlp', [
-    // 1. Limpiamos basura de intentos anteriores
-    '--rm-cache-dir',
+  // 🔥 EL BYPASS DEFINITIVO: APIs externas
+  try {
+    // Intento 1: API de Siputzx (Muy rápida y estable para Bots)
+    const res1 = await axios.get(`https://api.siputzx.my.id/api/d/ytmp3?url=${encodeURIComponent(url)}`);
+    const dlLink1 = res1.data?.data?.dl;
     
-    // 2. PUERTA TRASERA: Usamos SOLO clientes móviles. Prohibido usar "web" o "tv".
-    '--extractor-args', 'youtube:player_client=ios,android',
+    if (!dlLink1) throw new Error("Fallo API 1");
     
-    '--no-playlist',
-    '--ignore-errors',
-    '--no-warnings',
+    // Descargamos el archivo directamente al servidor
+    const audioBuffer1 = await axios.get(dlLink1, { responseType: 'arraybuffer' });
+    fs.writeFileSync(output, audioBuffer1.data);
+    return;
     
-    // 3. Tus cookies de PC para mantener la sesión viva
-    '--cookies', cookiesPath,
-
-    // 🔥 4. EL TRUCO FINAL: Pedimos el formato "b" (Video+Audio antiguo).
-    // YouTube no protege este formato con el rompecabezas JS.
-    '-f', 'b',
+  } catch (err1) {
+    console.log('⚠️ API 1 bloqueada, usando API de respaldo...');
     
-    // 5. Extraemos el audio a la fuerza de ese video
-    '-x',
-    '--audio-format', 'mp3',
-    '--audio-quality', '192K', // 192K asegura que FFmpeg no falle por peso
-
-    '-o', output,
-    url
-  ]);
+    // Intento 2: API Delirius (El mejor respaldo)
+    const res2 = await axios.get(`https://delirius-apiofc.vercel.app/download/ytmp3?url=${encodeURIComponent(url)}`);
+    const dlLink2 = res2.data?.data?.download;
+    
+    if (!dlLink2) throw new Error("Todas las APIs fallaron");
+    
+    const audioBuffer2 = await axios.get(dlLink2, { responseType: 'arraybuffer' });
+    fs.writeFileSync(output, audioBuffer2.data);
+  }
 }
 
 function sanitizeFileName(name = 'audio') {
@@ -107,7 +102,6 @@ async function processQueue(chatId) {
 
 async function handleDownload(job) {
   const { sock, remoteJid, msg, query } = job;
-  let file = null;
   let finalPath = null;
 
   try {
@@ -127,23 +121,16 @@ async function handleDownload(job) {
     }
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-    file = path.join(TEMP_DIR, `yt_audio_${id}.%(ext)s`);
+    finalPath = path.join(TEMP_DIR, `yt_audio_${id}.mp3`); // 🔥 Código simplificado
 
-    await downloadAudio(url, file);
+    await downloadAudio(url, finalPath);
 
-    const files = fs.readdirSync(TEMP_DIR);
-    const downloaded = files.find(f =>
-      f.startsWith(`yt_audio_${id}`) &&
-      f.endsWith('.mp3')
-    );
-
-    if (!downloaded) {
+    if (!fs.existsSync(finalPath)) {
       return sock.sendMessage(remoteJid, {
         text: '❌ No se pudo descargar el audio.'
       }, { quoted: msg });
     }
 
-    finalPath = path.join(TEMP_DIR, downloaded);
     const sizeMB = fs.statSync(finalPath).size / 1024 / 1024;
 
     if (sizeMB > 95) {
