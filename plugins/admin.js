@@ -19,28 +19,17 @@ function cleanJid(jid = '') {
 }
 
 function number(jid = '') {
-  return cleanJid(jid)
-    .split('@')[0]
-    .replace(/\D/g, '');
+  return cleanJid(jid).split('@')[0].replace(/\D/g, '');
 }
 
 function cleanName(name = '') {
-  return String(name || '')
-    .replace(/\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 40);
+  return String(name || '').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
 }
 
 function isOwnerUser(jid = '') {
   const num = number(jid);
-  const owners = Array.isArray(config.owner)
-    ? config.owner.map(n => String(n).replace(/\D/g, ''))
-    : [];
-  const rowners = Array.isArray(config.rowner)
-    ? config.rowner.map(n => String(n).replace(/\D/g, ''))
-    : [];
-  return owners.includes(num) || rowners.includes(num);
+  const owners = Array.isArray(config.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
+  return owners.includes(num);
 }
 
 function isBotTarget(ctx, target = {}) {
@@ -64,22 +53,12 @@ function getProtectedReason(ctx, target = {}) {
 }
 
 function getContextInfo(msg = {}) {
-  return (
-    msg.message?.extendedTextMessage?.contextInfo ||
-    msg.message?.imageMessage?.contextInfo ||
-    msg.message?.videoMessage?.contextInfo ||
-    msg.message?.audioMessage?.contextInfo ||
-    msg.message?.documentMessage?.contextInfo ||
-    msg.message?.stickerMessage?.contextInfo ||
-    null
-  );
+  return msg.message?.extendedTextMessage?.contextInfo || msg.message?.imageMessage?.contextInfo || msg.message?.videoMessage?.contextInfo || msg.message?.documentMessage?.contextInfo || null;
 }
 
 function getMentionedJids(msg = {}) {
   const ctx = getContextInfo(msg);
-  return Array.isArray(ctx?.mentionedJid)
-    ? ctx.mentionedJid.map(cleanJid).filter(Boolean)
-    : [];
+  return Array.isArray(ctx?.mentionedJid) ? ctx.mentionedJid.map(cleanJid).filter(Boolean) : [];
 }
 
 function getQuotedParticipant(msg = {}) {
@@ -94,25 +73,11 @@ function jidFromNumber(text = '') {
 }
 
 function getParticipantIds(participant = {}) {
-  return [
-    participant.id,
-    participant.jid,
-    participant.participant,
-    participant.lid
-  ]
-    .filter(Boolean)
-    .map(cleanJid)
-    .filter(Boolean);
+  return [participant.id, participant.jid, participant.participant, participant.lid].filter(Boolean).map(cleanJid).filter(Boolean);
 }
 
 function getParticipantLabel(participant = {}, fallbackJid = '') {
-  const name = cleanName(
-    participant.name ||
-    participant.notify ||
-    participant.verifiedName ||
-    participant.pushName ||
-    ''
-  );
+  const name = cleanName(participant.name || participant.notify || participant.pushName || '');
   if (name) return `@${name}`;
   const num = number(fallbackJid);
   return num ? `@${num}` : '@usuario';
@@ -120,13 +85,9 @@ function getParticipantLabel(participant = {}, fallbackJid = '') {
 
 function loadWarns() {
   try {
-    const dir = path.dirname(WARN_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     if (!fs.existsSync(WARN_FILE)) fs.writeFileSync(WARN_FILE, JSON.stringify({}, null, 2));
     return JSON.parse(fs.readFileSync(WARN_FILE, 'utf8'));
-  } catch {
-    return {};
-  }
+  } catch { return {}; }
 }
 
 function saveWarns(data) {
@@ -142,13 +103,8 @@ function setWarnCount(groupId, userJid, count, reason = '') {
   const data = loadWarns();
   if (!data[groupId]) data[groupId] = {};
   if (!data[groupId][userJid]) data[groupId][userJid] = { count: 0, reasons: [] };
-
   data[groupId][userJid].count = Math.max(0, Number(count || 0));
-
-  if (reason) {
-    data[groupId][userJid].reasons.push({ reason, time: Date.now() });
-  }
-
+  if (reason) data[groupId][userJid].reasons.push({ reason, time: Date.now() });
   if (data[groupId][userJid].count <= 0) delete data[groupId][userJid];
   saveWarns(data);
   return data?.[groupId]?.[userJid]?.count || 0;
@@ -177,11 +133,7 @@ function findParticipant(metadata, jid = '') {
   if (!metadata?.participants?.length) return null;
   const clean = cleanJid(jid);
   const num = number(clean);
-
-  return metadata.participants.find(p => {
-    const ids = getParticipantIds(p);
-    return ids.some(id => (id === clean || number(id) === num));
-  }) || null;
+  return metadata.participants.find(p => getParticipantIds(p).some(id => id === clean || number(id) === num)) || null;
 }
 
 function resolveTarget(rawJid = '', metadata = null) {
@@ -194,52 +146,31 @@ function resolveTarget(rawJid = '', metadata = null) {
     if (num) ids.push(`${num}@s.whatsapp.net`);
     const uniqueIds = [...new Set(ids.map(cleanJid).filter(Boolean))];
     const jid = uniqueIds[0];
-    return {
-      jid,
-      ids: uniqueIds,
-      label: getParticipantLabel(participant, jid),
-      number: number(jid)
-    };
+    return { jid, ids: uniqueIds, label: getParticipantLabel(participant, jid), number: number(jid) };
   }
 
   const ids = [clean];
   if (num) ids.push(`${num}@s.whatsapp.net`);
   const uniqueIds = [...new Set(ids.map(cleanJid).filter(Boolean))];
-
-  return {
-    jid: uniqueIds[0],
-    ids: uniqueIds,
-    label: num ? `@${num}` : '@usuario',
-    number: num
-  };
+  return { jid: uniqueIds[0], ids: uniqueIds, label: num ? `@${num}` : '@usuario', number: num };
 }
 
-// 🔥 AQUÍ ESTÁ EL ARREGLO FINAL PARA LOS ADMINS 🔥
-// Ahora lee la variable `isBotAdmin` y `isAdmin` directamente de tu handler
+// 🔥 BYPASS ABSOLUTO DE CACHÉ 🔥
 async function requireBotAdmin(ctx) {
-  if (ctx.isBotAdmin) return true;
-
-  await ctx.sock.sendMessage(ctx.remoteJid, {
-    text: '❌ El bot necesita ser admin para hacer eso.'
-  }, { quoted: ctx.msg });
-  return false;
+  // Ignoramos la memoria del bot. Dejamos pasar el comando SIEMPRE.
+  // WhatsApp real decidirá si funciona o tira error.
+  return true; 
 }
 
 async function requireAdminOrOwner(ctx) {
   if (ctx.isOwner || ctx.isAdmin) return true;
-
-  await ctx.sock.sendMessage(ctx.remoteJid, {
-    text: '❌ Solo admins del grupo o el creador pueden usar este comando.'
-  }, { quoted: ctx.msg });
+  await ctx.sock.sendMessage(ctx.remoteJid, { text: '❌ Solo admins del grupo o el creador pueden usar este comando.' }, { quoted: ctx.msg });
   return false;
 }
 
 async function requireGroup(ctx) {
   if (ctx.fromGroup) return true;
-
-  await ctx.sock.sendMessage(ctx.remoteJid, {
-    text: '❌ Este comando solo funciona en grupos.'
-  }, { quoted: ctx.msg });
+  await ctx.sock.sendMessage(ctx.remoteJid, { text: '❌ Este comando solo funciona en grupos.' }, { quoted: ctx.msg });
   return false;
 }
 
@@ -255,8 +186,7 @@ async function getTargets(ctx) {
 
   for (const arg of args || []) {
     const value = String(arg || '').trim();
-    if (!value) continue;
-    if (value.startsWith('@') && mentioned.length > 0) continue;
+    if (!value || (value.startsWith('@') && mentioned.length > 0)) continue;
     const jid = jidFromNumber(value);
     if (jid) rawTargets.push(jid);
   }
@@ -332,7 +262,7 @@ module.exports = {
   ],
 
   async onMessage(ctx) {
-    const { sock, msg, remoteJid, body, fromGroup, isOwner, isAdmin, isBotAdmin } = ctx;
+    const { sock, msg, remoteJid, body, fromGroup, isOwner, isAdmin } = ctx;
     const db = ctx.db || dbGlobal;
 
     try {
@@ -344,22 +274,14 @@ module.exports = {
       if (!containsLink(text)) return;
       if (isOwner || isAdmin) return; 
 
-      if (isBotAdmin) { 
-        try { await sock.sendMessage(remoteJid, { delete: msg.key }); } catch {}
-      }
+      // Intentar borrar enlace a la fuerza (si falla, no pasa nada)
+      try { await sock.sendMessage(remoteJid, { delete: msg.key }); } catch {}
 
       const metadata = await getFreshMetadata(sock, remoteJid, ctx.groupMetadata);
       const target = resolveTarget(ctx.sender, metadata);
       const count = await warnUser(sock, remoteJid, target, 'Enviar enlaces de otros grupos', msg);
 
       if (count >= MAX_WARN) {
-        if (!isBotAdmin) {
-          return sock.sendMessage(remoteJid, {
-            text: `⚠️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero no puedo expulsarlo porque no soy admin.`,
-            mentions: [target.jid]
-          });
-        }
-
         if (isProtectedTarget(ctx, target)) {
           resetWarn(remoteJid, target.jid);
           return sock.sendMessage(remoteJid, {
@@ -368,17 +290,15 @@ module.exports = {
           });
         }
 
-        await groupUpdateTargets(sock, remoteJid, [target], 'remove');
-        resetWarn(remoteJid, target.jid);
-
-        return sock.sendMessage(remoteJid, {
-          text: `🚫 Usuario expulsado por llegar a *${MAX_WARN}* advertencias.\n\n👤 ${target.label}`,
-          mentions: [target.jid]
-        });
+        try {
+          await groupUpdateTargets(sock, remoteJid, [target], 'remove');
+          resetWarn(remoteJid, target.jid);
+          return sock.sendMessage(remoteJid, { text: `🚫 Usuario expulsado por llegar a *${MAX_WARN}* advertencias.\n\n👤 ${target.label}`, mentions: [target.jid] });
+        } catch (err) {
+          return sock.sendMessage(remoteJid, { text: `⚠️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero WhatsApp me rechazó la expulsión. ¿Seguro que tengo rol de Administrador?`, mentions: [target.jid] });
+        }
       }
-    } catch (err) {
-      console.log('❌ Error en antilink:', err?.message || err);
-    }
+    } catch (err) {}
   },
 
   async execute(ctx) {
@@ -391,84 +311,51 @@ module.exports = {
 
       if (cmd === 'antilink') {
         if (!(await requireAdminOrOwner(ctx))) return;
-
         const option = String(args?.[0] || '').toLowerCase();
         if (!option) {
           const enabled = await db.getGroupSetting(remoteJid, 'antilink');
-          return sock.sendMessage(remoteJid, {
-            text: `🛡️ *ANTILINK*\n\nEstado: *${enabled === true ? 'Activado ✅' : 'Desactivado ❌'}*\n\nUso:\n.antilink on\n.antilink off`
-          }, { quoted: msg });
+          return sock.sendMessage(remoteJid, { text: `🛡️ *ANTILINK*\n\nEstado: *${enabled === true ? 'Activado ✅' : 'Desactivado ❌'}*\n\nUso:\n.antilink on\n.antilink off` }, { quoted: msg });
         }
-
-        if (!['on', 'off'].includes(option)) {
-          return sock.sendMessage(remoteJid, { text: '❌ Usa:\n.antilink on\n.antilink off' }, { quoted: msg });
-        }
-
+        if (!['on', 'off'].includes(option)) return sock.sendMessage(remoteJid, { text: '❌ Usa:\n.antilink on\n.antilink off' }, { quoted: msg });
         await db.setGroupSetting(remoteJid, 'antilink', option === 'on');
-        return sock.sendMessage(remoteJid, {
-          text: option === 'on' ? '✅ Antilink activado.' : '✅ Antilink desactivado.'
-        }, { quoted: msg });
+        return sock.sendMessage(remoteJid, { text: option === 'on' ? '✅ Antilink activado.' : '✅ Antilink desactivado.' }, { quoted: msg });
       }
 
       if (!(await requireAdminOrOwner(ctx))) return;
 
-      if (['kick', 'promote', 'demote', 'revoke', 'abrirgrupo', 'cerrargrupo'].includes(cmd)) {
-        if (!(await requireBotAdmin(ctx))) return;
-      }
-
       if (cmd === 'kick') {
         const targets = await getTargets(ctx);
-        if (!targets.length) {
-          return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número.' }, { quoted: msg });
-        }
-
+        if (!targets.length) return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número.' }, { quoted: msg });
         const protectedTargets = targets.filter(t => isProtectedTarget(ctx, t));
         const allowedTargets = targets.filter(t => !isProtectedTarget(ctx, t));
-
         if (protectedTargets.length) {
-          await sendSafe(sock, remoteJid, {
-            text: `🛡️ No puedo expulsar a:\n${protectedTargets.map(t => `• ${t.label} (${getProtectedReason(ctx, t)})`).join('\n')}`,
-            mentions: protectedTargets.map(t => t.jid)
-          }, { quoted: msg });
+          await sendSafe(sock, remoteJid, { text: `🛡️ No puedo expulsar a:\n${protectedTargets.map(t => `• ${t.label} (${getProtectedReason(ctx, t)})`).join('\n')}`, mentions: protectedTargets.map(t => t.jid) }, { quoted: msg });
         }
-
         if (!allowedTargets.length) return;
 
         await groupUpdateTargets(sock, remoteJid, allowedTargets, 'remove');
-        return sendSafe(sock, remoteJid, {
-          text: `✅ Usuario(s) expulsado(s): ${allowedTargets.map(t => t.label).join(', ')}`,
-          mentions: allowedTargets.map(t => t.jid)
-        }, { quoted: msg });
+        return sendSafe(sock, remoteJid, { text: `✅ Usuario(s) expulsado(s): ${allowedTargets.map(t => t.label).join(', ')}`, mentions: allowedTargets.map(t => t.jid) }, { quoted: msg });
       }
 
       if (cmd === 'promote') {
         const targets = await getTargets(ctx);
-        if (!targets.length) {
-          return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número del usuario.' }, { quoted: msg });
-        }
+        if (!targets.length) return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número del usuario.' }, { quoted: msg });
+        
         await groupUpdateTargets(sock, remoteJid, targets, 'promote');
-        return sendSafe(sock, remoteJid, {
-          text: `✅ Admin otorgado a: ${targets.map(t => t.label).join(', ')}`,
-          mentions: targets.map(t => t.jid)
-        }, { quoted: msg });
+        return sendSafe(sock, remoteJid, { text: `✅ Admin otorgado a: ${targets.map(t => t.label).join(', ')}`, mentions: targets.map(t => t.jid) }, { quoted: msg });
       }
 
       if (cmd === 'demote') {
         const targets = await getTargets(ctx);
-        if (!targets.length) {
-          return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número del usuario.' }, { quoted: msg });
-        }
+        if (!targets.length) return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número del usuario.' }, { quoted: msg });
+        
         await groupUpdateTargets(sock, remoteJid, targets, 'demote');
-        return sendSafe(sock, remoteJid, {
-          text: `✅ Admin removido a: ${targets.map(t => t.label).join(', ')}`,
-          mentions: targets.map(t => t.jid)
-        }, { quoted: msg });
+        return sendSafe(sock, remoteJid, { text: `✅ Admin removido a: ${targets.map(t => t.label).join(', ')}`, mentions: targets.map(t => t.jid) }, { quoted: msg });
       }
 
       if (cmd === 'revoke') {
         let code = '';
-        try { code = await sock.groupRevokeInvite(remoteJid); } 
-        catch { code = await sock.groupInviteCode(remoteJid); }
+        try { code = await sock.groupRevokeInvite(remoteJid); } catch { code = await sock.groupInviteCode(remoteJid); }
         return sock.sendMessage(remoteJid, { text: `✅ *Link del grupo reiniciado*\n\n🔗 Nuevo link:\nhttps://chat.whatsapp.com/${code}` }, { quoted: msg });
       }
 
@@ -485,28 +372,21 @@ module.exports = {
       if (cmd === 'warn') {
         const targets = await getTargets(ctx);
         if (!targets.length) return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número.\nEjemplo: .warn @usuario spam' }, { quoted: msg });
-
-        const reason = (args || []).filter(a => {
-          const v = String(a || '').trim();
-          if (!v || v.startsWith('@') || /^\+?\d{6,}$/.test(v.replace(/\s+/g, ''))) return false;
-          return true;
-        }).join(' ').trim();
-
+        const reason = (args || []).filter(a => { const v = String(a || '').trim(); return v && !v.startsWith('@') && !/^\+?\d{6,}$/.test(v.replace(/\s+/g, '')); }).join(' ').trim();
         for (const target of targets) {
           const count = await warnUser(sock, remoteJid, target, reason || 'Advertencia manual', msg);
-
           if (count >= MAX_WARN) {
             if (isProtectedTarget(ctx, target)) {
               resetWarn(remoteJid, target.jid);
               await sendSafe(sock, remoteJid, { text: `🛡️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero no puede ser expulsado porque es ${getProtectedReason(ctx, target)}.`, mentions: [target.jid] }, { quoted: msg });
               continue;
             }
-            if (ctx.isBotAdmin) {
+            try {
               await groupUpdateTargets(sock, remoteJid, [target], 'remove');
               resetWarn(remoteJid, target.jid);
               await sendSafe(sock, remoteJid, { text: `🚫 ${target.label} fue expulsado por llegar a *${MAX_WARN}* advertencias.`, mentions: [target.jid] }, { quoted: msg });
-            } else {
-              await sendSafe(sock, remoteJid, { text: `⚠️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero no puedo expulsarlo porque no soy admin.`, mentions: [target.jid] }, { quoted: msg });
+            } catch (e) {
+              await sendSafe(sock, remoteJid, { text: `⚠️ ${target.label} llegó a *${MAX_WARN}/${MAX_WARN}* warns, pero WhatsApp me rechazó la expulsión. ¿Seguro que soy admin?`, mentions: [target.jid] }, { quoted: msg });
             }
           }
         }
@@ -520,4 +400,31 @@ module.exports = {
           const current = getWarnCount(remoteJid, target.jid);
           setWarnCount(remoteJid, target.jid, Math.max(0, current - 1));
         }
-        return sendSafe(sock, remoteJid, { text:
+        return sendSafe(sock, remoteJid, { text: `✅ Se quitó 1 warn a: ${targets.map(t => t.label).join(', ')}`, mentions: targets.map(t => t.jid) }, { quoted: msg });
+      }
+
+      if (cmd === 'resetwarn') {
+        const targets = await getTargets(ctx);
+        if (!targets.length) return sock.sendMessage(remoteJid, { text: '❌ Responde, menciona o escribe el número del usuario.' }, { quoted: msg });
+        for (const target of targets) resetWarn(remoteJid, target.jid);
+        return sendSafe(sock, remoteJid, { text: `✅ Warns reiniciados para: ${targets.map(t => t.label).join(', ')}`, mentions: targets.map(t => t.jid) }, { quoted: msg });
+      }
+
+      if (cmd === 'warnings' || cmd === 'warns') {
+        const metadata = await getFreshMetadata(sock, remoteJid, groupMetadata);
+        const warns = getGroupWarns(remoteJid);
+        const entries = Object.entries(warns).filter(([, data]) => Number(data?.count || 0) > 0).sort((a, b) => Number(b[1].count || 0) - Number(a[1].count || 0));
+        if (!entries.length) return sock.sendMessage(remoteJid, { text: '✅ No hay usuarios con advertencias en este grupo.' }, { quoted: msg });
+        const mentions = entries.map(([jid]) => resolveTarget(jid, metadata).jid);
+        const list = entries.map(([jid, data], i) => `${i + 1}. ${resolveTarget(jid, metadata).label} — *${data.count}/${MAX_WARN}*`).join('\n');
+        return sock.sendMessage(remoteJid, { text: `⚠️ *WARNINGS DEL GRUPO*\n\n${list}`, mentions }, { quoted: msg });
+      }
+
+    } catch (err) {
+      console.log(`❌ Error en comando admin (${cmd}):`, err?.message || err);
+      return sock.sendMessage(remoteJid, {
+        text: '❌ WhatsApp rechazó la acción. Asegúrate de que el bot tenga el rol de *Administrador* en el grupo.'
+      }, { quoted: msg });
+    }
+  }
+};
