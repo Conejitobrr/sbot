@@ -155,7 +155,6 @@ module.exports = {
 ➤ *${p}tovideo* → Sticker a video
 ➤ *${p}attp* → Texto animado a sticker
 ➤ *${p}letra* → Letra de canciones
-➤ *${p}toanime* → Estilo anime
 ➤ *${p}filtro* → Filtros de voz
 ➤ *${p}tts* → Texto a voz
 ➤ *${p}audios* → Audios divertidos
