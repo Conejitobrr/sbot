@@ -475,16 +475,23 @@ async function messageHandler(sock, msg, store = {}) {
     let chatName = 'Chat Privado';
     let chatLabel = chalk.blue('PRIVADO');
 
+    // 🔥 MODIFICACIÓN QUIRÚRGICA: LÓGICA DE ADMINS CORREGIDA 🔥
     if (fromGroup) {
       chatLabel = chalk.magenta('GRUPO');
       groupMetadata = await safeGroupMetadata(sock, remoteJid);
       chatName = groupMetadata?.subject || 'Grupo';
 
-      try {
-        groupAdmins = await getGroupAdmins(sock, remoteJid);
-        isAdmin = groupAdmins.includes(sender);
-        isBotAdmin = groupAdmins.includes(botJid);
-      } catch {}
+      if (groupMetadata && Array.isArray(groupMetadata.participants)) {
+        const senderNum = cleanNumber(sender);
+        const botNum = cleanNumber(sock.user?.id || botJid);
+
+        // Filtramos y limpiamos a todos los admins
+        const admins = groupMetadata.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin');
+        groupAdmins = admins.map(p => p.id);
+
+        isAdmin = admins.some(p => cleanNumber(p.id) === senderNum);
+        isBotAdmin = admins.some(p => cleanNumber(p.id) === botNum);
+      }
     }
 
     const ownerNumbers = Array.isArray(config.owner)
@@ -510,6 +517,13 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.white('║ 👤 Nombre :'), chalk.green(pushName));
       console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number ? `+${number}` : 'Desconocido'));
       console.log(chalk.white('║ 👑 Owner  :'), chalk.yellow(isOwner ? 'Sí' : 'No'));
+      
+      // 🔥 MODIFICACIÓN QUIRÚRGICA: CONSOLA DE ADMINS 🔥
+      if (fromGroup) {
+        console.log(chalk.white('║ 👮 Admin  :'), chalk.yellow(isAdmin ? 'Sí' : 'No'));
+        console.log(chalk.white('║ 🤖 BotAdm :'), chalk.yellow(isBotAdmin ? 'Sí' : 'No'));
+      }
+
       console.log(chalk.white('║ 💬 Msg    :'), chalk.white(String(displayMsg).slice(0, 300)));
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
