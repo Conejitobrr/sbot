@@ -40,6 +40,8 @@ module.exports = {
 ➤ *${p}perfil* → Ver tu perfil
 ➤ *${p}grupobot* → Únete al grupo oficial
 ➤ *${p}infobot* → Información del bot
+➤ *${p}reportar* [error] → Reporta un bug al creador
+➤ *${p}contacto* → Contactar con el desarrollador
 ➤ *${p}donar* → Apoya al creador
 ➤ *${p}clima* [ciudad] → Ver clima actual
 
@@ -127,8 +129,10 @@ module.exports = {
 ➤ *${p}topgays* → Top más gays del grupo
 
 ━━━━━━━━━━━━━━━━━━━
-🤡 *CALCULADOR RANDOM*
+🤡 *CALCULADOR Y BROMAS*
 ━━━━━━━━━━━━━━━━━━━
+➤ *${p}chisme* → Revela un chisme inventado
+➤ *${p}funar* @user → Funa a alguien públicamente
 ➤ *${p}calculador* [texto] → Mide lo que sea
 ➤ *${p}gay* / *${p}lesbiana* / *${p}gay2*
 ➤ *${p}pajero* / *${p}pajera*
@@ -155,6 +159,7 @@ module.exports = {
 ➤ *${p}tovideo* → Sticker a video
 ➤ *${p}attp* → Texto animado a sticker
 ➤ *${p}letra* → Letra de canciones
+➤ *${p}toanime* → Estilo anime
 ➤ *${p}filtro* → Filtros de voz
 ➤ *${p}tts* → Texto a voz
 ➤ *${p}audios* → Audios divertidos
@@ -165,6 +170,7 @@ module.exports = {
 ━━━━━━━━━━━━━━━━━━━
 🛡️ *ADMINISTRADORES*
 ━━━━━━━━━━━━━━━━━━━
+➤ *${p}mutear* @user → Borra sus msjs aut.
 ➤ *${p}antilink* on/off → Bloqueo de links
 ➤ *${p}abrirgrupo* / *${p}cerrargrupo*
 ➤ *${p}linkgrupo* → Link del chat
