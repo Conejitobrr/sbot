@@ -15,11 +15,11 @@ try {
 const execFileAsync = promisify(execFile);
 const TEMP_DIR = path.join(process.cwd(), 'temp');
 
-// ⏳ COLA POR CHAT: 1 video cada 2 minutos (para evitar saturar el servidor)
+// ⏳ COLA POR CHAT: 1 video cada 2 minutos
 const QUEUE_DELAY = 2 * 60 * 1000; 
 const queues = new Map();
 const processingChats = new Set();
-const warnedChats = new Map(); // 🔥 CONTROL DE AVISOS
+const warnedChats = new Map();
 
 function ensureTemp() {
   if (!fs.existsSync(TEMP_DIR)) {
@@ -35,12 +35,9 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// 🔥 BÚSQUEDA MEJORADA
 async function searchVideo(query) {
   const res = await yts(query);
-
   if (!res.videos?.length) return null;
-
   return (
     res.videos.find(v =>
       v.url &&
@@ -50,16 +47,18 @@ async function searchVideo(query) {
   );
 }
 
-// 🔥 DESCARGA MEJORADA PARA YOUTUBE
+// 🔥 DESCARGA CON EL VPN INYECTADO
 async function downloadVideo(url, output) {
   await execFileAsync('yt-dlp', [
-    '--extractor-args', 'youtube:player_client=android',
+    // Usamos el túnel VPN que ya tienes encendido en el puerto 40000
+    '--proxy', 'socks5://127.0.0.1:40000', 
+    
     '--geo-bypass',
-    '--force-ipv4',
     '--no-playlist',
     '--ignore-errors',
     '--no-warnings',
 
+    // Buscamos un video ligero y decente para WhatsApp
     '-f', 'bv*[height<=480]+ba/best[height<=480]/best[height<=480]/best',
     '--merge-output-format', 'mp4',
 
@@ -68,13 +67,19 @@ async function downloadVideo(url, output) {
   ]);
 }
 
+// 🔥 CONVERSIÓN BLINDADA PARA PROTEGER TU JUEGO
 async function convertVideo(input, output) {
   await execFileAsync('ffmpeg', [
     '-y',
     '-i', input,
+    
+    // TRUCO EXPERTO: Obligamos a ffmpeg a usar solo 1 núcleo de tus 4.
+    // Así tu juego no sentirá absolutamente nada de lag.
+    '-threads', '1', 
+    
     '-c:v', 'libx264',
     '-c:a', 'aac',
-    '-preset', 'veryfast',
+    '-preset', 'fast',
     '-crf', '28',
     output
   ]);
@@ -85,7 +90,6 @@ async function convertVideo(input, output) {
 // ==========================================
 async function processQueue(chatId) {
   if (processingChats.has(chatId)) return;
-
   processingChats.add(chatId);
 
   const queue = queues.get(chatId) || [];
@@ -97,16 +101,13 @@ async function processQueue(chatId) {
       await handleDownload(job);
     } catch (err) {
       console.log('❌ Error en cola ytmp4:', err?.message || err);
-
       await job.sock.sendMessage(job.remoteJid, {
         text: '❌ Error al procesar este video.'
       }, { quoted: job.msg });
     }
 
-    // Se liberó un espacio, permitimos que la gente vuelva a pedir
     warnedChats.delete(chatId);
 
-    // Esperar un poco antes de procesar el siguiente para no saturar la RAM
     if (queue.length > 0) {
       await sleep(QUEUE_DELAY);
     }
@@ -122,13 +123,11 @@ async function processQueue(chatId) {
 // ==========================================
 async function handleDownload(job) {
   const { sock, remoteJid, msg, sender, query } = job;
-
   let downloadedPath = null;
   let finalFile = null;
 
   try {
     ensureTemp();
-
     let url = query;
     let title = 'Video de YouTube';
     let duration = '';
@@ -151,11 +150,11 @@ async function handleDownload(job) {
       duration = video.timestamp || '';
 
       await sock.sendMessage(remoteJid, {
-        text: `🎬 *${title}*\n⏱️ ${duration || 'Desconocido'}\n\n⏳ Descargando y convirtiendo (esto puede demorar)...`
+        text: `🎬 *${title}*\n⏱️ ${duration || 'Desconocido'}\n\n⏳ Descargando y convirtiendo (esto puede demorar un poco)...`
       }, { quoted: msg });
     } else {
       await sock.sendMessage(remoteJid, {
-        text: '⏳ Descargando video (esto puede demorar)...'
+        text: '⏳ Descargando video...'
       }, { quoted: msg });
     }
 
@@ -166,32 +165,25 @@ async function handleDownload(job) {
     }
 
     const id = `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-
     const rawFilePattern = path.join(TEMP_DIR, `yt_raw_${id}.%(ext)s`);
     finalFile = path.join(TEMP_DIR, `yt_final_${id}.mp4`);
 
     await downloadVideo(url, rawFilePattern);
 
-    // 🔥 BUSCAR ARCHIVO REAL DESCARGADO
     const downloaded = fs.readdirSync(TEMP_DIR).find(f =>
       f.startsWith(`yt_raw_${id}`) &&
-      (
-        f.endsWith('.mp4') ||
-        f.endsWith('.webm') ||
-        f.endsWith('.mkv') ||
-        f.endsWith('.m4a')
-      )
+      (f.endsWith('.mp4') || f.endsWith('.webm') || f.endsWith('.mkv') || f.endsWith('.m4a'))
     );
 
     if (!downloaded) {
       return sock.sendMessage(remoteJid, {
-        text: '❌ No se pudo descargar el video.'
+        text: '❌ No se pudo descargar el video a través del VPN.'
       }, { quoted: msg });
     }
 
     downloadedPath = path.join(TEMP_DIR, downloaded);
 
-    // Convertir a un formato ligero para WhatsApp
+    // Convertimos usando 1 solo núcleo para proteger el juego
     await convertVideo(downloadedPath, finalFile);
 
     if (!fs.existsSync(finalFile)) {
@@ -202,7 +194,7 @@ async function handleDownload(job) {
 
     const sizeMB = fs.statSync(finalFile).size / 1024 / 1024;
 
-    if (sizeMB > 30) {
+    if (sizeMB > 45) {
       return sock.sendMessage(remoteJid, {
         text: `⚠️ Video muy pesado (${sizeMB.toFixed(1)} MB). Límite de WhatsApp superado.`
       }, { quoted: msg });
@@ -223,7 +215,6 @@ async function handleDownload(job) {
     await db.addXP(sender, xp);
 
   } finally {
-    // 🧹 LIMPIEZA ABSOLUTA DE ARCHIVOS TEMPORALES
     for (const file of [downloadedPath, finalFile]) {
       try {
         if (file && fs.existsSync(file)) fs.unlinkSync(file);
@@ -245,7 +236,6 @@ module.exports = {
 
       const query = args.join(' ').trim();
 
-      // Iniciar la cola si no existe para este chat
       if (!queues.has(remoteJid)) {
         queues.set(remoteJid, []);
       }
@@ -255,20 +245,16 @@ module.exports = {
       
       const activeCount = queue.length + (isProcessing ? 1 : 0);
 
-      // 🔥 LÓGICA DE TOPE (MÁXIMO 2 VIDEOS)
       if (activeCount >= 2) {
         if (!warnedChats.has(remoteJid)) {
           warnedChats.set(remoteJid, new Set());
         }
         
         const warnedUsers = warnedChats.get(remoteJid);
-
-        // Si ya le avisamos, lo ignoramos
         if (warnedUsers.has(sender)) {
           return; 
         }
 
-        // Primer aviso
         warnedUsers.add(sender);
         return sock.sendMessage(remoteJid, {
           text: `⚠️ *COLA LLENA*\n\n@${sender.split('@')[0]}, ya hay 2 videos procesándose o en espera en este chat. Por favor, espera a que termine uno para pedir más.`,
@@ -279,7 +265,6 @@ module.exports = {
       const position = queue.length + (isProcessing ? 1 : 0);
       const waitMin = position === 0 ? 0 : position * 2;
 
-      // Añadir el trabajo a la cola
       queue.push({
         sock,
         remoteJid,
@@ -290,7 +275,6 @@ module.exports = {
         query
       });
 
-      // Notificar al usuario su posición en la fila
       await sock.sendMessage(remoteJid, {
         text: position === 0
 ? `📥 *Video añadido a la cola*
@@ -306,16 +290,14 @@ module.exports = {
 📌 Posición en cola: *#${position + 1}*
 
 ⏳ Tu pedido se empezará a procesar en aproximadamente *${waitMin} minuto(s)*.
-🚫 No necesitas volver a usar el comando, el bot te avisará.`,
+🚫 No necesitas volver a usar el comando.`,
         mentions: [sender]
       }, { quoted: msg });
 
-      // Iniciar el procesador de la cola
       processQueue(remoteJid);
 
     } catch (err) {
       console.log('❌ Error en añadir a cola de videos:', err?.message || err);
-
       await sock.sendMessage(remoteJid, {
         text: '❌ Error al intentar añadir tu pedido a la cola.'
       }, { quoted: msg });
