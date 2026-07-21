@@ -69,7 +69,7 @@ console.warn = (...args) => {
 // ==========================================
 const sendQueue = [];
 let isSending = false;
-const SEND_DELAY = 1000;
+const SEND_DELAY = 1000; // 1 segundo exacto de espera entre mensajes
 
 async function processSendQueue() {
   if (isSending || sendQueue.length === 0) return;
@@ -77,9 +77,15 @@ async function processSendQueue() {
 
   while (sendQueue.length > 0) {
     const task = sendQueue.shift();
-    try { await task(); } catch (err) {}
+    try {
+      await task();
+    } catch (err) {
+      // Los errores se manejan dentro de la propia tarea
+    }
+    // Pausa protectora para evitar el baneo de WhatsApp
     await new Promise(resolve => setTimeout(resolve, SEND_DELAY));
   }
+
   isSending = false;
 }
 
@@ -91,18 +97,32 @@ function attachSendLogger(sock) {
 
   sock.sendMessage = async (jid, content = {}, options = {}) => {
     return new Promise((resolve, reject) => {
+      // Metemos el envío a la fila de espera
       sendQueue.push(async () => {
         try {
           if (config.debug) {
             let type = 'Desconocido';
             let preview = '';
 
-            if (content.text) { type = 'Texto'; preview = content.text; } 
-            else if (content.image) { type = 'Imagen'; preview = content.caption || '[Imagen]'; } 
-            else if (content.video) { type = 'Video'; preview = content.caption || '[Video]'; } 
-            else if (content.audio) { type = content.ptt ? 'Nota de voz' : 'Audio'; preview = '[Audio]'; } 
-            else if (content.sticker) { type = 'Sticker'; preview = '[Sticker]'; } 
-            else if (content.document) { type = 'Documento'; preview = content.fileName || '[Documento]'; }
+            if (content.text) {
+              type = 'Texto';
+              preview = content.text;
+            } else if (content.image) {
+              type = 'Imagen';
+              preview = content.caption || '[Imagen]';
+            } else if (content.video) {
+              type = 'Video';
+              preview = content.caption || '[Video]';
+            } else if (content.audio) {
+              type = content.ptt ? 'Nota de voz' : 'Audio';
+              preview = '[Audio]';
+            } else if (content.sticker) {
+              type = 'Sticker';
+              preview = '[Sticker]';
+            } else if (content.document) {
+              type = 'Documento';
+              preview = content.fileName || '[Documento]';
+            }
 
             console.log(chalk.green('\n╔════════ BOT ENVÍA ════════'));
             console.log(chalk.white('║ 📤 A    :'), chalk.cyan(jid));
@@ -118,16 +138,23 @@ function attachSendLogger(sock) {
           reject(err);
         }
       });
+
+      // Iniciamos el procesador de la cola
       processSendQueue();
     });
   };
 }
+// ==========================================
+// FIN DEL SISTEMA ANTI-OVERLIMIT
+// ==========================================
 
 function getPluginsDir() {
   const plugin = path.join(process.cwd(), 'plugin');
   const plugins = path.join(process.cwd(), 'plugins');
+
   if (fs.existsSync(plugin)) return plugin;
   if (fs.existsSync(plugins)) return plugins;
+
   fs.mkdirSync(plugin, { recursive: true });
   return plugin;
 }
@@ -140,32 +167,55 @@ function loadPlugins() {
   plugins.clear();
   messagePlugins.length = 0;
 
-  const files = fs.readdirSync(PLUGINS_DIR).filter(file => file.endsWith('.js'));
+  const files = fs
+    .readdirSync(PLUGINS_DIR)
+    .filter(file => file.endsWith('.js'));
+
   let commandFiles = 0;
   let eventFiles = 0;
 
   for (const file of files) {
     try {
       const filepath = path.join(PLUGINS_DIR, file);
+
       delete require.cache[require.resolve(filepath)];
+
       const plugin = require(filepath);
 
-      if (!plugin) continue;
+      if (!plugin) {
+        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: vacío`));
+        continue;
+      }
 
       if (typeof plugin.onMessage === 'function') {
-        messagePlugins.push({ ...plugin, file });
+        messagePlugins.push({
+          ...plugin,
+          file
+        });
         eventFiles++;
       }
 
       if (typeof plugin.execute === 'function') {
         const commands = Array.isArray(plugin.commands) ? plugin.commands : [];
-        if (commands.length) {
+
+        if (!commands.length) {
+          console.log(chalk.yellow(`⚠️ Plugin comando ignorado ${file}: no tiene commands`));
+        } else {
           for (const cmd of commands) {
-            plugins.set(String(cmd).toLowerCase(), { ...plugin, file });
+            plugins.set(String(cmd).toLowerCase(), {
+              ...plugin,
+              file
+            });
           }
+
           commandFiles++;
         }
       }
+
+      if (typeof plugin.execute !== 'function' && typeof plugin.onMessage !== 'function') {
+        console.log(chalk.yellow(`⚠️ Plugin ignorado ${file}: falta execute() u onMessage()`));
+      }
+
     } catch (err) {
       console.log(chalk.red(`❌ Error cargando plugin ${file}:`), err?.message || err);
     }
@@ -179,16 +229,27 @@ global.loadPlugins = loadPlugins;
 loadPlugins();
 
 function cleanNumber(jid = '') {
-  return String(jid).split('@')[0].split(':')[0].replace(/\D/g, '');
+  return String(jid)
+    .split('@')[0]
+    .split(':')[0]
+    .replace(/\D/g, '');
 }
 
-function isObject(value) { return value && typeof value === 'object'; }
+function isObject(value) {
+  return value && typeof value === 'object';
+}
 
 function hasMediaMessage(message = {}) {
   return (
-    message.imageMessage || message.videoMessage || message.audioMessage ||
-    message.ptvMessage || message.stickerMessage || message.documentMessage ||
-    message.locationMessage || message.contactMessage || message.contactsArrayMessage ||
+    message.imageMessage ||
+    message.videoMessage ||
+    message.audioMessage ||
+    message.ptvMessage ||
+    message.stickerMessage ||
+    message.documentMessage ||
+    message.locationMessage ||
+    message.contactMessage ||
+    message.contactsArrayMessage ||
     message.reactionMessage
   );
 }
@@ -197,13 +258,29 @@ function hasViewOnceDeep(node, depth = 0, seen = new Set()) {
   if (!isObject(node)) return false;
   if (depth > 12) return false;
   if (seen.has(node)) return false;
+
   seen.add(node);
+
   const keys = Object.keys(node);
+
   if (keys.some(k => String(k).toLowerCase().includes('viewonce'))) return true;
-  if (node.imageMessage?.viewOnce || node.videoMessage?.viewOnce || node.audioMessage?.viewOnce || node.ptvMessage?.viewOnce) return true;
-  for (const key of keys) {
-    if (isObject(node[key])) { if (hasViewOnceDeep(node[key], depth + 1, seen)) return true; }
+
+  if (
+    node.imageMessage?.viewOnce === true ||
+    node.videoMessage?.viewOnce === true ||
+    node.audioMessage?.viewOnce === true ||
+    node.ptvMessage?.viewOnce === true
+  ) {
+    return true;
   }
+
+  for (const key of keys) {
+    const value = node[key];
+    if (isObject(value)) {
+      if (hasViewOnceDeep(value, depth + 1, seen)) return true;
+    }
+  }
+
   return false;
 }
 
@@ -211,32 +288,52 @@ function findMediaDeep(node, isOnce = false, depth = 0, seen = new Set()) {
   if (!isObject(node)) return null;
   if (depth > 12) return null;
   if (seen.has(node)) return null;
-  seen.add(node);
-  const keys = Object.keys(node);
-  const nowOnce = isOnce || keys.some(k => String(k).toLowerCase().includes('viewonce')) ||
-    node.imageMessage?.viewOnce || node.videoMessage?.viewOnce || node.audioMessage?.viewOnce || node.ptvMessage?.viewOnce;
 
-  if (hasMediaMessage(node)) return { message: node, isOnce: nowOnce };
+  seen.add(node);
+
+  const keys = Object.keys(node);
+
+  const nowOnce =
+    isOnce ||
+    keys.some(k => String(k).toLowerCase().includes('viewonce')) ||
+    node.imageMessage?.viewOnce === true ||
+    node.videoMessage?.viewOnce === true ||
+    node.audioMessage?.viewOnce === true ||
+    node.ptvMessage?.viewOnce === true;
+
+  if (hasMediaMessage(node)) {
+    return {
+      message: node,
+      isOnce: nowOnce
+    };
+  }
 
   for (const key of keys) {
-    if (!isObject(node[key])) continue;
-    const found = findMediaDeep(node[key], nowOnce || key.toLowerCase().includes('viewonce'), depth + 1, seen);
+    const value = node[key];
+    if (!isObject(value)) continue;
+
+    const found = findMediaDeep(value, nowOnce || key.toLowerCase().includes('viewonce'), depth + 1, seen);
     if (found) return found;
   }
+
   return null;
 }
 
 function getMessageKeysPreview(message = {}) {
   try {
     const keys = Object.keys(message || {});
-    return keys.length ? keys.slice(0, 8).join(', ') : 'sin keys';
-  } catch { return 'error leyendo keys'; }
+    if (!keys.length) return 'sin keys';
+    return keys.slice(0, 8).join(', ');
+  } catch {
+    return 'error leyendo keys';
+  }
 }
 
 function getReadableMessage(msg) {
   const message = msg.message || {};
   const found = findMediaDeep(message);
   const hasOnce = hasViewOnceDeep(message);
+
   const m = found?.message || message;
   const once = found?.isOnce || hasOnce ? ' de 1 sola vez' : '';
 
@@ -284,7 +381,9 @@ function loadJailDB() {
   try {
     if (!fs.existsSync(JAIL_PATH)) return { jailed: {}, fame: {} };
     return JSON.parse(fs.readFileSync(JAIL_PATH, 'utf8') || '{}');
-  } catch { return { jailed: {}, fame: {} }; }
+  } catch {
+    return { jailed: {}, fame: {} };
+  }
 }
 
 function saveJailDB(data) {
@@ -346,7 +445,8 @@ async function messageHandler(sock, msg, store = {}) {
     const key = msg.key || {};
     const remoteJid = key.remoteJid;
 
-    if (!remoteJid || remoteJid === 'status@broadcast') return;
+    if (!remoteJid) return;
+    if (remoteJid === 'status@broadcast') return;
 
     const fromMe = !!key.fromMe;
     const fromGroup = remoteJid.endsWith('@g.us');
@@ -358,7 +458,11 @@ async function messageHandler(sock, msg, store = {}) {
     const body = getBody(msg);
     const displayMsg = getReadableMessage(msg);
 
-    const pushName = msg.pushName || store.contacts?.[sender]?.name || store.contacts?.[sender]?.notify || 'Sin nombre';
+    const pushName =
+      msg.pushName ||
+      store.contacts?.[sender]?.name ||
+      store.contacts?.[sender]?.notify ||
+      'Sin nombre';
 
     const number = cleanNumber(sender);
     const userKey = number;
@@ -371,39 +475,33 @@ async function messageHandler(sock, msg, store = {}) {
     let chatName = 'Chat Privado';
     let chatLabel = chalk.blue('PRIVADO');
 
-    // 🔥 PARCHE ANTI-BUG DE WHATSAPP ARGENTINA/MÉXICO 🔥
     if (fromGroup) {
       chatLabel = chalk.magenta('GRUPO');
       groupMetadata = await safeGroupMetadata(sock, remoteJid);
       chatName = groupMetadata?.subject || 'Grupo';
 
-      if (groupMetadata && Array.isArray(groupMetadata.participants)) {
-        const senderNum = cleanNumber(sender);
-        const botNum = cleanNumber(sock.user?.id || botJid);
-
-        // Esta función revisa solo los últimos 10 dígitos para evadir el problema del '9' o el '1'
-        const sonElMismo = (id1, id2) => {
-          const n1 = cleanNumber(id1);
-          const n2 = cleanNumber(id2);
-          if (n1 === n2) return true;
-          return n1.length >= 10 && n2.length >= 10 && n1.slice(-10) === n2.slice(-10);
-        };
-
-        const admins = groupMetadata.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin');
-        groupAdmins = admins.map(p => p.id);
-
-        isAdmin = admins.some(p => sonElMismo(p.id, senderNum));
-        isBotAdmin = admins.some(p => sonElMismo(p.id, botNum));
-      }
+      try {
+        groupAdmins = await getGroupAdmins(sock, remoteJid);
+        isAdmin = groupAdmins.includes(sender);
+        isBotAdmin = groupAdmins.includes(botJid);
+      } catch {}
     }
 
-    const ownerNumbers = Array.isArray(config.owner) ? config.owner.map(n => String(n).replace(/\D/g, '')) : [];
+    const ownerNumbers = Array.isArray(config.owner)
+      ? config.owner.map(n => String(n).replace(/\D/g, ''))
+      : [];
+
     const senderNumber = cleanNumber(sender);
     const remoteNumber = cleanNumber(remoteJid);
     const participantNumber = cleanNumber(key.participant || '');
     const realNumber = cleanNumber(msg.realNumber || '');
 
-    const isOwner = fromMe || ownerNumbers.includes(senderNumber) || ownerNumbers.includes(remoteNumber) || ownerNumbers.includes(participantNumber) || ownerNumbers.includes(realNumber);
+    const isOwner =
+      fromMe ||
+      ownerNumbers.includes(senderNumber) ||
+      ownerNumbers.includes(remoteNumber) ||
+      ownerNumbers.includes(participantNumber) ||
+      ownerNumbers.includes(realNumber);
 
     if (config.debug) {
       console.log(chalk.gray('\n╔══════════════════════════════'));
@@ -412,16 +510,14 @@ async function messageHandler(sock, msg, store = {}) {
       console.log(chalk.white('║ 👤 Nombre :'), chalk.green(pushName));
       console.log(chalk.white('║ 📞 Número :'), chalk.yellow(number ? `+${number}` : 'Desconocido'));
       console.log(chalk.white('║ 👑 Owner  :'), chalk.yellow(isOwner ? 'Sí' : 'No'));
-      
-      if (fromGroup) {
-        console.log(chalk.white('║ 👮 Admin  :'), chalk.yellow(isAdmin ? 'Sí' : 'No'));
-        console.log(chalk.white('║ 🤖 BotAdm :'), chalk.yellow(isBotAdmin ? 'Sí' : 'No'));
-      }
-
       console.log(chalk.white('║ 💬 Msg    :'), chalk.white(String(displayMsg).slice(0, 300)));
       console.log(chalk.gray('╚══════════════════════════════\n'));
     }
 
+    // ==========================================
+    // 🔥 APAGADO ABSOLUTO DEL BOT 
+    // Comprobamos la BD temprano para bloquear TODO lo automático
+    // ==========================================
     let botEncendido = true;
     if (fromGroup) {
       const gData = await db.getGroup(remoteJid);
@@ -431,6 +527,7 @@ async function messageHandler(sock, msg, store = {}) {
       if (uData.bot === false) botEncendido = false;
     }
 
+    // 🔥 Solo ejecutamos los audios y funciones automáticas si el bot ESTÁ ENCENDIDO
     if (botEncendido) {
       if (messagePlugins.length) {
         for (const plugin of messagePlugins) {
@@ -457,7 +554,9 @@ async function messageHandler(sock, msg, store = {}) {
 
     if (!command) return;
 
+    // 🔥 Si el bot está apagado, bloqueamos los comandos (EXCEPTO enable/disable/menu/help)
     if (!botEncendido && !['enable', 'disable', 'menu', 'help'].includes(command)) {
+       // El Owner siempre tiene pase VIP para forzar comandos aunque esté apagado
        if (!isOwner) return; 
     }
 
@@ -471,7 +570,7 @@ async function messageHandler(sock, msg, store = {}) {
       const spamStatus = checkSpam(sender);
       if (spamStatus === 'WARN') {
         return sock.sendMessage(remoteJid, {
-          text: `⚠️ *¡ALTO AHÍ!*\n\nEstás enviando comandos demasiado rápido.\nSi sigues haciendo spam, te silenciaré por 1 minuto.`
+          text: `⚠️ *¡ALTO AHÍ!*\n\nEstás enviando comandos demasiado rápido.\nSi sigues haciendo spam, te silenciaré por 1 minuto de forma automática para proteger el sistema.`
         }, { quoted: msg });
       }
       if (spamStatus === 'BANNED') return;
@@ -480,7 +579,7 @@ async function messageHandler(sock, msg, store = {}) {
     const jail = checkJail(sender);
     if (jail && !isOwner && !['sobornar', 'fianza', 'usar', 'llave', 'inventario'].includes(command)) {
       return sock.sendMessage(remoteJid, {
-        text: `⛓️ *ESTÁS ARRESTADO*\n\nNo puedes usar comandos del bot por ahora.\n\n⏳ Tiempo restante: *${msToTime(jail.until - Date.now())}*`
+        text: `⛓️ *ESTÁS ARRESTADO*\n\nNo puedes usar comandos del bot por ahora.\n\n⏳ Tiempo restante: *${msToTime(jail.until - Date.now())}*\n💸 Usa *.sobornar* para intentar salir antes.`
       }, { quoted: msg });
     }
 
