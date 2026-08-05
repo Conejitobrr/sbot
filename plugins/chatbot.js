@@ -358,9 +358,9 @@ module.exports = {
 `🤖 Habla conmigo 😹
 
 Ejemplos:
-.ai hola
-.ai quién eres
-.ai explícame qué es un agujero negro`
+.bot hola
+.bot quién eres
+.bot explícame qué es un agujero negro`
       }, { quoted: msg });
     }
 
