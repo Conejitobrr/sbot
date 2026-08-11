@@ -151,7 +151,7 @@ module.exports = {
       { triggers: ['tetas'], file: 'ATetas' },
       { triggers: ['añanin'], file: 'Añañin' },
       { triggers: ['chaoo'], file: 'Chaoo' },
-      { triggers: ['coger'], file: 'Coger' },
+      { triggers: ['coge'], file: 'Coger' },
       { triggers: ['viernes'], file: 'viernes' },
       { triggers: ['siu', 'siuu', 'siuuu', 'siuuuu', 'siuuuuu', 'siuuuuuu'], file: 'siu' },
       { triggers: ['noche de paz'], file: 'Noche' },
