@@ -1,24 +1,39 @@
 'use strict';
 
-function getMentioned(msg) {
-  return msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+// ¡NUEVA FUNCIÓN MEJORADA!
+function obtenerObjetivo(msg) {
+  // 1. Intenta buscar si mencionaste a alguien con el @
+  let menciones = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+
+  // 2. Si WhatsApp falló en la mención, verifica si el usuario RESPONDÍO a un mensaje
+  if (menciones.length === 0) {
+    const usuarioCitado = msg.message?.extendedTextMessage?.contextInfo?.participant;
+    if (usuarioCitado) {
+      menciones = [usuarioCitado]; // Captura al dueño del mensaje que respondiste
+    }
+  }
+
+  return menciones;
 }
 
 module.exports = {
   commands: ['coger'],
 
   async execute({ sock, remoteJid, sender, msg }) {
-    const mentioned = getMentioned(msg)[0];
+    // Usamos la nueva función para buscar a la víctima
+    const targets = obtenerObjetivo(msg);
+    const mentioned = targets[0];
 
     if (!mentioned) {
       return sock.sendMessage(remoteJid, {
-        text: `❌ ¡Epa, fiera! ¿A quién te vas a llevar a lo oscurito? Debes mencionar a alguien.\n\nEjemplo:\n.coger @usuario`
+        text: `❌ ¡Epa, fiera! ¿A quién te vas a llevar a lo oscurito? \n\nDebes mencionar a alguien (@usuario) o **responder a uno de sus mensajes** con el comando.`
       }, { quoted: msg });
     }
 
     const user = `@${sender.split('@')[0]}`;
     const target = `@${mentioned.split('@')[0]}`;
 
+    // Lista gigante de respuestas cómicas
     const respuestasComicas = [
       `🥵 ¡${user} se acaba de coger a ${target}! y le hizo ver estrellitas. 🌟`,
       `🔥 ${user} y ${target} se fueron a lo oscurito... a jugar al teto. 😏`,
